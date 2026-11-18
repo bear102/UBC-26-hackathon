@@ -12,3 +12,5 @@ test-ledger
 keys/
 .claude/settings.local.json
 .vercel
+keys/
+.data/
