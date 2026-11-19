@@ -15,7 +15,15 @@ declare_id!("6x27yJQSb1iGRNumQG6Et8nB8x7Zq7qiKEzLkZhbQraf");
 pub const USDC_MINT: Pubkey = pubkey!("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
 #[cfg(feature = "self-mint")]
 pub const USDC_MINT: Pubkey = pubkey!("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"); // replaced at build time if used
+// Devnet build: attestor/relayer keys live only on the user's own PC (the build server is untrusted).
+#[cfg(not(feature = "server-keys"))]
+pub const ATTESTOR: Pubkey = pubkey!("BC2GGEKLBxCKMsAakUaHckmMuEjF71fmoPCFjP4E4aVN");
+#[cfg(not(feature = "server-keys"))]
+pub const RELAYER: Pubkey = pubkey!("Abq5tHs4mFZWFXNK53B5aKfgfnAPDa6jQHmTexDwDAGi");
+// Test/localnet build (`--features server-keys`): the build server's throwaway keys in keys/, for LiteSVM and localnet e2e.
+#[cfg(feature = "server-keys")]
 pub const ATTESTOR: Pubkey = pubkey!("5LQKRaTS8nkd1ag37huyKVNBc5iaFDRG1LnCYTvCu5Es");
+#[cfg(feature = "server-keys")]
 pub const RELAYER: Pubkey = pubkey!("FtVpLmYRmwrC7mdyLqRCF3sTpAF2PweFj2V2zpbZkVZr");
 pub const MAX_STRIP: usize = 6;
 pub const MAX_SYMBOL: usize = 48;
