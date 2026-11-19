@@ -1,0 +1,26 @@
+/* Checkout = a binding document. Plain sheet; the only ornament is the receipt certificate after success. */
+.kindRow { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 6px; }
+.title { font-size: 1.7rem; font-weight: 600; margin: 4px 0 6px; font-variation-settings: 'opsz' 28; }
+.lede { font-size: 14px; color: var(--ink-2); margin: 0 0 16px; }
+.lede b { color: var(--ink); }
+.terms { margin: 0 0 16px; }
+.terms :global(.amt) { font-size: 42px; }
+.trust { margin: 0 0 14px; }
+.actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.steps { margin: 4px 0 18px; border-top: 1px solid var(--line-2); padding-top: 14px !important; }
+.receipt { box-shadow: none; padding: 8px; margin: 0 0 18px; }
+.receiptIn { padding: 16px 18px 18px; }
+.receiptMsg { font-size: 14px; color: var(--ink-2); margin: 10px 0 14px; max-width: 80%; }
+.receiptMsg b { color: var(--pay); }
+.amt { font-size: 36px !important; }
+.seal { width: 92px; height: 92px; right: 10px; bottom: auto; top: 12px; }
+.kv { margin: 0 0 18px; }
+.ext { display: inline-flex; align-items: center; gap: 4px; }
+@media (max-width: 640px) {
+  .title { font-size: 1.4rem; }
+  .terms :global(.amt) { font-size: 32px; }
+  .amt { font-size: 28px !important; }
+  .seal { width: 64px; height: 64px; top: 8px; right: 8px; }
+  .receiptMsg { max-width: 72%; }
+  .actions > * { flex: 1 1 auto; }
+}

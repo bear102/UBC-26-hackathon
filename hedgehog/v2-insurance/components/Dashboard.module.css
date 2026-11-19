@@ -1,0 +1,93 @@
+/* Dashboard = the holder's policy register: page header with a faint rosette, a ledger of totals, a payout certificate,
+   policy stubs (perforated edge + seal + status stamp) and the live feed as a ruled document. Tokens only. */
+.pageHead { overflow: hidden; }
+.pageHead > div, .pageHead > a, .pageHead > span { position: relative; }
+.headRosette { position: absolute; width: 520px; height: 520px; right: -140px; top: -230px; opacity: .14; pointer-events: none; }
+.headMeta { font-family: var(--mono); font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.wallet { margin: 10px 0 0; font-family: var(--mono); font-size: 12px; letter-spacing: .06em; color: var(--ink-2); }
+
+/* totals ledger */
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--surface); border: 1px solid var(--ink); border-bottom: 3px double var(--ink); margin-bottom: 28px; }
+.stats > div { display: flex; flex-direction: column; gap: 10px; padding: 18px 22px 20px; border-left: 1px solid var(--line-2); min-width: 0; }
+.stats > div:first-child { border-left: 0; }
+.stats b { font-size: clamp(38px, 4vw, 52px); }
+.stats small { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; color: var(--muted); }
+@media (max-width: 700px) {
+  .stats { grid-template-columns: 1fr; }
+  .stats > div { border-left: 0; border-top: 1px solid var(--line-2); padding: 14px 16px; }
+  .stats > div:first-child { border-top: 0; }
+  .stats b { font-size: 40px; }
+}
+
+/* payout certificate (not rotated) */
+.hero { margin: 0 0 36px; }
+.terms3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.lossAmt { color: var(--red); }
+.heroFoot { margin-top: 16px; display: flex; justify-content: flex-end; }
+@media (max-width: 640px) {
+  .terms3 { grid-template-columns: 1fr 1fr; }
+  .terms3 > :first-child { grid-column: 1 / -1; border-bottom: 1px solid var(--ink); }
+  .terms3 > :nth-child(2) { border-left: 0; }
+}
+
+/* layout */
+.cols { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 28px; align-items: start; padding-bottom: 64px; }
+@media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
+.secHead { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; border-bottom: 1px solid var(--ink); padding-bottom: 8px; margin-bottom: 16px; }
+.secHead h2 { margin: 0; font-size: clamp(26px, 2.6vw, 34px); }
+.secMeta { font-family: var(--mono); font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.list { display: grid; gap: 16px; }
+
+/* policy stubs */
+.stub :global(.stub-left .pn) { max-height: 220px; overflow: hidden; }
+.stamp { position: absolute; right: 18px; top: 16px; z-index: 1; }
+.kick { display: flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); padding-right: 120px; }
+.kick :global(.dot) { color: var(--pay); }
+.stub :global(.stub-body h4) { padding-right: 110px; }
+.story { margin-top: 12px; }
+.grid4 { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+.stub :global(.stub-grid b) { display: block; margin-top: 2px; }
+.acct { font-size: 13px !important; }
+.links { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-top: 14px; padding-top: 10px; border-top: 1px dashed var(--line-2); font-family: var(--mono); font-size: 12px; }
+.ext { vertical-align: -1px; margin-left: 2px; }
+.backing { margin-top: 12px; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--line-2); border-left: 3px solid var(--gemini); font-size: 12.5px; }
+.backingTitle { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; font-weight: 600; }
+.order { margin-top: 6px; font-family: var(--mono); font-size: 12.5px; color: var(--ink); word-break: break-all; }
+@media (max-width: 640px) {
+  .stamp { position: static; display: inline-block; margin: 0 0 10px; transform: rotate(-2deg); }
+  .kick { padding-right: 0; flex-wrap: wrap; }
+  .stub :global(.stub-body h4) { padding-right: 0; font-size: 20px; }
+  .stub :global(.stub-body) { padding: 14px 14px 16px; }
+  .grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .stub :global(.stub-grid) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* no-wallet state */
+.connect { display: grid; gap: 16px; }
+.connectDoc { padding-bottom: 28px; }
+.connectBody { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 26px; align-items: center; padding-top: 8px; }
+.connectSeal { width: 132px; height: 132px; transform: rotate(-12deg); }
+.connectTitle { font-size: clamp(28px, 3vw, 38px); margin: 0 0 10px; }
+.connectText { color: var(--ink-2); margin: 0 0 18px; max-width: 34em; }
+.blankStub { display: grid; grid-template-columns: 110px 1fr; padding: 0; min-height: 120px; opacity: .7; }
+.blankLeft { border-right: 2px dashed var(--line-2); }
+.blankBody { display: grid; gap: 16px; padding: 22px 22px; align-content: center; }
+.blankBody i { display: block; border-bottom: 1px solid var(--line-2); height: 10px; }
+.blankBody i:first-child { width: 55%; }
+.blankBody i:nth-child(2) { width: 80%; }
+@media (max-width: 640px) {
+  .connectBody { grid-template-columns: 1fr; gap: 14px; }
+  .connectSeal { width: 84px; height: 84px; }
+  .blankStub { grid-template-columns: 64px 1fr; min-height: 90px; }
+}
+
+/* live feed */
+.feed { position: sticky; top: 92px; max-height: calc(100vh - 110px); overflow: auto; padding-top: 0; }
+.feedHead { position: sticky; top: 0; background: var(--surface); z-index: 1; margin-top: 0 !important; }
+.feedIntro { font-size: 12.5px; color: var(--muted); margin: 0 0 6px; }
+@media (max-width: 900px) { .feed { position: static; max-height: none; } }
+.events { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; }
+.events li { padding: 14px 0; border-top: 1px solid var(--line); }
+.events li p { margin: 8px 0 4px; font-size: 14px; color: var(--ink); overflow-wrap: anywhere; }
+.when { font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: .04em; }
+.tx { font-family: var(--mono); font-size: 12px; }

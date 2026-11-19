@@ -1,0 +1,36 @@
+/* Schedule of cover (spec §7). Flat sheet, ink frame, ledger rules. No ornament. */
+.schedule { background: var(--surface); border: 1px solid var(--ink); border-radius: var(--radius-sm); box-shadow: var(--shadow-lg); overflow-x: auto; }
+.top { display: flex; justify-content: space-between; align-items: center; gap: 8px 16px; flex-wrap: wrap; padding: 16px 20px; border-bottom: 1px solid var(--ink); }
+.meta { font-family: var(--mono); font-size: 11px; color: var(--ink-3); letter-spacing: .06em; text-transform: uppercase; overflow-wrap: anywhere; }
+.sch { background: transparent; }
+.sch th { padding: 11px 10px; }
+.sch th:last-child, .sch td:last-child { padding-right: 16px; }
+.sch td { padding: 16px 10px; }
+.ix { font-family: var(--mono); font-size: 12px; color: var(--ink-3); width: 40px; padding-right: 0 !important; }
+.risk { min-width: 220px; }
+.risk b { display: block; font-family: var(--serif); font-weight: 600; font-size: 19px; line-height: 1.2; letter-spacing: -.005em; font-variation-settings: 'opsz' 28; }
+.risk > span { display: block; font-size: 13px; color: var(--ink-2); margin-top: 4px; }
+.risk .ven { display: block; margin-top: 8px; }
+.odds { font-family: var(--mono); font-size: 15px; }
+.payc { font-weight: 600; font-size: 16px; white-space: nowrap; }
+.costc { font-size: 16px; white-space: nowrap; }
+.sub { display: block; font-size: 11.5px; font-weight: 400; color: var(--muted); margin-top: 3px; }
+.lbl { font-family: var(--serif); font-size: 19px; }
+.lbl span { font-family: var(--sans); font-weight: 400; }
+.sch tfoot .payc, .sch tfoot .costc { font-size: 18px; }
+
+@media (max-width: 640px) {
+  .schedule { overflow: visible; }
+  .top { flex-direction: column; align-items: flex-start; gap: 4px; padding: 14px 16px; }
+  .sch thead { display: none; }
+  .sch, .sch tbody, .sch tfoot { display: block; width: 100%; }
+  .sch tbody tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 8px; padding: 16px; border-bottom: 1px solid var(--line-2); }
+  .sch td { padding: 0 !important; border: 0 !important; text-align: left !important; }
+  .sch .ix, .sch .sp { display: none; }
+  .sch .risk { grid-column: 1 / -1; }
+  .sch td[data-l]::before { content: attr(data-l); display: block; font-family: var(--sans); font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 3px; }
+  .sch tfoot tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 14px 16px; border-top: 3px double var(--ink); }
+  .sch tfoot td { padding: 0 !important; border: 0 !important; }
+  .sch tfoot .lbl { grid-column: 1 / -1; }
+  .sch :global(.oddbar) { margin-left: 0; }
+}

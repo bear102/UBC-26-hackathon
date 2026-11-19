@@ -1,0 +1,52 @@
+/* Home — hero certificate + forms + three clauses. Tokens only. */
+.hero { position: relative; overflow: hidden; border-bottom: 1px solid var(--line-2); }
+.bgRosette { position: absolute; width: 980px; height: 980px; right: -220px; top: -170px; opacity: .22; pointer-events: none; animation: turn 240s linear infinite; }
+@keyframes turn { to { transform: rotate(360deg); } }
+.heroGrid {
+  position: relative; display: grid; grid-template-columns: minmax(0, .94fr) minmax(0, 1.06fr); column-gap: 40px;
+  grid-template-areas: "copy cert"; align-items: center;
+  padding-top: 56px; padding-bottom: 64px; min-height: min(806px, calc(100svh - 95px));
+}
+.copy { grid-area: copy; }
+.stage { grid-area: cert; }
+.pricedMob { display: none !important; }
+
+.h1 { margin: 22px 0 34px; font-variation-settings: 'opsz' 18; text-wrap: wrap; }
+.q { display: block; }
+.hedge { display: inline-block; position: relative; margin-top: 8px; }
+.lede { margin: 0 0 30px; max-width: 540px; }
+.cta { display: flex; gap: 12px; flex-wrap: wrap; }
+.priced { margin-top: 34px; display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-3); font-family: var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+.priced > span { display: inline-flex; align-items: center; gap: 14px; }
+.sep { width: 4px; height: 4px; background: var(--ink-3); transform: rotate(45deg); display: inline-block; }
+.venue { margin-top: 3px; }
+.feed { flex-basis: 100%; }
+
+/* three clauses */
+.clauses { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--surface); border: 1px solid var(--ink); }
+.clause { padding: 24px 26px 28px; position: relative; }
+.clause + .clause { border-left: 1px solid var(--ink); }
+.cno { display: block; font-family: var(--serif); font-style: italic; font-weight: 700; font-size: 44px; line-height: 1; color: var(--red); margin-bottom: 14px; }
+.clause h3 { font-size: 24px; margin: 0 0 8px; }
+.clause p { margin: 0; color: var(--ink-2); font-size: 15px; }
+
+@media (max-width: 1080px) {
+  .heroGrid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "copy" "cert"; row-gap: 40px; min-height: 0; padding-top: 44px; padding-bottom: 56px; }
+  .bgRosette { animation: none; }
+}
+@media (max-width: 860px) {
+  .clauses { grid-template-columns: minmax(0, 1fr); }
+  .clause + .clause { border-left: 0; border-top: 1px solid var(--ink); }
+}
+@media (max-width: 640px) {
+  .heroGrid { padding-top: 24px; padding-bottom: 40px; row-gap: 22px; grid-template-areas: "copy" "cert" "priced"; }
+  .pricedDesk { display: none !important; }
+  .pricedMob { display: flex !important; grid-area: priced; margin-top: 4px; gap: 8px 10px; font-size: 10.5px; }
+  .pricedMob > span { gap: 10px; }
+  .bgRosette { width: 620px; height: 620px; right: -300px; top: -120px; }
+  .h1 { margin: 14px 0 26px; }
+  .lede { margin-bottom: 20px; font-size: 16px; line-height: 1.5; }
+  .cta > :global(.btn) { flex: 1 1 auto; padding-left: 14px; padding-right: 14px; }
+  .clause { padding: 20px; }
+  .cno { font-size: 36px; }
+}
