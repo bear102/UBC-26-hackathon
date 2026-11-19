@@ -6,11 +6,12 @@ export type GContract = {
   id: string; label: string; ticker: string; instrumentSymbol: string; status: string; marketState?: string;
   expiryDate?: string; prices?: GPrices; description?: unknown; resolutionSide?: string | null; resolvedAt?: string | null;
   quantityMinimum?: string; quantityIncrement?: string; priceIncrement?: string;
+  abbreviatedName?: string; sportsSide?: string; target?: { type?: string; name?: string } | null;
 };
 export type GEvent = {
   id: string; title: string; ticker: string; category: string; type: string; status: string;
   startTime?: string | null; expiryDate?: string; effectiveDate?: string; resolvedAt?: string | null;
-  volume?: string; contracts: GContract[]; subcategory?: unknown; series?: unknown;
+  volume?: string; contracts: GContract[]; subcategory?: unknown; series?: unknown; slug?: string; tags?: string[];
 };
 export type BookLevel = { price: string; amount: string; timestamp?: string };
 export type Book = { bids: BookLevel[]; asks: BookLevel[] };
@@ -48,6 +49,29 @@ export async function activeEvents(max = 600): Promise<GEvent[]> {
     if (r.data.length < 100) break;
   }
   return out;
+}
+
+/** Active events of one category (Weather | Sports | Commodities | Crypto | ...). Paginated, deduped by ticker. */
+export async function activeEventsByCategory(category: string, max = 1500, ttlMs = 30_000): Promise<GEvent[]> {
+  return pagedEvents({ status: "active", category }, max, ttlMs);
+}
+
+/** Settled events, optionally filtered by category and free-text search (oldest first, as the API returns them). */
+export async function settledEvents(opts: { category?: string; search?: string; max?: number; ttlMs?: number } = {}): Promise<GEvent[]> {
+  return pagedEvents({ status: "settled", category: opts.category, search: opts.search }, opts.max ?? 300, opts.ttlMs ?? 300_000);
+}
+
+async function pagedEvents(q: Record<string, string | undefined>, max: number, ttlMs: number): Promise<GEvent[]> {
+  const seen = new Map<string, GEvent>();
+  const qs = Object.entries(q).filter(([, v]) => v).map(([k, v]) => `${k}=${encodeURIComponent(v as string)}`).join("&");
+  for (let offset = 0; offset < max; offset += 100) {
+    const r = await getJson<{ data: GEvent[]; pagination?: { total?: number } }>(
+      `${env.geminiPublic()}/v1/prediction-markets/events?${qs}&limit=100&offset=${offset}`, ttlMs);
+    for (const e of r.data) seen.set(e.ticker, e);
+    const total = r.pagination?.total;
+    if (r.data.length < 100 || (total !== undefined && offset + 100 >= total)) break;
+  }
+  return [...seen.values()];
 }
 
 export async function eventByTicker(ticker: string, ttlMs = 0): Promise<GEvent> {
