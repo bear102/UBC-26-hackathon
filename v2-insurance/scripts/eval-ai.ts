@@ -1,6 +1,6 @@
 // AI recommendation eval harness (docs/AI-EVAL.md).
 //   npx tsx scripts/eval-ai.ts snapshot                 freeze the live market universe -> .data/eval/markets.json
-//   npx tsx scripts/eval-ai.ts run <tag> [--live] [--only a,b] [--playbook] [--live-summary] [--pause ms]
+//   npx tsx scripts/eval-ai.ts run <tag> [--live] [--only a,b] [--playbook] [--live-summary] [--pause ms] [--skip-nollm] [--snap file.json]
 // Runs advise() over the benchmark set against the FROZEN market snapshot (candidate search = rankCandidates over
 // the snapshot, sizing = real sizeQuote without book fetches), scores every quote deterministically, then repeats
 // the run with every LLM call failing (robustness). LLM calls go through a record/replay cache keyed by
@@ -19,7 +19,7 @@ import type { BusinessProfile, MarketContract, Peril, Quote, QuoteLine, Risk } f
 
 const ROOT = process.cwd();
 const EVAL = path.join(ROOT, ".data/eval");
-const SNAP = path.join(EVAL, "markets.json");
+const SNAP = path.join(EVAL, process.argv.includes("--snap") ? process.argv[process.argv.indexOf("--snap") + 1] : "markets.json"); // --snap markets-v2.json
 const LLM_CACHE = path.join(EVAL, "llm-cache.json");
 const HIT_CACHE = path.join(EVAL, "hitrate-cache.json");
 const GRADES = path.join(ROOT, "tests/fixtures/eval-grades.json");
