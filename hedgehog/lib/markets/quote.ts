@@ -3,6 +3,7 @@ import type { HedgeLeg, MarketContract, QuoteLine, Risk } from "../types";
 import { getBook, type BookLevels } from "./book";
 import { contractMeta, type Bounds } from "./normalize";
 import { slotKey } from "./index";
+import { findEquivalent } from "./compare";
 
 /** Integer-°F/whole-unit aware: "Above 77" (lo 77 exclusive) == "78°F or above" (lo 78 inclusive) for temperatures. */
 function boundsKey(b: Bounds | undefined): string | null {
@@ -33,10 +34,11 @@ type Level = { price: number; size: number };
 const r2 = (x: number) => Math.round(x * 100) / 100;
 const r4 = (x: number) => Math.round(x * 10000) / 10000;
 
-/** Gemini + Kalshi lines are bought onchain (Solana outcome tokens); Gemini lines are also backed on Gemini by the desk.
- *  Polymarket (and anything non-tradable) is context only. A non-tradable Gemini contract falls back to the deep link. */
+/** Demo: cover can be priced from ANY of the 3 venues (whichever is cheapest for the same contract). The policy is sold
+ *  on Solana; the desk's backing order on that venue is recorded but only ever placed on Gemini (and only when live). */
+export const isCoverable = (c: MarketContract): boolean => c.status === "open" && (c.tradable || c.venue === "polymarket");
 export const actionFor = (c: MarketContract): QuoteLine["action"] =>
-  (c.venue === "gemini" || c.venue === "kalshi") && c.tradable ? "buy-onchain" : c.venue === "gemini" ? "open-on-gemini" : "read-only";
+  isCoverable(c) ? "buy-onchain" : c.venue === "gemini" ? "open-on-gemini" : "read-only";
 
 /** Ask ladder for one side: real book if given, else a single level at the top ask (sized by depth if known, else unlimited). */
 export function ladderFor(c: MarketContract, side: "yes" | "no", book?: BookLevels | null): Level[] {
@@ -101,6 +103,40 @@ export const ROUTE_TOLERANCE = 0.01;
  * insurance price and not dearer than Kalshi's (+1¢ tolerance), the leg is re-pointed at Gemini. Kalshi keeps
  * the leg when it is clearly cheaper or Gemini has no usable ask.
  */
+/**
+ * Best-price router (demo): for each leg, look for the SAME contract on the other venues (cross-venue matcher, which
+ * also handles flipped wording like "Spurs win NO" = "Clippers win YES") and re-point the leg at the cheapest ask for
+ * the side that pays. Ties (within half a cent) go to Gemini, then Kalshi, then Polymarket.
+ */
+export function routeToBest(legs: HedgeLeg[], contracts: Map<string, MarketContract>): HedgeLeg[] {
+  const pool = [...contracts.values()].filter(isCoverable);
+  const pref = { gemini: 0, kalshi: 0.002, polymarket: 0.004 } as const;
+  const taken = new Set(legs.map((l) => l.contractId));
+  return legs.map((leg) => {
+    const c = contracts.get(leg.contractId);
+    if (!c) return leg;
+    const askOf = (k: MarketContract, s: "yes" | "no") => (s === "yes" ? k.yesAsk : k.noAsk);
+    const opts: { c: MarketContract; side: "yes" | "no"; ask: number }[] = [];
+    const own = askOf(c, leg.side);
+    if (own !== null && own <= MAX_INSURANCE_ASK && isCoverable(c)) opts.push({ c, side: leg.side, ask: own });
+    for (const v of ["gemini", "kalshi", "polymarket"] as const) {
+      if (v === c.venue) continue;
+      const eq = findEquivalent(c, leg.side, pool.filter((p) => p.venue === v && !taken.has(p.id)));
+      if (!eq || eq.match !== "same") continue;
+      const a = askOf(eq.contract, eq.side);
+      if (a !== null && a <= MAX_INSURANCE_ASK) opts.push({ c: eq.contract, side: eq.side, ask: a });
+    }
+    if (!opts.length) return leg;
+    opts.sort((x, y) => x.ask + pref[x.c.venue] - (y.ask + pref[y.c.venue]));
+    const best = opts[0];
+    if (best.c.id === c.id) return leg;
+    taken.add(best.c.id);
+    const others = opts.filter((o) => o !== best).map((o) => `${o.c.venue} ${Math.round(o.ask * 100)}¢`).join(", ");
+    return { ...leg, contractId: best.c.id, side: best.side, rationale: `${leg.rationale}${leg.rationale ? " " : ""}(Best price: ${best.c.venue} ${Math.round(best.ask * 100)}¢${others ? ` vs ${others}` : ""}.)` };
+  });
+}
+
+/** @deprecated kept for tests/back-compat; the quote now uses routeToBest. */
 export function routeToGemini(legs: HedgeLeg[], contracts: Map<string, MarketContract>): HedgeLeg[] {
   const gem = [...contracts.values()].filter((c) => c.venue === "gemini" && c.status === "open" && c.tradable);
   if (!gem.length) return legs;
@@ -123,7 +159,7 @@ export interface SizeResult { lines: QuoteLine[]; uncovered: { riskId: string; r
 
 export async function sizeQuote(args: SizeArgs): Promise<SizeResult> {
   const { risks, contracts, coveragePct, budgetUsd } = args;
-  const legs = args.route === false ? args.legs : routeToGemini(args.legs, contracts);
+  const legs = args.route === false ? args.legs : routeToBest(args.legs, contracts);
   const books = new Map(args.books ?? []);
   const uncovered: SizeResult["uncovered"] = [];
   const riskById = new Map(risks.map((r) => [r.id, r]));

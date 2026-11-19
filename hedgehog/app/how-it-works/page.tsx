@@ -80,7 +80,7 @@ export default function HowItWorks() {
               {/* row 1: intake → AI → markets */}
               <Box x={20} y={60} w={170} h={60} n="01" title="Business owner" sub="preset or one sentence" />
               <Box x={240} y={60} w={200} h={60} n="02" title="AI risk advisor" sub="risks → live market picks" />
-              <Box x={500} y={40} w={220} h={50} n="03" title="Kalshi · Polymarket" sub="gaps Gemini can't fill · cross-check" tone="var(--kalshi)" />
+              <Box x={500} y={40} w={220} h={50} n="03" title="Kalshi · Polymarket" sub="compared on every hedge · best price wins" tone="var(--kalshi)" />
               <Box x={500} y={106} w={220} h={50} n="04" title="Gemini Prediction Markets" sub="primary prices · desk backs here" tone="var(--gemini)" />
               {/* row 2: quote, desk/crank, dashboard */}
               <Box x={240} y={190} w={200} h={60} n="05" title="Quote engine" sub="size · walk book · fit budget" />
@@ -130,8 +130,8 @@ export default function HowItWorks() {
             <li className={s.clause}>
               <span className={s.cno}>§ 1</span>
               <span className="badge badge-gemini">Gemini Prediction Markets</span>
-              <h3>Priced &amp; hedged on Gemini</h3>
-              <p>Gemini is the primary venue. Its live books (Austin highs, NBA/NFL games, WTI and Brent) price the cover. When a business buys, Hedgehog&apos;s desk <b>backs the exposure with the same contract on Gemini</b> via the Trader API, like an insurer reinsuring. Kalshi (on Solana via DFlow) fills what Gemini doesn&apos;t list: rain, snow, Texas power, lake levels, diesel, CPI. Polymarket is a read-only price check.</p>
+              <h3>Best price across three markets</h3>
+              <p>For every hedge we find the same contract on Gemini, Kalshi and Polymarket and price your cover from the cheapest (ties go to Gemini). Hedgehog&apos;s desk <b>backs the exposure with that contract</b>, like an insurer reinsuring. In this demo only Gemini backing can ever be placed live; Kalshi and Polymarket backing orders are recorded, not placed.</p>
             </li>
             <li className={s.clause}>
               <span className={s.cno}>§ 2</span>
@@ -159,7 +159,7 @@ export default function HowItWorks() {
               <ul className={s.ledger}>
                 <li><b>Gemini:</b> daily highs in 60+ cities, games, crude, natural gas, metals, crypto, Fed decisions.</li>
                 <li><b>Kalshi via DFlow on Solana:</b> rain (daily and monthly totals in 30+ cities), daily highs and lows, December snowfall by city, ski-resort snowfall, season snow days, ERCOT power prices, Lake Mead, heating degree days, weekly diesel and gas, CPI, tornado counts.</li>
-                <li><b>Polymarket (reference only):</b> Mississippi River low water, Lake Powell, Great Salt Lake, LA earthquake, US tornado totals.</li>
+                <li><b>Polymarket:</b> Mississippi River low water, Lake Powell, Great Salt Lake, LA earthquake, US tornado totals.</li>
                 <li><b>Not hedgeable anywhere yet:</b> wildfire, flood, hail, air quality. We say so rather than force a bad proxy.</li>
               </ul>
             </div>

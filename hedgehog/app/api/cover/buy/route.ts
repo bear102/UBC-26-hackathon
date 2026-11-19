@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { PublicKey } from "@solana/web3.js";
 import { store } from "@/lib/store";
+import { isCoverable } from "@/lib/markets/quote";
 import { ALL_PERILS } from "@/lib/types";
 import { coverClient, loadKeypair } from "@/lib/solana/policyClient";
 import { defaultGetContract, VenueError } from "@/lib/venue";
@@ -49,7 +50,7 @@ export async function POST(req: Request) {
     if (!(contracts >= 1)) throw new VenueError("contracts (or payoutUsd) must be >= 1");
     const contract = await defaultGetContract(b.marketRef);
     if (!contract) throw new VenueError(`unknown market ${b.marketRef}`, 404, "not_found");
-    if (!contract.tradable) throw new VenueError(`${contract.venue} markets are read-only context (cannot price cover)`, 400, "not_tradable");
+    if (!isCoverable(contract)) throw new VenueError(`${contract.venue} markets are read-only context (cannot price cover)`, 400, "not_tradable");
     const price = priceBuy(contract, b.side, contracts); // open, not expired, ask <= MAX_ASK, fee applied
     checkPriceMoved(price.marketCostUsd, b.premiumUsd);
     checkBacking(contract.id);

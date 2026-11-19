@@ -24,6 +24,7 @@ export interface BackingPlan {
 }
 
 export interface DeskHedge extends BackingPlan {
+  venue?: "gemini" | "kalshi" | "polymarket"; // where the backing order goes (best price); only Gemini can ever go live
   id: string;                         // `hedge:${kind}:${refId}`
   kind: "position" | "policy";
   refId: string;                      // position id or policy PDA
@@ -45,22 +46,22 @@ export interface DeskHedge extends BackingPlan {
 }
 
 const r2 = (x: number) => Math.round(x * 100) / 100;
+const VENUE_NAME = { gemini: "Gemini", kalshi: "Kalshi", polymarket: "Polymarket" } as const;
 const centsUp = (x: number) => Math.ceil(Math.round(x * 100 * 1e6) / 1e6) / 100;
 
 /** Pure: the order that backs `quantity` contracts of `outcome` on a Gemini contract. Throws when it can't be priced. */
 export function planBacking(c: Pick<MarketContract, "venue" | "symbol" | "yesAsk" | "noAsk" | "status">, outcome: "yes" | "no", quantity: number, slippage = HEDGE_SLIPPAGE): BackingPlan {
-  if (c.venue !== "gemini") throw new Error(`not a Gemini contract (${c.venue})`);
   if (c.status !== "open") throw new Error(`market is ${c.status}`);
   const qty = Math.floor(quantity);
   if (!Number.isFinite(qty) || qty < 1) throw new Error("quantity must be >= 1");
   const ask = outcome === "yes" ? c.yesAsk : c.noAsk;
-  if (ask == null || !(ask > 0 && ask < 1)) throw new Error(`no ${outcome.toUpperCase()} ask on Gemini`);
+  if (ask == null || !(ask > 0 && ask < 1)) throw new Error(`no ${outcome.toUpperCase()} ask on ${c.venue}`);
   const limitPrice = Math.min(HEDGE_MAX_PRICE, centsUp(ask + slippage));
   return { symbol: c.symbol, outcome, quantity: qty, limitPrice, refAsk: ask, notionalUsd: r2(qty * limitPrice) };
 }
 
-export const hedgeText = (h: Pick<DeskHedge, "mode" | "status" | "quantity" | "outcome" | "symbol" | "limitPrice" | "error">) =>
-  `Desk hedge on Gemini (${h.mode === "live" ? h.status : "dry-run"}): BUY ${h.quantity} ${h.outcome.toUpperCase()} ${h.symbol} @ $${h.limitPrice.toFixed(2)}${h.error ? ` (${h.error})` : ""}`;
+export const hedgeText = (h: Pick<DeskHedge, "mode" | "status" | "quantity" | "outcome" | "symbol" | "limitPrice" | "error" | "venue">) =>
+  `Desk hedge on ${VENUE_NAME[h.venue ?? "gemini"]} (${h.mode === "live" ? h.status : "dry-run"}): BUY ${h.quantity} ${h.outcome.toUpperCase()} ${h.symbol} @ $${h.limitPrice.toFixed(2)}${h.error ? ` (${h.error})` : ""}`;
 
 export const liveEnabled = () => process.env.HEDGE_LIVE === "1" && !!process.env.GEMINI_TRADE_KEY && !!process.env.GEMINI_TRADE_SECRET;
 
@@ -110,7 +111,7 @@ export interface BackArgs {
 const inflight = new Map<string, Promise<DeskHedge | null>>();
 
 export async function backOnGemini(a: BackArgs, opts: { place?: typeof placeGeminiOrder } = {}): Promise<DeskHedge | null> {
-  if (a.contract.venue !== "gemini") return null;
+  // Best-price venue backs the sale. Kalshi/Polymarket backing is always a recorded plan (never placed in the demo).
   const id = `hedge:${a.kind}:${a.refId}`;
   // Two concurrent confirms for the same sale must not place two orders (audit F9): share the in-flight call.
   const running = inflight.get(id);
@@ -131,8 +132,8 @@ async function backOnce(id: string, a: BackArgs, opts: { place?: typeof placeGem
   let h: DeskHedge;
   try {
     const plan = planBacking(a.contract, a.outcome, a.quantity);
-    h = { ...base, ...plan, mode: "dry-run", status: "dry-run", marginUsd: a.soldForUsd != null ? r2(a.soldForUsd - plan.notionalUsd) : undefined };
-    if (liveEnabled()) {
+    h = { ...base, ...plan, venue: a.contract.venue, mode: "dry-run", status: "dry-run", marginUsd: a.soldForUsd != null ? r2(a.soldForUsd - plan.notionalUsd) : undefined };
+    if (liveEnabled() && a.contract.venue === "gemini") {
       h.mode = "live";
       try {
         const o = await (opts.place ?? placeGeminiOrder)(plan);
@@ -161,11 +162,12 @@ export function listHedges(owner?: string): DeskHedge[] {
 
 /** Route helper: look up the live contract (≤8s) and back it. Only acts on `gemini:` ids. Never throws. */
 export async function backConfirmedSale(a: Omit<BackArgs, "contract"> & { contractId: string }, getContract: (id: string) => Promise<MarketContract | null>): Promise<DeskHedge | null> {
-  if (!a.contractId.startsWith("gemini:")) return null;
+  const venue = a.contractId.split(":")[0];
+  if (venue !== "gemini" && venue !== "kalshi" && venue !== "polymarket") return null;
   try {
     const contract = await Promise.race([getContract(a.contractId).catch(() => null), new Promise<null>((r) => setTimeout(() => r(null), 8_000))]);
     const c: MarketContract = contract ?? {
-      id: a.contractId, venue: "gemini", eventTitle: a.contractId, label: a.contractId, symbol: a.contractId.slice("gemini:".length),
+      id: a.contractId, venue, eventTitle: a.contractId, label: a.contractId, symbol: a.contractId.slice(venue.length + 1),
       eventTicker: "", peril: "other", expiry: "", yesAsk: null, yesBid: null, noAsk: null, noBid: null, tradable: true, status: "open",
     };
     return await backOnGemini({ ...a, contract: c });

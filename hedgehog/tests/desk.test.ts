@@ -26,11 +26,12 @@ const mk = (id: string, venue: MarketContract["venue"], yesAsk: number | null, n
 
 // ---------- action mapping ----------
 
-test("actionFor: Gemini + Kalshi buy onchain, non-tradable Gemini keeps the deep link, Polymarket is read-only", () => {
+test("actionFor: all 3 venues are coverable (best price wins), non-tradable Gemini keeps the deep link", () => {
   assert.equal(actionFor(mk("gemini:G", "gemini", 0.1, 0.9)), "buy-onchain");
   assert.equal(actionFor(mk("kalshi:K", "kalshi", 0.1, 0.9)), "buy-onchain");
   assert.equal(actionFor(mk("gemini:G", "gemini", 0.1, 0.9, { tradable: false })), "open-on-gemini");
-  assert.equal(actionFor(mk("polymarket:P", "polymarket", 0.1, 0.9)), "read-only");
+  assert.equal(actionFor(mk("polymarket:P", "polymarket", 0.1, 0.9)), "buy-onchain");
+  assert.equal(actionFor(mk("polymarket:P", "polymarket", 0.1, 0.9, { status: "closed" })), "read-only");
 });
 
 test("normalizeGeminiEvents: Gemini contracts are tradable (devnet tokens) and keep their Gemini deep link", () => {
@@ -66,9 +67,9 @@ test("preferGemini: Kalshi stays on top when Gemini is missing an ask, too dear 
 
 // ---------- sizing with a read-only line ----------
 
-test("sizeQuote: read-only (Polymarket) lines are sized for context but never spend the budget", async () => {
+test("sizeQuote: read-only (closed) lines are sized for context but never spend the budget", async () => {
   const k = mk("kalshi:K", "kalshi", 0.2, 0.8);
-  const p = mk("polymarket:P", "polymarket", 0.1, 0.9, { peril: "fed" });
+  const p = mk("kalshi:K2", "kalshi", 0.1, 0.9, { peril: "fed", tradable: false }); // open but not coverable -> context only
   const risks: Risk[] = [{ id: "r1", peril: "heat", title: "h", trigger: "x", lossUsd: 100, lossReasoning: "", confidence: 0.5 }, { id: "r2", peril: "fed", title: "f", trigger: "x", lossUsd: 100, lossReasoning: "", confidence: 0.5 }];
   const legs: HedgeLeg[] = [{ riskId: "r1", contractId: k.id, side: "yes", rationale: "", basisRisk: "" }, { riskId: "r2", contractId: p.id, side: "yes", rationale: "", basisRisk: "" }];
   const q = await sizeQuote({ legs, risks, contracts: new Map([[k.id, k], [p.id, p]]), coveragePct: 100, budgetUsd: 20, fetchBooks: false });
@@ -88,13 +89,13 @@ test("planBacking: same symbol/outcome, qty = contracts sold, limit = ask + 2c r
   assert.equal(no.limitPrice, 0.91);              // 0.885 + 0.02 = 0.905 -> 0.91
   assert.equal(no.notionalUsd, 10.92);
   assert.equal(planBacking(mk("gemini:X", "gemini", 0.98, 0.03), "yes", 1).limitPrice, 0.99);
-  assert.throws(() => planBacking(mk("kalshi:K", "kalshi", 0.1, 0.9), "yes", 1), /not a Gemini/);
+  assert.equal(planBacking(mk("kalshi:K", "kalshi", 0.1, 0.9), "yes", 1).limitPrice, 0.12); // any venue can be planned (best price)
   assert.throws(() => planBacking(mk("gemini:G", "gemini", null, 0.9), "yes", 1), /no YES ask/);
   assert.throws(() => planBacking(mk("gemini:G", "gemini", 0.1, 0.9, { status: "settled" }), "yes", 1), /settled/);
   assert.equal(hedgeText({ mode: "dry-run", status: "dry-run", quantity: 5, outcome: "yes", symbol: "GEMI-X", limitPrice: 0.13 }), "Desk hedge on Gemini (dry-run): BUY 5 YES GEMI-X @ $0.13");
 });
 
-test("backOnGemini: dry-run by default, recorded once per sale, feed line; ignores non-Gemini", async () => {
+test("backOnGemini: dry-run by default, recorded once per sale, feed line; records non-Gemini as dry-run plans", async () => {
   delete process.env.HEDGE_LIVE;
   const g = mk("gemini:GEMI-A", "gemini", 0.13, 0.88);
   let placed = 0;
@@ -108,7 +109,9 @@ test("backOnGemini: dry-run by default, recorded once per sale, feed line; ignor
   assert.equal(placed, 0);
   const again = await backOnGemini({ kind: "position", refId: "pos_1", contract: g, outcome: "yes", quantity: 99 }, { place });
   assert.equal(again!.quantity, 5);               // idempotent
-  assert.equal(await backOnGemini({ kind: "position", refId: "pos_2", contract: mk("kalshi:K", "kalshi", 0.1, 0.9), outcome: "yes", quantity: 5 }), null);
+  const kh = await backOnGemini({ kind: "position", refId: "pos_2", contract: mk("kalshi:K", "kalshi", 0.1, 0.9), outcome: "yes", quantity: 5 });
+  assert.equal(kh?.venue, "kalshi");
+  assert.equal(kh?.mode, "dry-run"); // non-Gemini backing is recorded, never placed
   assert.equal(listHedges("OWNER").length, 1);
   const feed = JSON.parse(fs.readFileSync(path.join(tmp, ".data", "feed.json"), "utf8"));
   assert.ok(feed.some((e: { text: string }) => e.text === "Desk hedge on Gemini (dry-run): BUY 5 YES GEMI-A @ $0.15"));
@@ -213,4 +216,22 @@ test("routeToGemini: a Kalshi pick moves to the identical Gemini contract unless
   // other team / other side of the book never matches
   const gSas = gm.find((c) => c.label === "San Antonio")!;
   assert.equal(sameContract(kDear, gSas), false);
+});
+
+test("routeToBest: re-points a leg to the cheapest identical contract across venues (ties → Gemini)", async () => {
+  const { routeToBest } = await import("../lib/markets/quote");
+  const { setMeta } = await import("../lib/markets/normalize");
+  const mkG = (id: string, venue: "gemini" | "kalshi" | "polymarket", ask: number) => {
+    const c = mk(id, venue, ask, 1 - ask + 0.02, { peril: "heat", location: "Austin" });
+    setMeta(id, { eventDate: "2026-11-21", bounds: { lo: 80, loInclusive: true, hiInclusive: false, text: "≥80" } });
+    return c;
+  };
+  const g = mkG("gemini:G80", "gemini", 0.30), k = mkG("kalshi:K80", "kalshi", 0.25), p = mkG("polymarket:P80", "polymarket", 0.22);
+  const contracts = new Map([[g.id, g], [k.id, k], [p.id, p]]);
+  const [leg] = routeToBest([{ riskId: "r1", contractId: g.id, side: "yes", rationale: "", basisRisk: "" }], contracts);
+  assert.equal(leg.contractId, p.id);
+  assert.match(leg.rationale, /Best price: polymarket 22¢/);
+  const tie = mkG("polymarket:P80b", "polymarket", 0.30);
+  const [kept] = routeToBest([{ riskId: "r1", contractId: g.id, side: "yes", rationale: "", basisRisk: "" }], new Map([[g.id, g], [tie.id, tie]]));
+  assert.equal(kept.contractId, g.id); // tie goes to Gemini
 });
