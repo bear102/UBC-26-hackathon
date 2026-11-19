@@ -14,3 +14,6 @@ keys/
 .vercel
 keys/
 .data/
+target/
+!target/idl/
+!target/types/
