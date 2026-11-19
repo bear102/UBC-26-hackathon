@@ -27,6 +27,7 @@ export default function Landing() {
             <p className={`lede ${s.lede}`}>
               Our AI finds the days that would hurt your business and builds cover from live prediction markets.
               <b> You see what it pays if the bad day happens, and what it costs if it doesn&apos;t.</b>
+              {" "}Your policy lives on Solana: the payout pool is public, and when the result comes in you&apos;re paid automatically.
             </p>
             <div className={s.cta}>
               <a href="#pick" className="btn btn-primary btn-lg">Get my quote <IconArrowRight size={16} /></a>
