@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import type { TickerItem } from "@/app/api/markets/ticker/route";
 import { isMock } from "@/lib/client/mode";
+import { lastBusiness, loadProfile } from "@/lib/client/storage";
 
 type Item = TickerItem;
 const MICRO = "Hedgehog worst-day cover · Priced on live prediction markets · Pays out on Solana ·";
@@ -14,7 +15,10 @@ export function OddsTicker() {
   useEffect(() => {
     if (isMock()) return;
     const ctl = new AbortController();
-    fetch("/api/markets/ticker", { signal: ctl.signal })
+    // local odds: the last business's city, else Austin (the server never shows foreign weather)
+    const id = lastBusiness();
+    const city = (id && loadProfile(id)?.city) || "Austin";
+    fetch(`/api/markets/ticker?city=${encodeURIComponent(city)}`, { signal: ctl.signal })
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then((it: unknown) => { if (Array.isArray(it) && it.length >= 3) setItems(it as Item[]); })
       .catch(() => { /* stay on microtext */ });
