@@ -50,9 +50,25 @@ export async function activeEvents(max = 600): Promise<GEvent[]> {
   return out;
 }
 
+/** Search active events (the paginated list is unstable and omits events; `search=` is reliable). */
+export async function searchEvents(queries: string[], extra: string[] = []): Promise<GEvent[]> {
+  const seen = new Map<string, GEvent>();
+  const urls = [
+    ...queries.map((q) => `${env.geminiPublic()}/v1/prediction-markets/events?status=active&limit=500&search=${encodeURIComponent(q)}`),
+    ...extra.map((q) => `${env.geminiPublic()}/v1/prediction-markets/events?status=active&limit=500&${q}`),
+  ];
+  for (const u of urls) {
+    try {
+      const r = await getJson<{ data: GEvent[] }>(u, 60_000);
+      for (const e of r.data) if (e.status === "active" && !seen.has(e.ticker)) seen.set(e.ticker, e);
+    } catch { /* one failed query should not kill the catalog */ }
+  }
+  return [...seen.values()];
+}
+
 export async function eventByTicker(ticker: string, ttlMs = 0): Promise<GEvent> {
   const r = await getJson<GEvent | { data: GEvent }>(`${env.geminiPublic()}/v1/prediction-markets/events/${encodeURIComponent(ticker)}`, ttlMs);
-  return "data" in r && !(r as GEvent).ticker ? (r as { data: GEvent }).data : (r as GEvent);
+  return "data" in r && !(r as unknown as GEvent).ticker ? (r as { data: GEvent }).data : (r as GEvent);
 }
 
 export async function book(symbol: string, ttlMs = 5_000): Promise<Book> {
