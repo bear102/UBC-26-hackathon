@@ -59,6 +59,22 @@ Tests: `npm run test:program` (13 LiteSVM tests with clock warp: happy YES/NO, U
 - Gemini's own contract text is the customer's terms (hashed onchain as `terms_hash`).
 - Depth evidence (Nov 18-19): 1,500 "Spurs lose" contracts cost $165-$217 on the live book.
 
+## The suite: three ways a business uses a prediction market
+
+The promo is one use of the engine. Behind the counter, the same engine (live Gemini catalog + book pricing + an LLM + the guarded agent) does two more:
+
+| Module | Route | What the owner gets | Trades? |
+|---|---|---|---|
+| **Risk Scan** | `/suite` | One sentence ("coffee cart near UT, iced and hot drinks, we take crypto") → up to 6 live Gemini markets that move this business (weather, local games, BTC, natural gas, the Fed), each with the chance, the cost of cover per $1, an editable AI estimate of the $ hit, the expected loss, where it settles, and a suggested action: **promo**, **hedge** or **plan**. | never |
+| **Promo Guarantee** | `/merchant` | The hedged money-back promo above. | yes (hedge before the first sale) |
+| **Hedge Desk** | `/suite/hedge` | Direct cover for the business: "You pay $4 now. If BTC is ≥ $63,000 at 4 PM CT, Gemini pays you $10." Re-priced every 10 s by walking the live book. | **sandbox only**, merchant login + typed max |
+
+Rules that keep the AI honest: **the LLM only chooses markets and writes words; code computes every number** (probability = book mid, cost = Σ ask, size = payout contracts, premium = book walk) from the book of the venue the cover would actually trade on. Unknown tickers/symbols are dropped; "$X or above" ladders keep exactly one threshold; Fed/GDP/unemployment rows are **plan-only**; cover priced above 75¢ per $1 becomes plan-only; thin, illiquid and empty books are flagged; the settlement source comes from Gemini's `sourceDetails`, never from the model. No key or a slow model → keyword fallback.
+
+Hedge Desk buys are IOC limit orders on key A (shared nonce counter with the agent), allowed only when `GEMINI_TRADE_BASE` is the Gemini sandbox, capped by `DESK_MAX_USD`, and re-priced right before sending. Each fill is committed on Solana as an **SPL Memo** (`hh:desk:v1:<sha256 of the fills>`) from the merchant key: a commitment, not an attestation. Desk positions are subtracted from what the promo attestor may claim, so desk cover can never mask a promo hedge break.
+
+**Venues:** odds and the catalog come from Gemini production (`GEMINI_PUBLIC_BASE`). Orders go to `GEMINI_TRADE_BASE`. A promise or desk ticket is **LIVE** when the trade venue lists every contract it needs (on the sandbox: BTC/ETH ladders); otherwise it is **PAPER**: priced on production odds, fills simulated, labelled everywhere, settled on Gemini's real result.
+
 ## Agent safety (the agent spends real money)
 
 IOC limit orders only, limit ≤ ask + $0.02 · Σask ≤ $0.75 per $1 of payout · never hedges more than the liability cap · daily budget (`DAILY_BUDGET_USD`, default $25) · no automatic buy retries without re-reading positions · halts on any 401/403/terms error · "Stop agent" button · its keys have no withdrawal role · the attestor uses a separate key and process path.
@@ -81,6 +97,6 @@ cp .env.example .env.local    # fill keys; never commit
 npm run build && npm start    # port 5380
 ```
 
-Env: `SOLANA_RPC_URL`, `USDC_MINT`, `PUBLIC_URL`, `HH_ADMIN_TOKEN` (merchant login: open `/api/login?t=<token>`), `GEMINI_API_KEY_A/SECRET_A` (agent), `GEMINI_API_KEY_B/SECRET_B` (attestor), `HEDGE_MODE` (`live`|`paper`), `DAILY_BUDGET_USD`, `PRICE_CEILING`, `LIMIT_SLIPPAGE`, `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`. Keypairs live in `keys/` (git-ignored).
+Env: `SOLANA_RPC_URL`, `USDC_MINT`, `PUBLIC_URL`, `HH_ADMIN_TOKEN` (merchant login: open `/api/login?t=<token>`), `GEMINI_API_KEY_A/SECRET_A` (agent), `GEMINI_API_KEY_B/SECRET_B` (attestor), `HEDGE_MODE` (`live`|`paper`), `DAILY_BUDGET_USD`, `PRICE_CEILING`, `LIMIT_SLIPPAGE`, `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` or `GOOGLE_API_KEY`, `GOOGLE_MODEL` (scan LLM), `GEMINI_PUBLIC_BASE` (odds, production) / `GEMINI_TRADE_BASE` (orders, e.g. `https://api.sandbox.gemini.com`), `HH_ALLOW_CRYPTO=1` (crypto/commodity promos), `DESK_MAX_USD` (Hedge Desk ticket cap, default 100). Keypairs live in `keys/` (git-ignored).
 
 Local end-to-end without devnet SOL: `npx tsx scripts/localnet-accounts.ts`, run `solana-test-validator --bpf-program <id> target/deploy/hedgehog_promise.so --account-dir .data/localnet`, start the app with `SOLANA_RPC_URL=http://127.0.0.1:8899`, then `npx tsx scripts/e2e.ts <ticker> <symbol…>`.

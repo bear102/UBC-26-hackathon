@@ -10,8 +10,9 @@ import idlJson from "./idl/hedgehog_promise.json";
 export const IDL = idlJson as Idl;
 export const PROGRAM_ID = new PublicKey((idlJson as { address: string }).address);
 export const USDC_MINT = new PublicKey(process.env.USDC_MINT || "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
-export const ATTESTOR = new PublicKey("5LQKRaTS8nkd1ag37huyKVNBc5iaFDRG1LnCYTvCu5Es");
-export const RELAYER = new PublicKey("FtVpLmYRmwrC7mdyLqRCF3sTpAF2PweFj2V2zpbZkVZr");
+// Defaults = the devnet program (keys on the user's PC). The build server sets HH_ATTESTOR/HH_RELAYER for localnet runs.
+export const ATTESTOR = new PublicKey(process.env.HH_ATTESTOR || "BC2GGEKLBxCKMsAakUaHckmMuEjF71fmoPCFjP4E4aVN");
+export const RELAYER = new PublicKey(process.env.HH_RELAYER || "Abq5tHs4mFZWFXNK53B5aKfgfnAPDa6jQHmTexDwDAGi");
 
 export const ERRORS: Record<number, string> = {
   6000: "SalesClosed", 6001: "SoldOut", 6002: "Unhedged", 6003: "LiabilityLocked", 6004: "UnauthorizedAttestor",

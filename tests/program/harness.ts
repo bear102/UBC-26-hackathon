@@ -13,7 +13,7 @@ export class H {
   relayer = loadKey("relayer");
   constructor() {
     this.svm = new LiteSVM();
-    this.svm.addProgramFromFile(PROGRAM_ID, "target/deploy/hedgehog_promise.so");
+    this.svm.addProgramFromFile(PROGRAM_ID, fs.existsSync("target/test/hedgehog_promise.so") ? "target/test/hedgehog_promise.so" : "target/deploy/hedgehog_promise.so"); // tests need the --features server-keys build (npm run build:program:test)
     const data = Buffer.alloc(MintLayout.span);
     MintLayout.encode({ mintAuthorityOption: 1, mintAuthority: Keypair.generate().publicKey, supply: BigInt(1e15), decimals: 6, isInitialized: true, freezeAuthorityOption: 0, freezeAuthority: PublicKey.default }, data);
     this.svm.setAccount(USDC_MINT, { lamports: 1_000_000_000, data, owner: TOKEN_PROGRAM_ID, executable: false });

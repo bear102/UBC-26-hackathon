@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import type { Terms } from "./canon";
+import type { Venue } from "./venue";
 
 export type Card = {
   event_ticker: string; event_title: string; strip: string[]; sentence: string; why: string; applies_to: string;
@@ -29,6 +30,7 @@ export type PromiseRec = {
   eventSnapshot?: unknown;         // Gemini event JSON at settlement (Verify fallback)
   eventSnapshotAt?: number;
   testLabel?: string;
+  venue?: Venue;                   // where it is hedged / settles (absent on early records: inferred)
 };
 export type CodeRec = { code: string; promiseId: string; session: string; createdAt: number; usedAt?: number; holder?: string; receiptIndex?: number; sig?: string; reserved?: boolean };
 export type OrderRec = { promiseId: string; orderId: string; symbol: string; side: "buy" | "sell"; qty: number; price: number; filled: number; avgPx?: number; status: string; ts: number; raw?: unknown };
@@ -48,6 +50,7 @@ export type State = {
   agent: { halted: boolean; haltReason?: string };
   cosigns: CosignRec[];
   log: LogRec[];
+  desk?: import("./hedgeDesk").DeskTicket[];   // M3 Hedge Desk tickets (suite, §14.4)
 };
 
 const DIR = path.resolve(process.cwd(), ".data");
@@ -73,7 +76,12 @@ export function save() {
   fs.mkdirSync(DIR, { recursive: true });
   const tmp = `${FILE}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(s, null, 1));
-  fs.renameSync(tmp, FILE);
+  try { fs.renameSync(tmp, FILE); }
+  catch (e) {
+    // Windows: renaming over a file another process (antivirus, indexer) holds open can fail with EPERM/EBUSY.
+    if (!["EPERM", "EBUSY", "EACCES"].includes((e as NodeJS.ErrnoException).code ?? "")) throw e;
+    fs.copyFileSync(tmp, FILE);
+  }
   if (!g.__hhLastBackup || Date.now() - g.__hhLastBackup > 10 * 60_000) {
     g.__hhLastBackup = Date.now();
     fs.mkdirSync(path.join(DIR, "backup"), { recursive: true });

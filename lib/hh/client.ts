@@ -5,13 +5,22 @@ import { createTransferCheckedInstruction, createAssociatedTokenAccountIdempoten
 import bs58 from "bs58";
 import { canonicalResolution, sha256Hex } from "./canon";
 
-export type Config = { programId: string; usdcMint: string; rpc: string; publicUrl: string; merchant: string; hedgeMode: "live" | "paper"; cluster: string };
+export type Config = { programId: string; usdcMint: string; rpc: string; publicUrl: string; merchant: string; hedgeMode: "live" | "paper"; tradeHost: string; dataHost: string; cluster: string };
 
+/** Fetch JSON. Never fails silently: a non-OK response throws with the server's `error` (or the first 200 chars of
+ *  the body), except responses that carry their own `ok` field (e.g. cosign/receipts), which are returned as data. */
 export async function getJSON<T>(url: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(url, { cache: "no-store", ...init });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok && (j as { error?: string }).error && !(j as { ok?: boolean }).hasOwnProperty("ok")) throw new Error((j as { error: string }).error);
-  return j as T;
+  let r: Response;
+  try { r = await fetch(url, { cache: "no-store", ...init }); }
+  catch (e) { throw new Error(`Network error calling ${url}: ${(e as Error).message}`); }
+  const text = await r.text();
+  let j: unknown = null;
+  try { j = text ? JSON.parse(text) : {}; } catch { /* not JSON (HTML error page, proxy page) */ }
+  if (r.ok && j !== null) return j as T;
+  if (j && typeof j === "object" && "ok" in (j as object)) return j as T;
+  const msg = (j as { error?: string } | null)?.error;
+  if (r.status === 401) throw new Error(msg || "Not logged in as the merchant: open /api/login?t=<HH_ADMIN_TOKEN> in this browser");
+  throw new Error(msg ? `${msg} (HTTP ${r.status})` : `HTTP ${r.status} from ${url}: ${text.replace(/\s+/g, " ").slice(0, 200)}`);
 }
 export const post = <T,>(url: string, body: unknown) => getJSON<T>(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
@@ -54,11 +63,12 @@ export type VerifyTick = { label: string; ok: boolean | null; detail?: string };
 type Ev = { ticker: string; status: string; resolvedAt?: string | null; contracts: { instrumentSymbol: string; label?: string; resolutionSide?: string | null }[] };
 
 /** Re-derive the outcome in the browser (§6.5): fetch Gemini, hash, compare to onchain fields. */
-export async function verify(p: { id: string; card: { event_ticker: string; strip: string[] }; onchain: { status: string; outcomeHash: string; winningSymbol: string; strip: string[]; refunded: number } | null }): Promise<{ ticks: VerifyTick[]; source: string }> {
-  let ev: Ev | null = null; let source = "Gemini (live, from your browser)";
+export async function verify(p: { id: string; resolveBase?: string; card: { event_ticker: string; strip: string[] }; onchain: { status: string; outcomeHash: string; winningSymbol: string; strip: string[]; refunded: number } | null }): Promise<{ ticks: VerifyTick[]; source: string }> {
+  const base = p.resolveBase || "https://api.gemini.com";
+  let ev: Ev | null = null; let source = `Gemini${/sandbox/.test(base) ? " sandbox" : ""} (live, from your browser)`;
   for (let i = 0; i < 3 && !ev; i++) {
     try {
-      const r = await fetch(`https://api.gemini.com/v1/prediction-markets/events/${encodeURIComponent(p.card.event_ticker)}`, { cache: "no-store" });
+      const r = await fetch(`${base}/v1/prediction-markets/events/${encodeURIComponent(p.card.event_ticker)}`, { cache: "no-store" });
       if (r.ok) ev = await r.json();
     } catch { /* retry */ }
   }

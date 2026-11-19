@@ -18,3 +18,5 @@ target/
 !target/idl/
 !target/types/
 .data/test-ledger/
+.next-local/
+.next-*/

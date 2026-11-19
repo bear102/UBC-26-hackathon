@@ -3,6 +3,7 @@ import { searchEvents, book, eventByTicker, richText, type GEvent } from "./gemi
 import { quoteBin, quoteStrip, walkBook, type StripQuote } from "./pricing";
 import { env } from "./env";
 import type { Card } from "./store";
+import { venueFor, liveCapable, bookBase, type Venue } from "./venue";
 
 const TX_NBA = ["SAS", "HOU", "DAL"];
 const TEAM_NAMES: Record<string, string> = { SAS: "Spurs", HOU: "Rockets", DAL: "Mavericks", TAMU: "Aggies", TAM: "Aggies", TEX: "Longhorns", TCU: "Horned Frogs", BAY: "Baylor", TTU: "Texas Tech", UH: "Cougars", SMU: "SMU", RICE: "Rice", UTSA: "UTSA" };
@@ -17,16 +18,23 @@ export function kindOf(e: GEvent): CatalogEvent["kind"] | null {
     const teams = [m[2], m[3]];
     if (m[1] === "NBA" ? teams.some((t) => TX_NBA.includes(t)) : teams.some((t) => TX_COLLEGE.includes(t))) return "game";
   }
-  if (process.env.HH_ALLOW_CRYPTO === "1" && /^(BTC|ETH|SOL)(05M|15M)?\d{10}$/.test(e.ticker)) return "crypto";
+  if (process.env.HH_ALLOW_CRYPTO === "1" && (/^(BTC|ETH|SOL|XRP)(05M|15M)?\d{10}$/.test(e.ticker) || /^(NGAS|WTI|BRENT|XAU|XAG|COPPER)\d{10}$/.test(e.ticker))) return "crypto";
   return null;
 }
 
 export async function promoCatalog(): Promise<CatalogEvent[]> {
   const now = Date.now();
+  const crypto = process.env.HH_ALLOW_CRYPTO === "1";
   const all = await searchEvents(
-    ["Spurs", "Rockets", "Mavericks", "Texas", "Aggies", "TCU", "Baylor", "SMU", "Rice", "UTSA", "Houston", "Austin", "San Antonio"],
-    ["category=Weather", ...(process.env.HH_ALLOW_CRYPTO === "1" ? ["category=Crypto"] : [])],
+    // narrow queries: "Texas"/"Houston"/"Dallas" each return 2-4 MB, too slow on a home connection
+    ["Spurs", "Rockets", "Mavericks", "Longhorns", "Aggies", "TCU", "Baylor", "SMU", "UTSA", "Austin", "San Antonio"],
+    ["category=Weather", ...(crypto ? ["category=Crypto", "category=Commodities"] : [])],
   );
+  // Financial promos that can trade for real live on the trade venue (e.g. the sandbox): list them from there.
+  if (crypto && liveCapable() && env.geminiTrade() !== env.geminiPublic()) {
+    const seen = new Set(all.map((e) => e.ticker));
+    for (const e of await searchEvents([], ["category=Crypto", "category=Commodities"], env.geminiTrade())) if (!seen.has(e.ticker)) all.push(e);
+  }
   const out: CatalogEvent[] = [];
   for (const e of all) {
     const k = kindOf(e);
@@ -59,22 +67,24 @@ export function promiseTimes(e: GEvent, kind: CatalogEvent["kind"]): { salesClos
   return { salesClose: Math.max(now + 60, expiry - 90), expectedResolve: expiry + 15 * 60 };
 }
 
-export type QuotedCard = Card & { quote: StripQuote; scale?: { contracts: number; cost: number; fillable: boolean } | null; salesClose: number; expectedResolve: number; kind: string };
+export type QuotedCard = Card & { quote: StripQuote; scale?: { contracts: number; cost: number; fillable: boolean } | null; salesClose: number; expectedResolve: number; kind: string; venue: Venue };
 
 export async function quoteCard(card: Card, k = 1): Promise<QuotedCard> {
-  const e = await eventByTicker(card.event_ticker, 15_000);
+  const venue = await venueFor(card.event_ticker, card.strip);
+  const base = bookBase(venue);
+  const e = await eventByTicker(card.event_ticker, 15_000, base);
   const kind = kindOf(e) ?? "game";
-  const bins = await Promise.all(card.strip.map(async (s) => quoteBin(s, await book(s).catch(() => ({ bids: [], asks: [] })), env.limitSlippage())));
+  const bins = await Promise.all(card.strip.map(async (s) => quoteBin(s, await book(s, 5_000, base).catch(() => ({ bids: [], asks: [] })), env.limitSlippage())));
   const quote = quoteStrip(bins, k);
   let scale = null;
   if (card.strip.length === 1) {
-    const b = await book(card.strip[0]).catch(() => ({ bids: [], asks: [] }));
+    const b = await book(card.strip[0], 5_000, base).catch(() => ({ bids: [], asks: [] }));
     const w = walkBook(b, 1500);
     scale = { contracts: 1500, cost: w.cost, fillable: w.fillable };
   }
   const first = e.contracts.find((c) => c.instrumentSymbol === card.strip[0]);
   const t = promiseTimes(e, kind);
-  return { ...card, event_title: e.title, start_time: e.startTime ?? null, expiry: e.expiryDate, category: e.category, rules_text: richText(first?.description), quote, scale, salesClose: t.salesClose, expectedResolve: t.expectedResolve, kind };
+  return { ...card, event_title: e.title, start_time: e.startTime ?? null, expiry: e.expiryDate, category: e.category, rules_text: richText(first?.description), quote, scale, salesClose: t.salesClose, expectedResolve: t.expectedResolve, kind, venue };
 }
 
 /** Template cards (§5.1 T1-T3) built from the live catalog. */
@@ -104,6 +114,22 @@ export async function templateCards(cat?: CatalogEvent[]): Promise<Card[]> {
       cards.push({ event_ticker: wx.ticker, event_title: wx.title, strip: lowSide.map((b) => b.s), sentence: `Under ${x}°F at the airport → $1 back on iced drinks`, why: "A cool day hurts iced-drink sales; the promo gives people a reason to buy anyway.", applies_to: "iced drinks" });
       cards.push({ event_ticker: wx.ticker, event_title: wx.title, strip: hiSide.map((b) => b.s), sentence: `${x}°F or warmer → $1 back on hot drinks`, why: "A hot day hurts hot-drink sales; the promo keeps them moving.", applies_to: "hot drinks" });
     }
+  }
+  if (process.env.HH_ALLOW_CRYPTO === "1") {
+    // "Coffee's on us if BTC rallies": hourly BTC ladder, the threshold nearest a coin flip, 30 min - 6 h out
+    const now = Date.now();
+    const hourly = cat.filter((e) => /^BTC\d{10}$/.test(e.ticker) && Date.parse(e.expiryDate!) > now + 30 * 60_000 && Date.parse(e.expiryDate!) < now + 6 * 3600_000)
+      .sort((a, b) => Date.parse(a.expiryDate!) - Date.parse(b.expiryDate!));
+    for (const ev of hourly) {
+      const c = ev.contracts.filter((x) => x.prices?.bestAsk && x.prices?.bestBid)
+        .map((x) => ({ x, mid: (Number(x.prices!.bestBid) + Number(x.prices!.bestAsk)) / 2 }))
+        .sort((a, b) => Math.abs(a.mid - 0.5) - Math.abs(b.mid - 0.5))[0];
+      if (!c) continue;
+      const when = new Date(ev.expiryDate!).toLocaleTimeString("en-US", { timeZone: "America/Chicago", hour: "numeric", minute: "2-digit" });
+      cards.unshift({ event_ticker: ev.ticker, event_title: ev.title, strip: [c.x.instrumentSymbol], sentence: `BTC ${c.x.label} at ${when} CT → $1 back`, why: "A crypto-crowd coffee bar: the promo pays out when the market rallies.", applies_to: "any coffee" });
+      break;
+    }
+    return cards.slice(0, 4);
   }
   return cards.slice(0, 3);
 }

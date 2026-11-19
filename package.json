@@ -9,11 +9,12 @@
     "start": "next start -p 5380",
     "worker": "tsx scripts/worker.ts",
     "gate": "tsx scripts/h0-gate.ts",
-    "setup": "tsx scripts/setup.ts",
+    "e2e": "tsx scripts/e2e.ts",
     "keys": "tsx scripts/keys.ts",
     "test": "node --import tsx --test tests/unit/*.test.ts tests/program/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "test:program": "node --import tsx --test tests/program/*.test.ts"
+    "test:program": "node --import tsx --test tests/program/*.test.ts",
+    "build:program:test": "bash -c 'export PATH=$HOME/.avm/bin:$HOME/.local/share/solana/install/active_release/bin:$HOME/.cargo/bin:$PATH && anchor build --no-idl -- --tools-version v1.57 --features server-keys && mkdir -p target/test && cp target/deploy/hedgehog_promise.so target/test/'"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.10.0",

@@ -14,11 +14,13 @@ export default function Counter({ params }: { params: Promise<{ id: string }> })
   const [err, setErr] = useState("");
   const [now, setNow] = useState(Date.now());
   const poll = useRef<ReturnType<typeof setInterval> | null>(null);
-  useEffect(() => { const f = () => getJSON<PV>(`/api/promises/${id}`).then(setP).catch(() => {}); f(); const t = setInterval(f, 3000); const c = setInterval(() => setNow(Date.now()), 1000); return () => { clearInterval(t); clearInterval(c); }; }, [id]);
+  useEffect(() => { const f = () => getJSON<PV>(`/api/promises/${id}`).then((v) => setP(v)).catch((e) => setErr(String(e.message))); f(); const t = setInterval(f, 3000); const c = setInterval(() => setNow(Date.now()), 1000); return () => { clearInterval(t); clearInterval(c); }; }, [id]);
 
   async function sale() {
     setErr("");
-    const r = await post<{ code?: string; url?: string; expiresAt?: number; error?: string }>("/api/counter/code", { promiseId: id });
+    let r: { code?: string; url?: string; expiresAt?: number; error?: string };
+    try { r = await post("/api/counter/code", { promiseId: id }); }
+    catch (e) { setErr(`${(e as Error).message}. Open the counter from the merchant console ([Open counter QR]) on this device.`); return; }
     if (!r.code) { setErr(r.error || "failed"); return; }
     setCode({ code: r.code, url: r.url!, expiresAt: r.expiresAt! });
     setQr(await QRCode.toDataURL(r.url!, { margin: 1, width: 380 }));
@@ -32,7 +34,7 @@ export default function Counter({ params }: { params: Promise<{ id: string }> })
       }
     }, 2000);
   }
-  if (!p) return <main className="narrow"><span className="spin" /></main>;
+  if (!p) return <main className="narrow">{err ? <p className="err">{err}</p> : <span className="spin" />}</main>;
   const oc = p.onchain;
   const left = oc ? Math.max(0, oc.cap - oc.sold) : p.cap;
   const closeIn = p.salesCloseTs * 1000 - now;

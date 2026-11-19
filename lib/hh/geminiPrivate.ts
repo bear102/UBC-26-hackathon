@@ -12,8 +12,10 @@ function creds(p: Profile): Creds {
 }
 export const hasKeys = (p: Profile) => Boolean(creds(p).key && creds(p).secret);
 
-const lastNonce: Record<Profile, number> = { A: 0, B: 0 };
-function nonce(p: Profile) {
+// Process-wide nonce counters. Next.js bundles instrumentation (worker) and route handlers separately, so module
+// state is NOT shared between them; keep the counters on globalThis so every caller of a key uses one sequence.
+const lastNonce = ((globalThis as unknown as { __hhNonce?: Record<Profile, number> }).__hhNonce ??= { A: 0, B: 0 });
+export function nonce(p: Profile) {
   const n = Math.max(Date.now(), lastNonce[p] + 1);
   lastNonce[p] = n;
   return n;

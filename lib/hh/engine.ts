@@ -12,8 +12,11 @@ import * as P from "./program";
 import { conn, key, send, readPromise, receiptsOf, explorer } from "./chain";
 import { load, mutate, log, budgetToday, type PromiseRec, type OrderRec, type Card } from "./store";
 import { quoteCard } from "./catalog";
+import { liveCapable, venueOf, bookBase, hostOf, type Venue } from "./venue";
 
-export const hedgeMode = (): "live" | "paper" => (process.env.HEDGE_MODE === "live" || (process.env.HEDGE_MODE !== "paper" && G.hasKeys("A") && G.hasKeys("B")) ? "live" : "paper");
+/** Whether live trading is possible at all (keys present, not forced to paper). Each promise has its own venue/mode. */
+export const hedgeMode = (): "live" | "paper" => (liveCapable() ? "live" : "paper");
+const venueFor_ = (rec: PromiseRec): Venue => venueOf(rec, load().orders.filter((o) => o.promiseId === rec.id).map((o) => o.orderId));
 
 const nowS = () => Math.floor(Date.now() / 1000);
 
@@ -28,7 +31,7 @@ export async function createPromise(inp: CreateInput): Promise<PromiseRec> {
   const id = Date.now();
   const refundUnits = Math.round(inp.refundUsd * 1_000_000);
   const salesClose = inp.salesCloseTs ?? q.salesClose;
-  const ev = await eventByTicker(inp.card.event_ticker, 15_000);
+  const ev = await eventByTicker(inp.card.event_ticker, 15_000, q.venue.resolve);
   const first = ev.contracts.find((c) => c.instrumentSymbol === inp.card.strip[0]);
   const terms: Terms = {
     sentence: inp.card.sentence, applies_to: inp.card.applies_to, event_ticker: inp.card.event_ticker, strip: inp.card.strip,
@@ -47,10 +50,10 @@ export async function createPromise(inp: CreateInput): Promise<PromiseRec> {
     id: String(id), pda: pda.toBase58(), vault: P.vaultPda(pda).toBase58(), merchantName: terms.merchant_name, card: { ...inp.card, event_title: ev.title, rules_text: richText(first?.description) },
     terms, termsHash: th, refundUnits, cap: inp.cap, salesCloseTs: salesClose, expectedResolveTs: Math.max(q.expectedResolve, salesClose + 60),
     topupThreshold: inp.topupThreshold, tranche: inp.tranche ?? 10, createdAt: Date.now(), createSig: r.sig, status: "HEDGING", alloc: {}, premium: 0,
-    testLabel: inp.testLabel,
+    testLabel: inp.testLabel, venue: q.venue,
   };
   mutate((s) => { s.promises[rec.id] = rec; });
-  log("info", "create", `promise ${rec.id} created ${explorer(r.sig)}`, { pda: rec.pda });
+  log("info", "create", `promise ${rec.id} created (${q.venue.mode} on ${hostOf(q.venue.mode === "live" ? q.venue.trade : q.venue.data)}${q.venue.why ? `: ${q.venue.why}` : ""}) ${explorer(r.sig)}`, { pda: rec.pda });
   if (inp.adopt) {
     // Test promises (D20) adopt an existing position (e.g. the H0 gate fill) instead of buying. The attestor still
     // attests min(adopted, real position - other promises' allocations), so nothing is claimed that Gemini doesn't show.
@@ -62,7 +65,8 @@ export async function createPromise(inp: CreateInput): Promise<PromiseRec> {
 
 // ------------------------------------------------------------------ agent
 
-const inflight = new Map<string, Promise<unknown>>();
+// globalThis: shared by the worker bundle and route-handler bundles (one in-flight hedge per promise process-wide)
+const inflight = ((globalThis as unknown as { __hhInflight?: Map<string, Promise<unknown>> }).__hhInflight ??= new Map());
 
 /** Buy the next tranche if guards pass, then attest OPEN. reason: create | revert | timer */
 export async function hedge(promiseId: string, reason: "create" | "revert" | "timer"): Promise<{ ok: boolean; note: string }> {
@@ -86,7 +90,8 @@ async function hedgeInner(promiseId: string, reason: "create" | "revert" | "time
   if (target == null) return { ok: false, note: "no top-up needed" };
   const held = rec.card.strip.map((sym) => rec.alloc[sym] ?? 0);
   const need = needPerBin(target, k, held);
-  const bins = await Promise.all(rec.card.strip.map(async (sym) => quoteBin(sym, await book(sym, 3000).catch(() => ({ bids: [], asks: [] })), env.limitSlippage())));
+  const venue = venueFor_(rec);
+  const bins = await Promise.all(rec.card.strip.map(async (sym) => quoteBin(sym, await book(sym, 3000, bookBase(venue)).catch(() => ({ bids: [], asks: [] })), env.limitSlippage())));
   const budget = budgetToday(s);
   const why = guardReason({ bins, needContracts: need, k, targetReceipts: target, cap: rec.cap, premiumToday: budget.spent, dailyBudget: env.dailyBudget(), priceCeiling: env.priceCeiling(), now: nowS(), salesCloseTs: rec.salesCloseTs, halted: s.agent.halted });
   if (why) {
@@ -96,7 +101,7 @@ async function hedgeInner(promiseId: string, reason: "create" | "revert" | "time
     return { ok: false, note: why };
   }
   const reqs = rec.card.strip.map((sym, i) => ({ symbol: sym, side: "buy" as const, outcome: "yes" as const, price: bins[i].limit as number, quantity: need[i] })).filter((o) => o.quantity > 0);
-  const mode = hedgeMode();
+  const mode = venue.mode;
   let orders: OrderRec[] = [];
   try {
     if (mode === "live") {
@@ -141,8 +146,11 @@ async function hedgeInner(promiseId: string, reason: "create" | "revert" | "time
 /** Per-bin quantity (contracts) this promise may claim: min(alloc, position - Σ other open allocs). */
 async function attestableQty(rec: PromiseRec, freshOrderIds: string[] = []): Promise<number[]> {
   const s = load();
-  const others = Object.values(s.promises).filter((p) => p.id !== rec.id && !["CLOSED", "SETTLED_NO", "HEDGE_FAILED"].includes(p.status));
-  if (hedgeMode() === "paper") return rec.card.strip.map((sym) => rec.alloc[sym] ?? 0);
+  const v = venueFor_(rec);
+  if (v.mode === "paper") return rec.card.strip.map((sym) => rec.alloc[sym] ?? 0);
+  // only other LIVE promises on the same trade venue share the real position (paper allocations are not positions)
+  const others = Object.values(s.promises).filter((p) => p.id !== rec.id && !["CLOSED", "SETTLED_NO", "HEDGE_FAILED"].includes(p.status)
+    && venueFor_(p).mode === "live" && venueFor_(p).trade === v.trade);
   let pos = await G.positions("B");
   const posQty = (sym: string) => pos.filter((x) => x.symbol === sym && (x.outcome ?? "yes") === "yes").reduce((a, x) => a + Number(x.totalQuantity), 0);
   // fast path: if positions lag a fresh fill, use order history read with key B (never more than B itself observed)
@@ -153,8 +161,13 @@ async function attestableQty(rec: PromiseRec, freshOrderIds: string[] = []): Pro
       pos = await G.positions("B");
     }
   }
+  // Hedge Desk fills (direct cover, same Gemini account) are someone else's position too: never let them stand in
+  // for a promise's hedge, or a sold-back promo hedge would be masked by a desk position on the same contract.
+  const deskQty = (sym: string) => (s.desk ?? []).filter((t) => t.status !== "REJECTED")
+    // Gemini positions are per outcome; promo hedges are YES, so only desk YES fills share that position
+    .reduce((a, t) => a + t.fills.filter((f) => f.symbol === sym && (f.outcome ?? "yes") === "yes").reduce((x, f) => x + f.filled, 0), 0);
   return rec.card.strip.map((sym) => {
-    const otherAlloc = others.reduce((a, o) => a + (o.alloc[sym] ?? 0), 0);
+    const otherAlloc = others.reduce((a, o) => a + (o.alloc[sym] ?? 0), 0) + deskQty(sym);
     return Math.max(0, Math.min(rec.alloc[sym] ?? 0, posQty(sym) - otherAlloc));
   });
 }
@@ -188,7 +201,7 @@ export async function attest(promiseId: string, phase: 0 | 1 | 2, freshOrderIds:
 
 export async function relay(promiseId: string): Promise<string> {
   const rec = load().promises[promiseId];
-  const ev = await eventByTicker(rec.card.event_ticker);
+  const ev = await eventByTicker(rec.card.event_ticker, 0, venueFor_(rec).resolve);
   if (ev.status !== "settled") return `event ${ev.status}`;
   if (!isBinaryResolved(ev)) { log("warn", "relayer", `${rec.card.event_ticker} settled but not binary; waiting`); return "not binary"; }
   const winning = rec.card.strip.find((sym) => ev.contracts.find((c) => c.instrumentSymbol === sym)?.resolutionSide === "yes") ?? "";
@@ -258,7 +271,7 @@ export async function closeReceipts(promiseId: string) {
 
 // ------------------------------------------------------------------ worker tick
 
-const lastRun = new Map<string, number>();
+const lastRun = ((globalThis as unknown as { __hhLastRun?: Map<string, number> }).__hhLastRun ??= new Map());
 const every = (k: string, ms: number) => { const t = lastRun.get(k) ?? 0; if (Date.now() - t < ms) return false; lastRun.set(k, Date.now()); return true; };
 
 export async function tick() {
@@ -269,7 +282,7 @@ export async function tick() {
     try {
       const id = rec.id;
       if (now < rec.salesCloseTs) {
-        if (rec.status === "SELLING" && hedgeMode() === "live" && every(`open:${id}`, 5 * 60_000)) await attest(id, 0);
+        if (rec.status === "SELLING" && venueFor_(rec).mode === "live" && every(`open:${id}`, 5 * 60_000)) await attest(id, 0);
         if (rec.status === "SELLING" && rec.topupThreshold >= 0 && every(`topup:${id}`, 30_000)) {
           const p = await readPromise(rec.pda);
           if (p && trancheTarget({ hedgedCapacity: p.hedgedCapacity, sold: p.sold, cap: rec.cap, threshold: rec.topupThreshold, revertSeen: false, tranche: rec.tranche }) != null) await hedge(id, "timer");
@@ -283,7 +296,7 @@ export async function tick() {
       if (rec.status === "CLOSED_FOR_SALES") {
         if (!atts.length && now >= rec.salesCloseTs + 30 && every(`cutoff:${id}`, 60_000)) await attest(id, 1);
         else if (atts.length && every(`sweep:${id}`, 15 * 60_000)) {
-          if (hedgeMode() === "live") {
+          if (venueFor_(rec).mode === "live") {
             const q = (await attestableQty(rec)).map(toCenti);
             const last = atts[atts.length - 1];
             if (q.some((x, i) => x < last.qtyCenti[i])) await attest(id, 1);
@@ -312,10 +325,11 @@ export async function tick() {
   }
 }
 
-let started = false;
 export function startWorker() {
-  if (started || process.env.HH_WORKER === "0") return;
-  started = true;
+  // global flag: `next dev` can evaluate this module more than once; never run two worker loops
+  const g = globalThis as unknown as { __hhWorker?: boolean };
+  if (g.__hhWorker || process.env.HH_WORKER === "0") return;
+  g.__hhWorker = true;
   let busy = false;
   setInterval(async () => {
     if (busy) return;

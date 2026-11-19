@@ -1,4 +1,5 @@
 // Generate (once) the devnet keypairs used by Hedgehog and print their pubkeys.
+import { pathToFileURL } from "node:url";
 import { Keypair } from "@solana/web3.js";
 import fs from "node:fs";
 import path from "node:path";
@@ -20,7 +21,7 @@ function ensure(name: string): Keypair {
   return kp;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   fs.mkdirSync(DIR, { recursive: true });
   for (const n of KEY_NAMES) console.log(n.padEnd(9), ensure(n).publicKey.toBase58());
 }

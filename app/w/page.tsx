@@ -8,10 +8,12 @@ type W = { holder: string; balance: number | null; receipts: { promiseId: string
 export default function Wallet() {
   const [kp, setKp] = useState<Keypair | null>(null);
   const [w, setW] = useState<W | null>(null);
-  useEffect(() => { const k = getKeypair(); setKp(k); if (location.hash) history.replaceState(null, "", "/w"); getJSON<W>(`/api/wallet?holder=${k.publicKey.toBase58()}`).then(setW); }, []);
+  const [err, setErr] = useState("");
+  useEffect(() => { const k = getKeypair(); setKp(k); if (location.hash) history.replaceState(null, "", "/w"); getJSON<W>(`/api/wallet?holder=${k.publicKey.toBase58()}`).then(setW).catch((e) => setErr(String(e.message))); }, []);
   return (
     <main className="narrow">
       <h1>My receipts</h1>
+      {err && <p className="err">{err}</p>}
       {kp && <p className="small muted">Key {short(kp.publicKey.toBase58(), 6)} (stored in this browser)</p>}
       {w && <div className="card"><div className="muted small">Balance</div><div className="huge">{w.balance == null ? "$0.00" : usd(w.balance)}</div><div className="small muted">test USDC</div></div>}
       {w?.receipts.length === 0 && <p className="muted">No receipts on this device yet.</p>}

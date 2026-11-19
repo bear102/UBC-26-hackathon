@@ -29,7 +29,7 @@ export type HedgehogPromise = {
         {
           "name": "attestor",
           "signer": true,
-          "address": "5LQKRaTS8nkd1ag37huyKVNBc5iaFDRG1LnCYTvCu5Es"
+          "address": "BC2GGEKLBxCKMsAakUaHckmMuEjF71fmoPCFjP4E4aVN"
         },
         {
           "name": "promise",
@@ -82,7 +82,7 @@ export type HedgehogPromise = {
         {
           "name": "relayer",
           "signer": true,
-          "address": "FtVpLmYRmwrC7mdyLqRCF3sTpAF2PweFj2V2zpbZkVZr"
+          "address": "Abq5tHs4mFZWFXNK53B5aKfgfnAPDa6jQHmTexDwDAGi"
         },
         {
           "name": "promise",
