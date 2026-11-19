@@ -33,7 +33,7 @@ export const VENUE_LABEL: Record<string, string> = { gemini: "Gemini", kalshi: "
 /** One-line venue role shown under quote lines. */
 export const VENUE_ROLE: Record<string, string> = {
   gemini: "Priced & hedged on Gemini · settled on Solana",
-  kalshi: "Kalshi contract · outcome tokens on Solana",
+  kalshi: "Kalshi contract · settled on Solana",
   polymarket: "Polymarket · read-only context",
 };
 /** "BUY 5 YES GEMI-… @ $0.15" */

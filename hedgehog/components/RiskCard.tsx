@@ -71,22 +71,15 @@ export function RiskCard({ risk, lines, bought, onBuy, onCover, profile }: {
               <VenueCompare line={l} location={risk.location} />
 
               <div className={s.actions}>
-                {l.action === "buy-onchain" && (hedgeDone
-                  ? <a className="btn btn-sm" href={hedgeDone.simulated ? "/dashboard" : explorerTx(hedgeDone.signature, hedgeDone.network)} target={hedgeDone.simulated ? undefined : "_blank"} rel="noreferrer"><IconCheck size={14} /> Hedge bought {hedgeDone.simulated ? null : <IconExternal size={13} />}</a>
-                  : <button className="btn btn-primary btn-sm" disabled={zero} onClick={() => onBuy(l)}>Buy hedge (devnet)</button>)}
-                {l.action === "open-on-gemini" && (
-                  <a className="btn btn-primary btn-sm" href={c.url || "https://www.gemini.com/prediction-markets"} target="_blank" rel="noreferrer">
-                    Open on Gemini <IconExternal size={13} />
-                  </a>
-                )}
-                {l.action === "read-only" && (c.url
+                {/* One way to buy: a Hedgehog Cover policy (our Solana program), priced from the live market and backed on Gemini. */}
+                {l.action === "read-only" ? (c.url
                   ? <a className="badge badge-neutral" href={c.url} target="_blank" rel="noreferrer">Context only · view on {VENUE_LABEL[c.venue] ?? c.venue} <IconExternal size={12} /></a>
-                  : <span className="badge badge-neutral">Context only · not tradable here</span>)}
-                {l.action !== "read-only" && (coverDone
-                  ? <span className="badge badge-good"><IconCheck size={12} /> Hedgehog Cover active</span>
-                  : <button className="btn btn-gold btn-sm" disabled={zero} onClick={() => onCover(l)}>Get Hedgehog Cover instead</button>)}
-                {c.venue === "gemini" && l.action === "buy-onchain" && (
-                  <a className="btn btn-ghost btn-sm" href={c.url || "https://www.gemini.com/predictions"} target="_blank" rel="noreferrer">Open on Gemini <IconExternal size={13} /></a>
+                  : <span className="badge badge-neutral">Context only · not tradable here</span>)
+                  : (coverDone
+                    ? <a className="btn btn-sm" href="/dashboard"><IconCheck size={14} /> Covered · view on dashboard</a>
+                    : <button className="btn btn-primary btn-sm" disabled={zero} onClick={() => onCover(l)}>Get covered</button>)}
+                {c.venue === "gemini" && l.action !== "read-only" && (
+                  <a className="btn btn-ghost btn-sm" href={c.url || "https://www.gemini.com/predictions"} target="_blank" rel="noreferrer">See market on Gemini <IconExternal size={13} /></a>
                 )}
               </div>
               {l.action === "open-on-gemini" && <p className="xs muted" style={{ margin: "6px 0 0" }}>Buy {l.contracts.toLocaleString()} × “{c.label}” at ≤ {cents(l.pricePerContract)} in your Gemini account.</p>}

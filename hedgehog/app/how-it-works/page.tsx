@@ -88,7 +88,7 @@ export default function HowItWorks() {
               <Box x={780} y={190} w={180} h={60} n="07" title="Live dashboard" sub="positions, payouts, feed" />
               {/* row 3: onchain */}
               <Box x={20} y={330} w={180} h={64} n="08" title="Owner's wallet" sub="Phantom / MetaMask signs" />
-              <Box x={240} y={330} w={220} h={64} n="09" title="Outcome tokens" sub="YES/NO SPL mints · $1 if it happens" />
+              <Box x={240} y={330} w={220} h={64} n="09" title="Your policy account" sub="terms · payout · status" />
               <Box x={500} y={330} w={220} h={64} n="10" title="hedgehog_policy (Anchor)" sub="USDC vault · budget · payout" />
               <Box x={780} y={330} w={180} h={64} n="11" title="QuickNode Streams" sub="filters our txs → webhook" />
 
@@ -137,13 +137,13 @@ export default function HowItWorks() {
               <span className={s.cno}>§ 2</span>
               <span className="badge badge-kalshi">Solana</span>
               <h3>Settled on Solana</h3>
-              <p>Each hedge is an SPL outcome token (the DFlow model) minted at the venue&apos;s live ask. The desk co-signs, the owner signs in Phantom, and winning tokens pay $1 USDC. <b>Hedgehog Cover</b> is our Anchor program: premiums go into a USDC vault, a monthly budget cap is enforced onchain, and payouts are parametric.</p>
+              <p>Getting covered is one signature. <b>Hedgehog Cover</b>, our Anchor program, records the policy onchain, moves the premium into a USDC vault anyone can check, and enforces a monthly budget cap. When the market settles, the payout goes to the owner&apos;s wallet automatically.</p>
             </li>
             <li className={s.clause}>
               <span className={s.cno}>§ 3</span>
               <span className="badge badge-neutral">QuickNode Streams</span>
               <h3>The live coverage feed</h3>
-              <p>A QuickNode Stream on the owner&apos;s token mints and the policy program pushes fills, resolutions and payouts to our webhook. The dashboard shows them in plain words: “Hedge filled”, “Paid $480”.</p>
+              <p>A QuickNode Stream on the policy program pushes fills, resolutions and payouts to our webhook. The dashboard shows them in plain words: “Hedge filled”, “Paid $480”.</p>
             </li>
           </ol>
         </section>

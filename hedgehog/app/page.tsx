@@ -100,7 +100,7 @@ export default function Landing() {
             <li className={s.clause}>
               <span className={s.cno}>§ 3</span>
               <h3>One signature on Solana</h3>
-              <p>Buy the hedge as tokens or as a Hedgehog Cover policy. Payouts land in your wallet.</p>
+              <p>Get covered with one signature: a Hedgehog Cover policy on Solana. Payouts land in your wallet.</p>
             </li>
           </ol>
         </div>

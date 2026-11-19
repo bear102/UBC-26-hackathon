@@ -100,8 +100,8 @@ export const coverBuy = (b: CoverBuyReq) => call<CoverBuyRes>("/api/cover/buy", 
 export const coverConfirm = (policyPda: string, signature: string) => call<{ backing?: DeskHedge }>("/api/cover/confirm", post({ policyPda, signature }));
 
 /** Devnet demo faucet: tops the wallet up to $50 test dollars + fee SOL. Never throws (mainnet / real-USDC setups just skip). */
-export async function devnetFaucet(owner: string): Promise<void> {
-  try { await call<unknown>("/api/hedge/faucet", post({ owner })); } catch (e) { console.warn("faucet skipped", e); }
+export async function devnetFaucet(owner: string, needUsd?: number): Promise<void> {
+  try { await call<unknown>("/api/hedge/faucet", post({ owner, needUsd })); } catch (e) { console.warn("faucet skipped", e); }
 }
 
 // Mock-mode positions created by simulated checkouts (so the dashboard reflects them).

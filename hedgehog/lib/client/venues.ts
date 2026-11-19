@@ -82,7 +82,7 @@ export function localComparison(line: QuoteLine): Comparison {
     contractId: c.id, side: line.side, peril: c.peril, rows, usedVenue: c.venue, bestVenue: c.venue, verdict, spreadPts: cc ? Math.abs(diff) : null,
     headline: rows.map((r) => `${venueName(r.venue)} ${fmtChance(r.prob)}`).join(" · "),
     flags: cc && cc.exact && Math.abs(diff) >= 4 ? [`Polymarket is ${Math.abs(diff)} pts ${diff > 0 ? "higher" : "lower"} than ${venueName(c.venue)}`] : [],
-    why: c.venue === "gemini" ? VENUES.gemini.desc : c.venue === "kalshi" ? "Gemini doesn't list this market, so we use Kalshi. You still get a Solana outcome token." : VENUES.polymarket.desc,
+    why: c.venue === "gemini" ? VENUES.gemini.desc : c.venue === "kalshi" ? "Gemini doesn't list this market, so we use Kalshi. Your policy still settles on Solana." : VENUES.polymarket.desc,
     asOf: new Date().toISOString(),
   };
 }

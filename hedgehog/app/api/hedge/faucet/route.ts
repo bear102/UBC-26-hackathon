@@ -1,6 +1,6 @@
 // POST { owner } -> { minted, usd, solSent, sigs } — DEVNET demo faucet. Works only when the settlement mint
 // (USDC_MINT) is a test dollar whose mint authority is the desk (e.g. the e2e test mint in .data/e2e-test-usdc.json).
-// Tops the wallet up to $50 test USD and, if it has < 0.01 SOL, sends 0.02 devnet SOL for fees.
+// Tops the wallet up to max($500, 1.2 × needUsd + $10) test USD and, if it has < 0.01 SOL, sends 0.02 devnet SOL for fees.
 import { NextResponse } from "next/server";
 import { LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import { createAssociatedTokenAccountIdempotentInstruction, createMintToInstruction, getAccount, getAssociatedTokenAddressSync, getMint } from "@solana/spl-token";
@@ -13,12 +13,15 @@ import { errorResponse } from "@/lib/venue/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-const TARGET_USD = 50;
+const MIN_TARGET_USD = 500;   // devnet test dollars: enough for any demo quote
+const MAX_TARGET_USD = 20_000; // sanity cap on a single top-up
 
 export async function POST(req: Request) {
   try {
     if (env.venue() !== "mock") throw new VenueError("faucet is devnet-only", 403, "forbidden");
-    const body = (await req.json().catch(() => ({}))) as { owner?: string };
+    const body = (await req.json().catch(() => ({}))) as { owner?: string; needUsd?: number };
+    const need = Number(body.needUsd);
+    const TARGET_USD = Math.min(MAX_TARGET_USD, Math.max(MIN_TARGET_USD, Number.isFinite(need) && need > 0 ? Math.ceil(need * 1.2 + 10) : 0));
     let owner: PublicKey;
     try { owner = new PublicKey(body.owner ?? ""); } catch { throw new VenueError("invalid owner pubkey"); }
     const conn = getConnection("devnet");

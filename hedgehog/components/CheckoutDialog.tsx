@@ -55,7 +55,7 @@ export function CheckoutDialog({ kind, line, risk, businessId, onClose, onDone }
       }
       if (!publicKey) throw new Error("Connect a wallet first.");
       go("build");
-      await devnetFaucet(owner); // devnet only: tops the wallet up to $50 test dollars + fee SOL; no-op otherwise
+      await devnetFaucet(owner, line.premiumUsd); // devnet only: tops the wallet up to cover this purchase (min $500 test dollars) + fee SOL; no-op otherwise
       if (isCover) {
         const r = await coverBuy({
           owner, businessId, peril: risk?.peril ?? line.contract.peril, marketRef: line.contractId, trigger: risk?.trigger ?? line.contract.label,
@@ -116,7 +116,7 @@ export function CheckoutDialog({ kind, line, risk, businessId, onClose, onDone }
           <span className="serial">{line.contractId}</span>
         </div>
         <div className={s.kindRow}>
-          <span className="eyebrow">{isCover ? "Hedgehog Cover · onchain policy" : "Buy hedge · outcome tokens"}</span>
+          <span className="eyebrow">{isCover ? "Hedgehog Cover · policy on Solana" : "Buy hedge · outcome tokens"}</span>
           <span className="badge badge-devnet">Devnet</span>
         </div>
         <h2 id="co-title" className={s.title}>{risk?.title ?? line.contract.eventTitle}</h2>
@@ -142,7 +142,7 @@ export function CheckoutDialog({ kind, line, risk, businessId, onClose, onDone }
             {mock && <div className="alert alert-info small" style={{ marginBottom: 12 }}>Demo mode: simulated, nothing goes onchain.</div>}
             <div className={s.actions}>
               <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-              <button className="btn btn-primary" onClick={start}>{connected || mock ? (isCover ? "Buy cover" : "Buy hedge") : "Connect wallet & buy"}</button>
+              <button className="btn btn-primary" onClick={start}>{connected || mock ? (isCover ? "Get covered" : "Buy hedge") : "Connect wallet & get covered"}</button>
             </div>
           </>
         )}
