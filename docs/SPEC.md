@@ -79,7 +79,7 @@ The user's direction: "a suite dedicated to using AI to help businesses make the
 
 **Evidence that the wider catalog is real (Gemini public API, 2026-11-19 01:40Z, `GET /v1/prediction-markets/events`, 1,045 unique events: 1,003 in the paginated list plus category queries):** Sports 785, Weather 115 (daily highs for ~60 cities incl. AUS, SAT, HOU, DFW), Crypto 90, Politics 24, Commodities 18 (WTI, Brent, **natural gas**, gold, silver, copper; daily and month-end), Economics 13 (**`FED261211` Fed decision in December**, `RECESSION26`, `UNEMPMON2612041400`, GDP, S&P). Sample book (re-checked 02:00Z): `NGAS2611302200` "$4 or above" bid 0.31 × 250 / asks 0.35 × 0.76 then 0.36 × 250; lifetime volume **$34.02, $0 in 24 h**; settles on Kaiko index `KK_RFR_NATGASUSDC` (`sourceDetails`), not NYMEX; `FED261211` "Hike 25bps" ask 0.93, "Maintain" 0.06; `RECESSION26` YES ask 0.04. **WTI month-end books are empty** (most bins have no ask), so oil is shown as "no market depth today" and never hedged.
 
-**What does not change:** the program (§3), every never-cut item (§9), the hero beat (D2), the honesty lines (§7.4), the track (Consumer Apps, D1), and the G1-G5 gates. The suite is built **after G4** from shared code and cut before any never-cut item (§9 cut list).
+**What does not change:** the program (§3), every never-cut item (§9), the hero beat (D2), the honesty lines (§7.4), the track (Consumer Apps, D1), and the G1-G5 gates. The suite is built from shared code and cut before any never-cut item (§9 cut list). **Hard rule: no suite code is written until G1 (real Gemini fill) and G2 (program on devnet) have actually passed.** Status at H6.8 (02:00Z Thu): G1 has missed its H4 deadline. There are no Gemini keys, because the build host was found compromised and the user has not yet decided where secrets may live. The G1 NO-GO rule (§9, STRATEGY.md) still applies and outranks everything in §14. The suite lives under **new routes** (`/suite/*`, `/api/exposures`, `/api/hedge-desk/quote`); `/merchant`, `/api/scan` and every v2 screen stay untouched.
 
 **Why this helps the score, not just the scope:** (1) The Gemini bounty: we would use 5 Gemini market categories, not 2, and the vision slide ("prediction markets replace small-business insurance") becomes a live screen instead of a claim. (2) It answers the judge question "is this just a bar gimmick?" (3) Every new module is read-only or reuses the guarded agent, so it adds no new trust surface.
 
@@ -93,6 +93,8 @@ The user's direction: "a suite dedicated to using AI to help businesses make the
 4. **At sales cutoff** the attestor re-reads positions → `attest_hedge(CUTOFF)` → the held fraction and the merchant track record are written.
 5. **Gemini resolves** → the relayer posts `attest_outcome(winning_symbol, canonical_hash)` (this also writes the merchant's hedge record) → on YES, a `refund_crank` tx creates the customers' USDC accounts and pushes $1 to 10 receipts per transaction. On NO, the merchant calls `release`. Afterwards `close_receipts` returns receipt rent to the merchant.
 6. **The customer sees "$1.00 is yours"** → Spend it here (transfer to the merchant) / Cash out (any address) / Verify with Gemini (browser re-hash).
+
+**v3 suite (owner side, §14):** `/suite` maps the business's risks to live Gemini markets (M1); a row can become a promo (this path), a quote-only hedge ticket (M3; real fills only by CLI after the user's yes), or a planning line (M4).
 
 ---
 
@@ -607,11 +609,11 @@ Read-only: terms JSON + hash, **`hedge.json`** (every Gemini orderId, symbol, si
 | 0:00-0:15 | Opener (§0.2) | Speaker A | Title slide: "Hedgehog: promos for Austin bars, hedged on Gemini, refunds guaranteed onchain" | — |
 | 0:15-0:40 | Problem | A | One slide: the bar-promo headlines **that have a saved source URL by H36** (candidates: The Jeffrey, Rizzo's, TallBoy, The Blue Light; currently unsourced in `ideas/`; any headline without a link is dropped, and so is the "~40% more business" quote) + "hand-built · unescrowed · no customer proof" + "a broker won't quote a $6 beer" | if none are sourced: "Money-back-if promos are common; Mattress Mack made them famous" (sourced) |
 | 0:40-1:20 | **Proof it pays (recorded)** | A narrates over the clip | Thursday 9 AM-noon at our cart: two promises (iced under 74°F / hot 74°F+), sold to different customers. "One side was certain to pay; we did that on purpose so you could see a real payout." Gemini resolved Fri 5:02 AM → Explorer: **N refunds in ⌈N/10⌉ crank transactions** → phone "$1.00 is yours" → Verify 3 ticks. Then one line on the Spurs: the result as it happened (refunds, or "the bar's whole cost was $2.80") | the clip **is** the fallback; `/p/` pages as stills |
-| 1:20-2:00 | Live: one sentence → **exposure map** (M1) | B types `sports bar on Guadalupe, $6 drafts, patio, game nights, variable-rate SBA loan` → [Scan my risks] | Exposure map in ≤15 s; B reads only two rows aloud: Spurs tonight (promo) and Saturday high (patio). The Fed row shows as "plan" and is not discussed. B taps the Spurs row → the pre-created promise: "Lock & hedge happened this morning, and here are the Gemini order ids" | cached scan for this exact sentence (§14.2) is instant; template cards behind it |
+| 1:20-2:00 | Live: one sentence → **exposure map** (M1) | B types `sports bar on Guadalupe, $6 drafts, patio, game nights, variable-rate SBA loan` → [Scan my risks] | Exposure map in ≤15 s; B reads only two rows aloud: the **stage promo's event** (the Saturday Austin high or Aggies-OU, per the prep note above) and one more local row. The Fed row shows as "plan" and is not discussed. B taps the stage-promo row → the pre-created promise: "Lock & hedge happened this morning, and here are the Gemini order ids" | cached scan for this exact sentence (§14.2) is instant; template cards behind it |
 | 2:00-2:50 | **HERO: no hedge, no promise** | B taps **[New sale]** for each judge ("the cashier rings you up"). Two judges scan → receipts #9, #10 ("If <team> loses tonight, $1 comes back to you"; issued one after the other by the server mutex, even if they scan at once). A third judge scans → phone: "**No hedge, no promise (yet)**"; console shows a red `Unhedged (6002)` failed tx. The agent fires an IOC batch on Gemini → order id appears → OPEN attest → capacity 20 → the third phone flips to its receipt (within the 45-s retry window; G4 measures the latency). Line: "A receipt cannot exist until Gemini says the hedge exists." | Gemini 500 / no fill → the phone stays "No hedge, no promise". **That is still the point**: show Thursday's recorded production fill + order ids. Network down → backup phones + screen recording |
 | 2:50-3:30 | Try to cheat it | B taps attack 2 (`LiabilityLocked`) and attack 3 (`UnauthorizedAttestor`), red failed txs on Explorer; then a 10-s recorded clip from Thursday's Spurs night: sell 1 contract back on Gemini before tip-off → receipt badge flips to "Hedge reduced: your $1 is still in the vault" and the merchant record shows a break; receipt after tip-off → `SalesClosed`. Line: "The vault is the customer's guarantee. The Gemini contract is the merchant's." | prebuilt failed-tx links from rehearsal |
 | 3:30-4:10 | Economics | A, slide | "300 covers, $5 back if the Spurs lose: a $1,500 tail. Unhedged: 14% chance of losing $1,500. On Gemini's book **this afternoon**, 1,500 Clippers contracts cost **$217.50**. The vault is a deposit, not a cost: it comes back every night, from the vault or from Gemini. The only cost is the premium." Small print: "weather books ~100 deep per bin today; book screenshot 2026-11-18 19:21Z; one snapshot, re-checked Sat AM" | — |
-| 4:10-4:45 | Vision, **shown not told** (M3) | A + B | B switches to the Hedge Desk tab (pre-loaded): "A taqueria's gas bill: if natural gas closes at $4.00 or more on Nov 30, Gemini pays $100. Today that costs about $36, a one-in-three chance. One snapshot, and the book is thin: 250 contracts at the top." (live book; say the depth out loud) + the real order id if the user approved a ≤ $10 fill (§14.4), else "a ticket, not a trade". A: "Same engine, three ways to use a market: promise your customers, protect your costs, or just plan with the odds. Insurance replaced by exchange cover, priced live and paid in minutes. Each held hedge goes on the merchant's onchain record, and that record earns a smaller lock next time." | static screenshot of the Hedge Desk from Friday |
+| 4:10-4:45 | Vision, **shown not told** (M3) | A + B | B switches to the Hedge Desk tab (pre-loaded): "A taqueria's gas bill: if natural gas closes at $4.00 or more on Nov 30, Gemini pays $100. Today that costs about $36, a one-in-three chance. One snapshot, and the book is thin: 250 contracts at the top." (live book; say the depth out loud) + the real order id if the user approved a ≤ $10 fill (§14.4), else "a ticket, not a trade". A: "Same engine, three ways to use a market: promise your customers, protect your costs, or just plan with the odds. Insurance replaced by exchange cover, priced live and paid in minutes. Each held promo hedge goes on the merchant's onchain record, and that record earns a smaller lock next time." | static screenshot of the Hedge Desk from Friday |
 | 4:45-5:00 | Close | A | "Every bar promo in the news was hand-built. Ours is one sentence, hedged on Gemini before the first sale, and paid to the customer automatically." `/p/` QR on the slide | — |
 
 Q&A pocket answers (§7.4) are printed on a card.
@@ -620,6 +622,7 @@ Q&A pocket answers (§7.4) are printed on a card.
 1. 0:00-0:12 opener line + title.
 2. 0:12-0:30 problem slide.
 3. 0:30-1:05 merchant flow screen capture (scan → cards → Lock & hedge → real order ids → OPEN attest → capacity 10), with the Spurs promo captured Thursday afternoon.
+3b. (+10 s, taken from step 7) M1 exposure map for the bar sentence → one M3 ticket priced live ("a ticket, not a trade" unless a fill was approved). Without this, Devpost judges never see the suite.
 4. 1:05-1:30 cashier taps [New sale], phones scan at the watch party. Receipt #11 → Unhedged → top-up → success (captured Thursday).
 5. 1:30-1:50 attack montage: LiabilityLocked, UnauthorizedAttestor, SalesClosed, hedge-reduced flip.
 6. 1:50-2:20 **payout**: Gemini settles Austin high (5:02 AM Fri) → crank txs → "$1.00 is yours" → Spend it here (balance + transfer) → Verify (4 ticks). **Fallback if Run #1 was skipped or settles late:** the D20 test promise (Gemini settled Nov 18 high ~Thu 5:02 AM, real Gemini hedge, 10 receipts paid in one crank tx), labelled "test promise, $0.10 receipts, all bins, so it was certain to pay".
@@ -657,7 +660,7 @@ Human voiceover. Captions on. The honesty lines (§7.4 H1-H3) are spoken once.
 
 **Suite (v3, §14):** one section "Three ways a business uses a prediction market" with a screenshot each of the M1 exposure map, M2 promise, M3 hedge ticket (and M4 brief if built); the list of Gemini categories the catalog reads; the M3 sizing formula; and a line that M1/M4 never trade.
 
-**Agent safety (since an agent spends real money):** decision loop (§5.2) and limits: IOC limit orders only, ≤ ask+2c, Σask ≤ 0.75 per $1 ceiling, never hedge more than the liability, $25/day budget, halts on errors, no onchain withdrawal authority, separate keys and nonces.
+**Agent safety (since an agent spends real money):** decision loop (§5.2) and limits: IOC limit orders only, ≤ ask+2c, Σask ≤ 0.75 per $1 ceiling, never hedge more than the liability, $25/day budget, halts on errors, no onchain withdrawal authority, separate keys and nonces. M3 (suite) never buys from the web app: one CLI script, $10 cap, its own budget, only after the user's explicit yes (§14.4).
 
 **DeFi fallback (if the track switches):** economic design (premium vs expected loss, spread paid, capital lock 100% ≤ 72 h, v2 lock ratio from the track record), risk assumptions (oracle/attestor trust, Gemini counterparty, basis risk = 0 by construction, liquidity caps), addresses.
 
@@ -681,16 +684,17 @@ Owners: **U** = the user (human, holds the Gemini account, pitch). **F** = optio
 | Fri PM / Sat | — | Rockets promo (finals footage), pick + pre-create the finals promo, rehearse ×3, backup phones, recording. | U, F | — |
 
 **Suite work (v3, §14), slotted into the windows above:**
-- **Thu 12-5 PM (H23-28), A2:** `lib/hh/catalog.ts` widened to all categories (§14.1) + M1 `/api/scan` returning exposures (§14.2), with a recorded fixture for tests. This replaces the "LLM scan + templates" item in that row; it is the same file, with a wider tool schema.
-- **Thu 10 PM-Fri 3 AM (H33-38), A3 + A2:** `/merchant` becomes the suite home with tabs Scan · Promises · Hedge Desk · Brief. M3 ticket UI + `lib/hh/hedgeDesk.ts` sizing (pure, unit-tested) + dry-run by default (§14.4). M4 brief if time (§14.5).
-- **Fri 5-9 AM (H40-44), U:** decide whether to approve one small real M3 fill (≤ $10, §14.4). Screenshots for the README and video.
-- Gate **G4b at H38 (Fri 3 AM): M1 returns a valid exposure map for the 3 stage sentences in ≤ 15 s, and M3 prices a ticket from a live book.** If NO → M1 keeps only the promo cards (v2 behaviour) and M3 becomes one static slide.
+- **Precondition:** G1 and G2 passed (§0.4 hard rule). The v2 scan, templates and cards are built first, in their own H23-28 slot, and are **frozen** once the Spurs promo is created through them at H26.
+- **Thu 5-10 PM (H28-33), A2 (in parallel with Run #2, which needs no new code):** `lib/hh/catalog.ts` widened (§14.1) as a separate export, `lib/hh/exposure.ts`, **new** route `/api/exposures` (§14.2), with a recorded fixture for tests. `lib/hh/hedgeDesk.ts` sizing (pure, unit-tested).
+- **Thu 10 PM-Fri 2 AM (H33-37), A3:** **new** pages `/suite` (exposure map) and `/suite/hedge` (M3 ticket, quote only). `/merchant` is not touched. README/slides/Verify work in that window keeps priority. M4 only if G4b has already passed.
+- **Fri 5-9 AM (H40-44), U:** decide on one small real M3 fill (≤ $10, done by CLI after a Telegram yes, §14.4). Screenshots for the README and video (§7.2 step 3b).
+- Gate **G4b at H37 (Fri 2 AM): `/api/exposures` returns a valid map for the 3 stage sentences in ≤ 15 s using a live LLM call (not the keyword fallback), and `/suite/hedge` prices a ticket from a live book.** If NO → the suite becomes 1 slide + the M1 fixture screenshot, and the stage uses the v2 cards (which exist regardless).
 
 **Cut list, in order (cut from the top first):**
 0a. M4 Odds Brief (§14.5).
 0b. M3 real fill (keep the dry-run ticket priced from the live book).
 0c. M3 onchain record write (§14.4; keep the fill in `hedge.json`).
-0d. M3 ticket UI (keep one slide), then M1 non-promo rows (M1 falls back to v2 promo cards).
+0d. `/suite/hedge` page (keep one slide), then `/suite` itself (the v2 cards at `/merchant` are unaffected because they never depended on M1).
 1. LLM scan polish (templates only).
 2. Cash out (keep Spend it here). If cut, the cosign ATA-create branch goes too.
 3. San Antonio and NCAA catalog entries.
@@ -787,10 +791,10 @@ Owners: **U** = the user (human, holds the Gemini account, pitch). **F** = optio
 - **U2 (deadline H3):** Gemini API keys: **key A Trader**, **key B Trader**, optional **key C Auditor**; *no* Fund Manager/withdrawal; IP allowlist off or set to the host IP. Put them in `.env.local` (never committed; `.gitignore` already present).
 - **U3:** Solana devnet SOL via faucet.solana.com (GitHub login) to the deployer (≥ 8 SOL for program deploy, ~3-4 SOL for a ~400 KB program) and merchant (2 SOL) pubkeys that A1 prints.
 - **U4:** Circle devnet USDC via faucet.circle.com (Solana Devnet) to the merchant: ≥ $100 total across requests (vault locks: 20+20 weather, 20 Spurs, 20 finals, 20 Rockets, $1 D20 test). If short by H12, the self-mint fallback is used (§4.4).
-- **U5:** Anthropic API key in `.env.local` (optional; templates work without it).
+- **U5 (v3: REQUIRED by H28, Thu 5 PM, if the suite is built):** Anthropic API key in `.env.local`. M1 without a live model is a keyword router and G4b fails. Where the key may live depends on the host-compromise decision (same as the Gemini keys).
 - **U6 (REQUIRED, by H19 before Run #1):** a stable hostname: a Cloudflare named tunnel on a domain you control, or an ngrok account with its free static domain (availability unverified for your account; check when signing up). Quick tunnels are not allowed (D16).
 - **U7:** Logistics: a table/spot near UT for Thursday 9-12 and a watch-party room Thursday 5-10 PM; 2 spare phones for finals; tell friends to come scan.
-- **U8:** Approve the real-money budget: ≤ $75 total premium (expected ≈ $46: weather pair ~$22, Spurs ~$3, finals ~$5, Rockets ~$11, D20 test hedge ~$1.30, other tests ~$2).
+- **U8:** Approve the real-money budget: ≤ $75 total premium for promo hedges (expected ≈ $46: weather pair ~$22, Spurs ~$3, finals ~$5, Rockets ~$11, D20 test hedge ~$1.30, other tests ~$2). **Plus, separately, ≤ $10 for one optional M3 fill (open question 10)**, which does not draw on `DAILY_BUDGET`.
 
 ---
 
@@ -892,7 +896,7 @@ One app, one core, four modules (§0.4). **Rule for every module: the LLM picks 
 
 ### 14.1 Catalog (`lib/hh/catalog.ts`, widened)
 - Source: `GET /v1/prediction-markets/events?limit=500&offset=…` (paginated; `pagination.total` was 1,003 at 01:40Z) plus `?category=Economics|Commodities|Politics` (verified to work).
-- Keep an event only if: `status` active, `expiryDate` within **45 days** (drops 2028 elections etc.), and **at least one contract has a `bestAsk`** (drops today's empty WTI month-end books).
+- Keep an event only if: `status` active, `expiryDate` within **45 days**, or **100 days for Economics** (keeps `RECESSION26`, expiring 2027-02-01; drops 2028 elections etc.), and **at least one contract has a `bestAsk`** (drops today's empty WTI month-end books).
 - Relevance pre-filter before the LLM (keeps the prompt small, ≤ 120 events): weather for the profile's city (default `AUS`; `SAT`, `HOU`, `DFW` mapped from text), sports for teams in that metro, all Commodities, all Economics, and Politics only when a keyword hits (e.g. `CRYPTOSTRUCT26` for a crypto business).
 - Compact row per event for the prompt: `ticker · title · expiry · [label: ask]…` (≤ 16 contracts).
 - Cache 60 s. The existing v2 filter (§5.1) stays as the `promo` subset.
@@ -919,7 +923,8 @@ Input: free text ≤ 400 chars. The LLM gets the filtered catalog and must call 
 - **`action` is forced to `plan`** when Σask of `symbols` > 0.75 per $1 (cover that costs almost what it pays, e.g. a 93% Fed hike) and for every `FED*`, `UNEMP*`, `GDP*`, `RECESSION*` row in the hackathon build (these get a planning line, never a hedge button).
 - `basis_note` is **prefixed by code** with the event's `sourceDetails` (agency + index), so the settlement source is never invented by the LLM.
 - Rows whose event has `volume24h == 0` get an `illiquid` label in addition to `thin`.
-- Server adds per row: `p_bad` = Σ mid of `symbols` (capped at 1), `cost_per_$1` = Σ ask, `depth` = min ask depth within ask+0.02, and a label `thin` if depth < 50.
+- **Market shape:** code classifies each event as `exclusive` (bins, exactly one pays: WXHIGH, sports moneylines, Fed) or `ladder` (cumulative "$X or above" thresholds: NGAS, WTI, metals, S&P). For a `ladder`, exactly **one** symbol is allowed per row (extra symbols are dropped, keeping the one nearest 50% mid).
+- Server adds per row: `p_bad` = Σ mid of `symbols` for `exclusive` (capped at 1), or the single mid for `ladder`, `cost_per_$1` = Σ ask, `depth` = min ask depth within ask+0.02, and a label `thin` if depth < 50.
 - UI: one row per exposure, sorted by `p_bad × impact_usd`: "**Natural gas ≥ $4.00 on Nov 30** · $0.36 per $1 · 33% · AI est. hit $300 [edit] · *Settles on Kaiko's natural-gas index; your utility bill follows it with a lag*" with a button per action: [Make it a promo] → M2 card flow; [Hedge it] → M3 ticket; [Plan for it] → M4.
 - Timeout 15 s → keyword fallback (`bar|pub|watch` → next local NBA/NCAA `-M`; `patio|truck|cart|iced` → local `WXHIGH`; `loan|SBA|credit line` → `FED*`; `gas|stove|kitchen|restaurant|taqueria` → `NGAS*`; `crypto` → `CRYPTOSTRUCT26`). The 3 stage sentences are pre-cached by sha256 of the text (cache max age 10 min, refreshed by the worker every 5 min on stage day).
 - Stage sentences: (1) the sports bar (§7.1), (2) `taqueria on East 6th, gas griddles, 2 food trucks`, (3) `coffee cart near UT, iced and hot drinks`.
@@ -929,10 +934,10 @@ The v2 product, §1-§13, unchanged. Entered from M1 rows with `action = promo` 
 
 ### 14.4 M3 Hedge Desk (`lib/hh/hedgeDesk.ts`, `/api/hedge-desk/quote`, `/api/hedge-desk/order`)
 Direct cover for the business itself. No customer, no vault, no program instruction.
-- **Sizing (pure, unit-tested):** owner sets `payout_usd` (default = `impact_usd`, editable). Each contract pays $1, so for a single-bin threshold market `qty = payout_usd`. For a multi-bin strip (mutually exclusive bins), buy `payout_usd` of **each** bin, since exactly one pays. `premium` = walk the asks for `qty` per bin (limit ask+0.02). Show `premium`, `fair` (Σ mid × qty), `spread_paid`, `p_bad`, `expected_payout = p_bad × payout_usd`, `fillable` (depth vs qty), and the plain line "You pay $X now. If <scenario>, Gemini pays you $Y. Otherwise you lose the $X."
+- **Sizing (pure, unit-tested):** owner sets `payout_usd` (default = `impact_usd`, editable). Each contract pays $1, so for a single-bin threshold market `qty = payout_usd`. For a multi-bin strip of an `exclusive` event, buy `payout_usd` of **each** bin, since exactly one pays. A `ladder` event always uses one threshold (§14.2). `premium` = walk the asks for `qty` per bin (limit ask+0.02). Show `premium`, `fair` (Σ mid × qty), `spread_paid`, `p_bad`, `expected_payout = p_bad × payout_usd`, `fillable` (depth vs qty), and the plain line "You pay $X now. If <scenario>, Gemini pays you $Y. Otherwise you lose the $X."
 - **Ticket states:** `DRAFT → PRICED → APPROVED → FILLED | PARTIAL | REJECTED`. Re-priced on open and every 10 s.
-- **Money rule (CLAUDE.md):** `/order` refuses unless (a) env `M3_LIVE=1`, (b) the request carries a one-time approval token minted by the owner tapping [Buy cover] and typing the dollar amount, and (c) the order is ≤ `M3_MAX_ORDER_USD` (**$10** during the hackathon). The user approves each real fill explicitly (open question 10). Default is dry-run: the ticket ends at `PRICED` with "not bought (demo)".
-- **Guards:** the §5.2 agent guards apply unchanged (IOC only, limit ≤ ask+0.02, `Σask ≤ PRICE_CEILING`, the shared `DAILY_BUDGET`, halt conditions). M3 never sells.
+- **Money rule (CLAUDE.md):** there is **no web order route**. The public app has no merchant auth, so a button on it can't count as approval. The web ticket is quote-only and ends at `PRICED` with "a ticket, not a trade". A real fill is done by `scripts/m3-order.ts <ticketId> <maxUsd>` from the host, only after the user replies yes on Telegram to that exact ticket and amount. The script refuses above `M3_MAX_ORDER_USD` (**$10**) and re-prices before sending.
+- **Keys, nonces, budget:** the script uses **key A**. Nonces come from the same persisted monotonic counter as the agent (`.data/nonce-A.json`, `max(Date.now()*1000, last+1)`, written before send), so a CLI call can't collide with the Next/agent process. M3 has its **own** `M3_BUDGET_USD` (default $10) and never touches `DAILY_BUDGET`. The other §5.2 guards apply (IOC only, limit ≤ ask+0.02, `Σask ≤ PRICE_CEILING`, halt state). M3 never sells.
 - **Record (optional, cut 0c):** after a fill, the merchant key sends one **SPL Memo** tx with `hh:m3:<sha256(hedge-desk.json)>`. No program change. It is shown on the merchant's public page next to the Merchant PDA track record and labelled as a commitment, not an attestation.
 - **Allocation:** M3 fills are tagged `alloc[m3:<ticket>]` in the §5.2 ledger so the M2 attestor never counts them as promo cover.
 
@@ -946,9 +951,11 @@ Direct cover for the business itself. No customer, no vault, no program instruct
 lib/hh/catalog.ts       widened catalog + relevance filter (§14.1)
 lib/hh/exposure.ts      M1 tool call, validation, enrichment, keyword fallback
 lib/hh/hedgeDesk.ts     M3 sizing + ticket state (pure)
-app/merchant            suite home: tabs Scan · Promises · Hedge Desk · Brief
-app/api/scan            M1 (replaces the v2 card endpoint; returns promo cards inside rows)
-app/api/hedge-desk/*    quote (public reads) · order (guarded, approval token)
+app/suite               M1 exposure map (+ Brief tab if built); links to /merchant for promos
+app/suite/hedge         M3 ticket, quote only
+app/api/exposures       M1 (new; /api/scan and the v2 cards stay as they are)
+app/api/hedge-desk/quote  public reads only
+scripts/m3-order.ts     the only M3 buy path (CLI, after a Telegram yes)
 app/api/brief           M4
 store                   + profiles[merchant], exposures[scanId], tickets[id], approvals[token]
 ```
@@ -957,7 +964,8 @@ store                   + profiles[merchant], exposures[scanId], tickets[id], ap
 - `hedgeDesk`: single-bin and 3-bin strip sizing; partial depth → `fillable=false`; premium = book walk on a saved book.
 - `exposure`: hallucinated ticker dropped; `promo` on a non-promo event becomes `hedge`; keyword fallback for each stage sentence.
 - `catalog`: an event with no asks (WTI month-end fixture) is excluded; 2028 elections excluded by the 45-day rule.
-- `/api/hedge-desk/order`: refuses without `M3_LIVE`, without a token, with a reused token, and above $10.
+- `scripts/m3-order.ts`: refuses above $10, refuses when re-priced Σask > ceiling, shares the persisted key-A nonce file (two concurrent calls never reuse a nonce).
+- `exposure`: a ladder row with 2 symbols keeps 1; `p_bad` for a ladder is never a sum.
 
 ### 14.8 Q&A additions
 - **"Isn't this gambling for businesses?"** "It's the opposite side of the trade: the business buys the outcome that hurts it, so a bad day costs a known premium instead of an unknown loss. That's what insurance does. The difference is the price comes from a live market in seconds."
@@ -969,8 +977,8 @@ store                   + profiles[merchant], exposures[scanId], tickets[id], ap
 ### 14.9 Risks (add to §10.1)
 | # | Risk | Likelihood | Mitigation |
 |---|---|---|---|
-| R20 | Suite work starves the never-cut path | medium | Built only after G4; G4b at H38; cut items 0a-0d first |
-| R21 | LLM proposes markets that don't exist | high without fix | Server validation drops them; keyword fallback |
-| R22 | Thin or empty books outside weather/sports | high | `bestAsk` filter, `thin` label, `fillable` flag; WTI excluded today |
-| R23 | A judge reads M3 as unlicensed advice | low | Numbers from code, owner approval per order, "not advice" footer |
-| R24 | Pitch gets crowded again (D2) | medium | M1 replaces an existing beat (1:20-2:00); M3 replaces the told vision (4:10-4:45); no new beats |
+| R25 | Suite work starves the never-cut path | high while G1 is open | No suite code before G1+G2 pass; new routes only; G4b at H37; cut items 0a-0d first |
+| R26 | LLM proposes markets that don't exist | high without fix | Server validation drops them; keyword fallback |
+| R27 | Thin or empty books outside weather/sports | high | `bestAsk` filter, `thin` label, `fillable` flag; WTI excluded today |
+| R28 | A judge reads M3 as unlicensed advice | low | Numbers from code, macro rows are plan-only, CLI-only buys after a user yes, "not advice" footer |
+| R29 | Pitch gets crowded again (D2) | medium | M1 replaces an existing beat (1:20-2:00); M3 replaces the told vision (4:10-4:45); no new beats |
