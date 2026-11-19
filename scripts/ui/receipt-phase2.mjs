@@ -1,0 +1,18 @@
+import { chromium, devices } from "playwright";
+const [BASE, PATH, OUT] = process.argv.slice(2);
+const b = await chromium.launch();
+const phone = await b.newContext({ ...devices["iPhone 13"], storageState: `${OUT}/phone-state.json` });
+const p = await phone.newPage();
+const errs = []; p.on("pageerror", (e) => errs.push(e.message)); p.on("console", (m) => m.type() === "error" && errs.push(m.text()));
+await p.goto(BASE + PATH);
+await p.getByText("is yours").first().waitFor({ timeout: 90000 });
+await p.getByRole("button", { name: "Spend it here" }).waitFor({ timeout: 60000 });
+await p.screenshot({ path: `${OUT}/yes-paid.png`, fullPage: true });
+await p.getByRole("button", { name: "Verify with Gemini" }).click();
+await p.getByText("Hash matches").first().waitFor({ timeout: 30000 });
+await p.getByRole("button", { name: "Spend it here" }).click();
+await p.getByText(/Sent \$/).first().waitFor({ timeout: 60000 }).catch(() => errs.push("no Sent confirmation"));
+await p.waitForTimeout(1000);
+await p.screenshot({ path: `${OUT}/yes-spent.png`, fullPage: true });
+console.log(JSON.stringify({ errs, text: (await p.locator("main").innerText()).slice(0, 1500) }, null, 1));
+await b.close();

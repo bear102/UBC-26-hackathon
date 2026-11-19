@@ -1,0 +1,17 @@
+import { chromium, devices } from "playwright";
+const [BASE, PID, OUT] = process.argv.slice(2);
+const b = await chromium.launch();
+const desk = await b.newContext();
+const d = await desk.newPage();
+await d.goto(BASE + `/merchant/p/${PID}`);
+await d.evaluate(async (id) => fetch(`/api/promises/${id}/action`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "counter" }) }), PID);
+const url = await d.evaluate(async (id) => { const r = await fetch("/api/counter/code", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ promiseId: id }) }); return (await r.json()).url; }, PID);
+const phone = await b.newContext({ ...devices["iPhone 13"] });
+const p = await phone.newPage();
+const errs = []; p.on("pageerror", (e) => errs.push(e.message));
+await p.goto(BASE + new URL(url).pathname);
+await p.getByText("comes back to you").first().waitFor({ timeout: 60000 });
+await p.screenshot({ path: `${OUT}/yes-receipt-before.png`, fullPage: true });
+await phone.storageState({ path: `${OUT}/phone-state.json` });
+console.log(JSON.stringify({ path: new URL(url).pathname, errs }));
+await b.close();
