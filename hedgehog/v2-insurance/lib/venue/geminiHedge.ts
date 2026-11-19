@@ -64,7 +64,7 @@ export const hedgeText = (h: Pick<DeskHedge, "mode" | "status" | "quantity" | "o
 
 export const liveEnabled = () => process.env.HEDGE_LIVE === "1" && !!process.env.GEMINI_TRADE_KEY && !!process.env.GEMINI_TRADE_SECRET;
 
-// ---------- Gemini private API (HMAC-SHA384), adapted from v1-promos/lib/hh/geminiPrivate.ts ----------
+// ---------- Gemini private API (HMAC-SHA384), adapted from old/lib/hh/geminiPrivate.ts ----------
 
 let lastNonce = 0;
 type OrderResp = { orderId?: string | number; status?: string; filledQuantity?: string; avgExecutionPrice?: string; [k: string]: unknown };
