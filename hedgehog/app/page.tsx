@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PresetGrid } from "@/components/PresetGrid";
 import { GuillocheBand, Rosette, Seal, Swash } from "@/components/Engraving";
 import { IconArrowRight } from "@/components/Icons";
+import { PastQuotes } from "@/components/PastQuotes";
 import s from "./page.module.css";
 
 const PRICED = ["Priced on Gemini", "Kalshi", "Polymarket", "Paid out on Solana"];
@@ -73,6 +74,7 @@ export default function Landing() {
 
       <section className="sec" id="pick">
         <div className="container">
+          <PastQuotes eyebrow="Welcome back" />
           <div className="sec-head">
             <div><span className="eyebrow">Step 1</span><h2>Pick a business, <em>or describe yours</em></h2></div>
             <span className="muted small">Three Austin examples · a quote in about 30 seconds</span>
@@ -96,12 +98,12 @@ export default function Landing() {
             <li className={s.clause}>
               <span className={s.cno}>§ 2</span>
               <h3>Matched to live markets</h3>
-              <p>Gemini and Kalshi contracts that pay when that day comes, with the odds and the price.</p>
+              <p>Live Gemini, Kalshi and Polymarket contracts that pay when that day comes. The cheapest one prices your cover.</p>
             </li>
             <li className={s.clause}>
               <span className={s.cno}>§ 3</span>
               <h3>One signature on Solana</h3>
-              <p>Get covered with one signature: a Hedgehog Cover policy on Solana. Payouts land in your wallet.</p>
+              <p>One signature buys a Hedgehog Cover policy on Solana, sold only if its vault can pay. Payouts land in your wallet.</p>
             </li>
           </ol>
         </div>

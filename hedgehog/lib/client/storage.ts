@@ -46,3 +46,17 @@ export function clearQuotes(id: string) {
     }
   } catch {}
 }
+
+/** Every stored quote with its coverage level (from the key `hh.quote.<businessId>.<pct>`), for "Your past quotes". */
+export function storedQuoteEntries(): { quote: Quote; pct: number }[] {
+  const out: { quote: Quote; pct: number }[] = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const m = localStorage.key(i)?.match(/^hh\.quote\.(.+)\.(\d+)$/);
+      if (!m) continue;
+      const q = get<Quote>(m[0]);
+      if (q) out.push({ quote: q, pct: Number(m[2]) });
+    }
+  } catch {}
+  return out;
+}

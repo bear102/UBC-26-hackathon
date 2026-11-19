@@ -10,6 +10,7 @@ import { allStoredQuotes, lastOwner, setLastOwner } from "@/lib/client/storage";
 import { DEMO_OWNER, type CoverPolicy } from "@/lib/fixtures";
 import { cents, explorerTx, orderText, shortAddr, shortDate, timeAgo, usd, VENUE_LABEL } from "@/lib/client/format";
 import { PolicyStory, PositionStory } from "./explain/PositionStory";
+import { PastQuotes } from "./PastQuotes";
 import { Provenance, venueOfId } from "./markets/Provenance";
 import { When } from "./markets/When";
 import { GuillocheBand, Rosette, Seal } from "./Engraving";
@@ -185,6 +186,8 @@ export function Dashboard() {
         <div><span className="label">Premiums paid</span><b className="fig cost">{usd(stats.premium, 2)}</b><small>hedges + Cover policies</small></div>
         <div><span className="label">Paid out to you</span><b className="fig">{usd(stats.paidOut)}</b><small>settled hedges</small></div>
       </section>
+
+      <PastQuotes eyebrow="Quotes" />
 
       {stats.hero && (
         <section className={`cert ${s.hero}`}>

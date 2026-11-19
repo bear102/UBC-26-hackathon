@@ -137,13 +137,13 @@ export default function HowItWorks() {
               <span className={s.cno}>§ 2</span>
               <span className="badge badge-kalshi">Solana</span>
               <h3>Settled on Solana</h3>
-              <p>Getting covered is one signature. <b>Hedgehog Cover</b>, our Anchor program, records the policy onchain, moves the premium into a USDC vault anyone can check, and enforces a monthly budget cap. When the market settles, the payout goes to the owner&apos;s wallet automatically.</p>
+              <p>Getting covered is one signature. <b>Hedgehog Cover</b>, our Anchor program, records the policy onchain, moves the premium into a USDC vault anyone can check, refuses any policy the vault can&apos;t pay, and enforces a monthly budget cap. When the market settles, the payout goes to the owner&apos;s wallet automatically.</p>
             </li>
             <li className={s.clause}>
               <span className={s.cno}>§ 3</span>
               <span className="badge badge-neutral">QuickNode Streams</span>
               <h3>The live coverage feed</h3>
-              <p>A QuickNode Stream on the policy program pushes fills, resolutions and payouts to our webhook. The dashboard shows them in plain words: “Hedge filled”, “Paid $480”.</p>
+              <p>A QuickNode Stream filters Solana blocks to Hedgehog&apos;s transactions and pushes fills, resolutions and payouts to our webhook. The dashboard shows them in plain words: “Hedge filled”, “Paid $480”.</p>
             </li>
           </ol>
         </section>
@@ -153,7 +153,7 @@ export default function HowItWorks() {
             <div>
               <span className="eyebrow">Venues</span>
               <h2 className={s.h2}>One market layer, <em>three venues</em></h2>
-              <p className={s.intro}>You never pick a venue. <b>Gemini first, Kalshi where Gemini has nothing, Polymarket for reference.</b></p>
+              <p className={s.intro}>You never pick a venue. <b>We use whichever venue is cheapest for the same contract.</b></p>
               <div className={`card ${s.legend}`}><VenueLegend /></div>
               <h3 className={s.h3}>What&apos;s on the menu</h3>
               <ul className={s.ledger}>
@@ -168,7 +168,7 @@ export default function HowItWorks() {
               <h2 className={s.h2}>How we choose, <em>and show it</em></h2>
               <ol className={`${s.ledger} ${s.numbered}`}>
                 <li><b>Same event, side by side.</b> Each hedge shows a one-line check, e.g. <span className={s.sample}>Gemini 11% · Kalshi 12% · Polymarket 11% — markets agree</span>, that opens into a full comparison.</li>
-                <li><b>Gemini first.</b> Code (not the AI) swaps a Kalshi pick for the identical Gemini contract if it costs at most 1¢ more. Otherwise Kalshi stays.</li>
+                <li><b>Cheapest wins.</b> Code (not the AI) moves each pick to the cheapest identical contract; near-ties go to Gemini.</li>
                 <li><b>Disagreement is flagged.</b> A venue 4+ points away gets a warning. Similar-but-not-identical questions are marked ≈.</li>
                 <li><b>Same on the dashboard.</b> Each position shows where its price came from and where it&apos;s backed.</li>
               </ol>

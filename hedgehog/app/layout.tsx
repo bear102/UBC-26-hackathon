@@ -10,7 +10,7 @@ const plexMono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500", "600
 
 export const metadata: Metadata = {
   title: "Hedgehog — insurance for your worst business day",
-  description: "AI-built hedges from live prediction markets (Gemini, Kalshi via Solana), priced like an insurance quote and bought with one signature.",
+  description: "AI-built cover for small businesses, priced from live Gemini, Kalshi and Polymarket markets and bought with one Solana signature.",
   icons: { icon: "/favicon.svg" },
 };
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#F3EEE1" };

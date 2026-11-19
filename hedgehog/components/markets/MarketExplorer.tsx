@@ -61,7 +61,7 @@ export function MarketExplorer({ data, initial }: { data: ExplorerData; initial:
   return (
     <>
       <p className={s.note}>
-        <b>Gemini first</b>, Kalshi (on Solana via DFlow) where Gemini has nothing, Polymarket for reference.{" "}
+        <b>The cheapest venue prices your cover.</b> Kalshi trades on Solana via DFlow.{" "}
         No venue lists wildfire, flood, hail or air quality yet.
       </p>
       <div className={s.stat}>

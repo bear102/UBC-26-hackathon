@@ -190,9 +190,9 @@ export function PlanView() {
             <p className={s.summary}>{quote.summary}</p>
             <ClarifyRecap answers={quote.clarifications ?? loadClarify(profile)?.answers} asked={!!loadClarify(profile)?.questions.length} onEdit={editAnswers} busy={loading} />
             <p className={`xs ${s.venues}`}>
-              <span className="badge badge-gemini">Priced &amp; hedged on Gemini</span>
+              <span className="badge badge-gemini">Priced live: Gemini · Kalshi · Polymarket</span>
               <span className="badge badge-kalshi">Settled on Solana</span>
-              <span className="muted">We back each sale with the same contract on Gemini. <Link href="/how-it-works">How</Link></span>
+              <span className="muted">Each line uses the cheapest venue for that contract. <Link href="/how-it-works">How</Link></span>
             </p>
           </div>
 
