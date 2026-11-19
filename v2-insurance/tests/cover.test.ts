@@ -63,7 +63,7 @@ async function expectErr(p: Promise<unknown>, code: string) {
 }
 
 const inSecs = (s: number) => Math.floor(Date.now() / 1000) + s;
-const client = new CoverClient({ connection: conn });
+let client: CoverClient;
 
 const buy = (owner: PublicKey, o: Partial<{ premiumUsd: number; payoutUsd: number; expiry: number; monthlyBudgetUsd: number }> = {}) =>
   client.buildBuyTx({
@@ -82,8 +82,9 @@ before(async () => {
   await airdrop(admin.publicKey, 20);
   await airdrop(attestor.publicKey, 2);
   mint = await createMint(conn, admin, admin.publicKey, null, 6);
+  client = new CoverClient({ connection: conn, mint });
   const adminClient = client.withSigner(admin);
-  await adminClient.initUnderwriter({ mint, attestor: attestor.publicKey, maxExposureUsd: 1000, graceSecs: GRACE });
+  await adminClient.initUnderwriter({ attestor: attestor.publicKey, maxExposureUsd: 1000, graceSecs: GRACE });
   const adminAta = await getOrCreateAssociatedTokenAccount(conn, admin, mint, admin.publicKey);
   await mintTo(conn, admin, mint, adminAta.address, admin, 500 * 1e6);
   await adminClient.fundVault(500);

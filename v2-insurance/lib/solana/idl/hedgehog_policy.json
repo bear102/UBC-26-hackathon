@@ -39,6 +39,11 @@
                   117,
                   119
                 ]
+              },
+              {
+                "kind": "account",
+                "path": "underwriter.mint",
+                "account": "Underwriter"
               }
             ]
           }
@@ -179,6 +184,11 @@
                   117,
                   119
                 ]
+              },
+              {
+                "kind": "account",
+                "path": "underwriter.mint",
+                "account": "Underwriter"
               }
             ]
           }
@@ -240,6 +250,11 @@
                   117,
                   119
                 ]
+              },
+              {
+                "kind": "account",
+                "path": "underwriter.mint",
+                "account": "Underwriter"
               }
             ]
           }
@@ -294,7 +309,13 @@
           "signer": true
         },
         {
+          "name": "mint"
+        },
+        {
           "name": "underwriter",
+          "docs": [
+            "One underwriter per settlement mint: [\"uw\", mint]."
+          ],
           "writable": true,
           "pda": {
             "seeds": [
@@ -304,12 +325,13 @@
                   117,
                   119
                 ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
               }
             ]
           }
-        },
-        {
-          "name": "mint"
         },
         {
           "name": "vault",
@@ -527,6 +549,11 @@
                   117,
                   119
                 ]
+              },
+              {
+                "kind": "account",
+                "path": "underwriter.mint",
+                "account": "Underwriter"
               }
             ]
           }
@@ -574,6 +601,11 @@
                   117,
                   119
                 ]
+              },
+              {
+                "kind": "account",
+                "path": "underwriter.mint",
+                "account": "Underwriter"
               }
             ]
           }

@@ -10,13 +10,13 @@ const graceSecs = Number(process.argv[3] ?? 3600);
 const deployer = loadKeypair("deployer");
 const attestor = loadKeypair("attestor").publicKey;
 const mint = new PublicKey(env.usdcMint());
-const c = new CoverClient({ signer: deployer });
+const c = new CoverClient({ signer: deployer, mint });
 
 const existing = await c.fetchUnderwriter();
 if (existing) {
   console.log("underwriter already initialized");
 } else {
-  const sig = await c.initUnderwriter({ mint, attestor, maxExposureUsd, graceSecs });
+  const sig = await c.initUnderwriter({ attestor, maxExposureUsd, graceSecs });
   console.log("init_underwriter tx:", sig);
 }
 console.log(JSON.stringify(await c.info(), null, 2));

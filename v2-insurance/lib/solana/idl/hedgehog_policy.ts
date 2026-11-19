@@ -45,6 +45,11 @@ export type HedgehogPolicy = {
                   117,
                   119
                 ]
+              },
+              {
+                "kind": "account",
+                "path": "underwriter.mint",
+                "account": "underwriter"
               }
             ]
           }
@@ -185,6 +190,11 @@ export type HedgehogPolicy = {
                   117,
                   119
                 ]
+              },
+              {
+                "kind": "account",
+                "path": "underwriter.mint",
+                "account": "underwriter"
               }
             ]
           }
@@ -246,6 +256,11 @@ export type HedgehogPolicy = {
                   117,
                   119
                 ]
+              },
+              {
+                "kind": "account",
+                "path": "underwriter.mint",
+                "account": "underwriter"
               }
             ]
           }
@@ -300,7 +315,13 @@ export type HedgehogPolicy = {
           "signer": true
         },
         {
+          "name": "mint"
+        },
+        {
           "name": "underwriter",
+          "docs": [
+            "One underwriter per settlement mint: [\"uw\", mint]."
+          ],
           "writable": true,
           "pda": {
             "seeds": [
@@ -310,12 +331,13 @@ export type HedgehogPolicy = {
                   117,
                   119
                 ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
               }
             ]
           }
-        },
-        {
-          "name": "mint"
         },
         {
           "name": "vault",
@@ -533,6 +555,11 @@ export type HedgehogPolicy = {
                   117,
                   119
                 ]
+              },
+              {
+                "kind": "account",
+                "path": "underwriter.mint",
+                "account": "underwriter"
               }
             ]
           }
@@ -580,6 +607,11 @@ export type HedgehogPolicy = {
                   117,
                   119
                 ]
+              },
+              {
+                "kind": "account",
+                "path": "underwriter.mint",
+                "account": "underwriter"
               }
             ]
           }

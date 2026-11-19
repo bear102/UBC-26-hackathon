@@ -71,8 +71,9 @@ export const toUnits = (usd: number) => new BN(Math.round(usd * 10 ** USDC_DECIM
 export const fromUnits = (v: BN | bigint | number | string) => Number(v.toString()) / 10 ** USDC_DECIMALS;
 export const triggerHash = (trigger: string) => Array.from(createHash("sha256").update(trigger).digest());
 
-export function underwriterPda(programId = PROGRAM_ID) {
-  return PublicKey.findProgramAddressSync([Buffer.from("uw")], programId)[0];
+/** Underwriter PDA, one per settlement mint: ["uw", mint]. */
+export function underwriterPda(mint: PublicKey, programId = PROGRAM_ID) {
+  return PublicKey.findProgramAddressSync([Buffer.from("uw"), mint.toBuffer()], programId)[0];
 }
 export function businessPda(owner: PublicKey, programId = PROGRAM_ID) {
   return PublicKey.findProgramAddressSync([Buffer.from("biz"), owner.toBuffer()], programId)[0];
@@ -119,6 +120,8 @@ export interface CoverClientOpts {
   connection?: Connection;
   /** Signer for program.methods...rpc() calls (scripts/tests). Omit for read-only / unsigned-tx building. */
   signer?: Keypair;
+  /** Settlement mint (selects the underwriter PDA). Defaults to env USDC_MINT (devnet test dollar). */
+  mint?: PublicKey;
   /** Token program of the mint (classic SPL by default; Circle devnet USDC is classic SPL). */
   tokenProgram?: PublicKey;
 }
@@ -127,6 +130,7 @@ export class CoverClient {
   readonly connection: Connection;
   readonly program: Program<HedgehogPolicy>;
   readonly tokenProgram: PublicKey;
+  readonly mint: PublicKey;
   readonly uw: PublicKey;
 
   constructor(opts: CoverClientOpts = {}) {
@@ -134,11 +138,12 @@ export class CoverClient {
     const provider = new AnchorProvider(this.connection, walletFor(opts.signer), { commitment: "confirmed" });
     this.program = new Program<HedgehogPolicy>(idlJson as HedgehogPolicy, provider);
     this.tokenProgram = opts.tokenProgram ?? TOKEN_PROGRAM_ID;
-    this.uw = underwriterPda(this.program.programId);
+    this.mint = opts.mint ?? new PublicKey(env.usdcMint());
+    this.uw = underwriterPda(this.mint, this.program.programId);
   }
 
   withSigner(signer: Keypair) {
-    return new CoverClient({ connection: this.connection, signer, tokenProgram: this.tokenProgram });
+    return new CoverClient({ connection: this.connection, signer, mint: this.mint, tokenProgram: this.tokenProgram });
   }
 
   async fetchUnderwriter() {
@@ -150,7 +155,7 @@ export class CoverClient {
   }
 
   async info(): Promise<CoverInfo> {
-    const base = { programId: this.program.programId.toBase58(), underwriterPda: this.uw.toBase58() };
+    const base = { programId: this.program.programId.toBase58(), underwriterPda: this.uw.toBase58(), mint: this.mint.toBase58() };
     const u = await this.fetchUnderwriter();
     if (!u) return { ...base, initialized: false };
     let vaultBalance = 0;
@@ -177,13 +182,15 @@ export class CoverClient {
 
   // ------------------------------------------------ admin (signed by this.signer)
 
-  async initUnderwriter(p: { mint: PublicKey; attestor: PublicKey; maxExposureUsd: number; graceSecs: number }) {
+  /** Creates the underwriter for this client's mint. */
+  async initUnderwriter(p: { attestor: PublicKey; maxExposureUsd: number; graceSecs: number }) {
     return this.program.methods
       .initUnderwriter(p.attestor, toUnits(p.maxExposureUsd), new BN(p.graceSecs))
       .accountsPartial({
         authority: this.program.provider.publicKey!,
-        mint: p.mint,
-        vault: getAssociatedTokenAddressSync(p.mint, this.uw, true, this.tokenProgram),
+        underwriter: this.uw,
+        mint: this.mint,
+        vault: getAssociatedTokenAddressSync(this.mint, this.uw, true, this.tokenProgram),
         tokenProgram: this.tokenProgram,
       })
       .rpc();

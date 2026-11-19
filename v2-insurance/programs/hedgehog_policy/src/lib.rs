@@ -4,6 +4,7 @@
 //! policy that pays `payout` if a trusted attestor (our crank, reading the venue
 //! resolution) reports the insured event happened. If the attestor never settles,
 //! anyone can expire the policy after `expiry + grace` and the premium is refunded.
+//! The underwriter PDA is seeded by its settlement mint: ["uw", mint].
 use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token_interface::{self, Mint, TokenAccount, TokenInterface, TransferChecked};
@@ -248,7 +249,7 @@ fn transfer_from_vault<'info>(
     amount: u64,
 ) -> Result<()> {
     let bump = [underwriter.bump];
-    let seeds: &[&[u8]] = &[UW_SEED, &bump];
+    let seeds: &[&[u8]] = &[UW_SEED, underwriter.mint.as_ref(), &bump];
     let signer = &[seeds];
     token_interface::transfer_checked(
         CpiContext::new_with_signer(
@@ -327,10 +328,11 @@ pub struct Policy {
 pub struct InitUnderwriter<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
-    #[account(init, payer = authority, space = 8 + Underwriter::INIT_SPACE, seeds = [UW_SEED], bump)]
-    pub underwriter: Account<'info, Underwriter>,
     #[account(mint::token_program = token_program)]
     pub mint: InterfaceAccount<'info, Mint>,
+    /// One underwriter per settlement mint: ["uw", mint].
+    #[account(init, payer = authority, space = 8 + Underwriter::INIT_SPACE, seeds = [UW_SEED, mint.key().as_ref()], bump)]
+    pub underwriter: Account<'info, Underwriter>,
     #[account(
         init,
         payer = authority,
@@ -347,7 +349,7 @@ pub struct InitUnderwriter<'info> {
 #[derive(Accounts)]
 pub struct FundVault<'info> {
     pub funder: Signer<'info>,
-    #[account(seeds = [UW_SEED], bump = underwriter.bump, has_one = mint, has_one = vault)]
+    #[account(seeds = [UW_SEED, underwriter.mint.as_ref()], bump = underwriter.bump, has_one = mint, has_one = vault)]
     pub underwriter: Account<'info, Underwriter>,
     #[account(mut)]
     pub vault: InterfaceAccount<'info, TokenAccount>,
@@ -361,7 +363,7 @@ pub struct FundVault<'info> {
 #[derive(Accounts)]
 pub struct SetUnderwriter<'info> {
     pub authority: Signer<'info>,
-    #[account(mut, seeds = [UW_SEED], bump = underwriter.bump, has_one = authority)]
+    #[account(mut, seeds = [UW_SEED, underwriter.mint.as_ref()], bump = underwriter.bump, has_one = authority)]
     pub underwriter: Account<'info, Underwriter>,
 }
 
@@ -386,7 +388,7 @@ pub struct SetBudget<'info> {
 pub struct BuyPolicy<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
-    #[account(mut, seeds = [UW_SEED], bump = underwriter.bump, has_one = mint, has_one = vault)]
+    #[account(mut, seeds = [UW_SEED, underwriter.mint.as_ref()], bump = underwriter.bump, has_one = mint, has_one = vault)]
     pub underwriter: Account<'info, Underwriter>,
     #[account(mut, seeds = [BIZ_SEED, owner.key().as_ref()], bump = business.bump, has_one = owner)]
     pub business: Account<'info, Business>,
@@ -411,7 +413,7 @@ pub struct BuyPolicy<'info> {
 #[derive(Accounts)]
 pub struct SettlePolicy<'info> {
     pub attestor: Signer<'info>,
-    #[account(mut, seeds = [UW_SEED], bump = underwriter.bump, has_one = mint, has_one = vault)]
+    #[account(mut, seeds = [UW_SEED, underwriter.mint.as_ref()], bump = underwriter.bump, has_one = mint, has_one = vault)]
     pub underwriter: Account<'info, Underwriter>,
     #[account(mut)]
     pub policy: Account<'info, Policy>,
@@ -427,7 +429,7 @@ pub struct SettlePolicy<'info> {
 #[derive(Accounts)]
 pub struct ExpirePolicy<'info> {
     pub caller: Signer<'info>,
-    #[account(mut, seeds = [UW_SEED], bump = underwriter.bump, has_one = mint, has_one = vault)]
+    #[account(mut, seeds = [UW_SEED, underwriter.mint.as_ref()], bump = underwriter.bump, has_one = mint, has_one = vault)]
     pub underwriter: Account<'info, Underwriter>,
     #[account(mut)]
     pub policy: Account<'info, Policy>,
