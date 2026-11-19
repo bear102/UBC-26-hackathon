@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import type { Position, QuoteLine, Risk } from "@/lib/types";
-import { addMockPosition, coverBuy, hedgeBuy, hedgeConfirm, sleep } from "@/lib/client/api";
+import { addMockPosition, coverBuy, coverConfirm, devnetFaucet, hedgeBuy, hedgeConfirm, sleep } from "@/lib/client/api";
 import { isMock } from "@/lib/client/mode";
 import { signAndSend, walletErrorMessage, type Network } from "@/lib/client/tx";
 import { cents, explorerTx, shortAddr, usd, VENUE_LABEL } from "@/lib/client/format";
@@ -51,12 +51,14 @@ export function CheckoutDialog({ kind, line, risk, businessId, onClose, onDone }
       }
       if (!publicKey) throw new Error("Connect a wallet first.");
       go("build");
+      await devnetFaucet(owner); // devnet only: tops the wallet up to $50 test dollars + fee SOL; no-op otherwise
       if (isCover) {
         const r = await coverBuy({
           owner, businessId, peril: risk?.peril ?? line.contract.peril, marketRef: line.contractId, trigger: risk?.trigger ?? line.contract.label,
           premiumUsd: line.premiumUsd, payoutUsd: line.payoutUsd, expiry: line.contract.expiry,
         });
         const sig = await signAndSend(signTransaction, r.txBase64, "devnet", (s) => go(s));
+        try { await coverConfirm(r.policyPda, sig); } catch (e) { console.warn("cover confirm failed", e); }
         const res: CheckoutResult = { kind, signature: sig, network: "devnet", policyId: r.policyId, policyPda: r.policyPda };
         setResult(res); go("done"); onDone(res);
       } else {

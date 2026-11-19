@@ -59,7 +59,15 @@ export const getFeed = (since?: string) =>
 export const getPolicies = (owner: string) =>
   withFallback<CoverPolicy[]>("policies", async () => {
     const r = await call<unknown>(`/api/cover/policies?owner=${encodeURIComponent(owner)}`);
-    return Array.isArray(r) ? (r as CoverPolicy[]) : [];
+    const rows = (Array.isArray(r) ? r : (r as { policies?: unknown[] })?.policies ?? []) as Record<string, unknown>[];
+    return rows.map((p) => ({
+      ...p,
+      policyId: String(p.policyId ?? ""),
+      policyPda: (p.policyPda ?? p.pda) as string | undefined,
+      businessId: (p.businessId ?? undefined) as string | undefined,
+      trigger: (p.trigger ?? undefined) as string | undefined,
+      txSig: (p.txSig ?? undefined) as string | undefined,
+    })) as CoverPolicy[];
   }, () => fixturePolicies());
 
 export const getCoverInfo = () => withFallback<CoverInfo>("cover-info", () => call<CoverInfo>("/api/cover/info"), () => fixtureCoverInfo());
@@ -73,6 +81,12 @@ export const hedgeConfirm = (positionId: string, signature: string) => call<Posi
 export type CoverBuyReq = { owner: string; businessId: string; peril: string; marketRef: string; trigger: string; premiumUsd: number; payoutUsd: number; expiry: string };
 export type CoverBuyRes = { policyId: string; policyPda: string; txBase64: string };
 export const coverBuy = (b: CoverBuyReq) => call<CoverBuyRes>("/api/cover/buy", post(b));
+export const coverConfirm = (policyPda: string, signature: string) => call<unknown>("/api/cover/confirm", post({ policyPda, signature }));
+
+/** Devnet demo faucet: tops the wallet up to $50 test dollars + fee SOL. Never throws (mainnet / real-USDC setups just skip). */
+export async function devnetFaucet(owner: string): Promise<void> {
+  try { await call<unknown>("/api/hedge/faucet", post({ owner })); } catch (e) { console.warn("faucet skipped", e); }
+}
 
 // Mock-mode positions created by simulated checkouts (so the dashboard reflects them).
 const MOCK_POS = "hh.mockPositions";
