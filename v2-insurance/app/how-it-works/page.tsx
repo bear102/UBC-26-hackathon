@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CoverInfoPanel } from "@/components/CoverInfoPanel";
+import { VenueLegend } from "@/components/markets/VenueBadge";
 import s from "./page.module.css";
 
 export const metadata = { title: "How it works — Hedgehog" };
@@ -87,6 +88,26 @@ export default function HowItWorks() {
             <span className="badge badge-neutral">QuickNode Streams</span>
             <h3 style={{ marginTop: 10 }}>The live coverage feed</h3>
             <p className="small">A QuickNode Stream filtered to the owner&apos;s outcome-token mints and the policy program pushes fills, transfers, resolutions and payouts to our webhook. The dashboard turns them into plain words: “Hedge filled”, “Market resolved YES”, “Paid $480”.</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="section" style={{ paddingTop: 0 }}>
+        <div className={s.two}>
+          <div>
+            <h2>One market layer, three venues</h2>
+            <p className="small" style={{ color: "var(--ink-2)" }}>You never have to pick a venue. Every hedge carries the same three badges, and each one means one thing:</p>
+            <div className="card-soft"><VenueLegend /></div>
+          </div>
+          <div>
+            <h2>How we choose, and show it</h2>
+            <ul className={s.list}>
+              <li><b>Same event, side by side.</b> Each hedge has a one-line check, e.g. <span className="mono small">Gemini 11% · Kalshi 12% · Polymarket 11% — markets agree</span>. Open it to see chance, cost per $1, how much is for sale and when it closes on each venue, with <b>Best price</b> and <b>What we use</b> marked.</li>
+              <li><b>Gemini first.</b> Gemini prices the cover and the desk backs it there. Code (not the AI) moves a pick from Kalshi to the identical Gemini contract when it costs no more than 1¢ extra. Kalshi stays when Gemini doesn&apos;t list the event, has no sellers, or is clearly dearer.</li>
+              <li><b>Disagreement is flagged.</b> If another venue is 4+ points away (“Polymarket is 8 pts higher”), the plan says so. Similar-but-not-identical questions are marked ≈ and never count as agreement.</li>
+              <li><b>Same story on the dashboard.</b> Each position shows where its price came from and where it&apos;s backed (Gemini desk order, dry-run for now).</li>
+            </ul>
+            <Link href="/markets?cross=1" className="btn" style={{ marginTop: 4 }}>Browse every live market →</Link>
           </div>
         </div>
       </section>

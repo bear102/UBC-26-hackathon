@@ -1,14 +1,13 @@
 "use client";
 import type { BusinessProfile, QuoteLine, Risk } from "@/lib/types";
 import { WhyThisHedge } from "./explain/WhyThisHedge";
-import { cents, explorerTx, pct, PERIL_ICON, PERIL_LABEL, shortDate, usd, VENUE_LABEL, VENUE_ROLE } from "@/lib/client/format";
+import { cents, explorerTx, pct, PERIL_ICON, PERIL_LABEL, shortDate, usd, VENUE_LABEL } from "@/lib/client/format";
+import { VenueCompare } from "./markets/VenueCompare";
 import type { CheckoutResult } from "./CheckoutDialog";
 import { RiskInsights } from "./plan/CreativeHedges";
 import s from "./RiskCard.module.css";
 
-export function VenueBadge({ venue }: { venue: string }) {
-  return <span className={`badge badge-${venue}`}>{VENUE_LABEL[venue] ?? venue}</span>;
-}
+export { VenueBadge } from "./markets/VenueBadge";
 
 export function Confidence({ value }: { value: number }) {
   const n = Math.round(Math.max(0, Math.min(1, value)) * 5);
@@ -49,21 +48,8 @@ export function RiskCard({ risk, lines, bought, onBuy, onCover, profile }: {
           const zero = l.contracts <= 0;
           return (
             <div key={l.contractId} className={s.hedge}>
-              <div className="row between" style={{ gap: 8 }}>
-                <span className="eyebrow">Matched market{l.tier ? <> · <span style={{ color: "var(--brand)" }}>{l.tier}</span></> : null}</span>
-                <VenueBadge venue={c.venue} />
-              </div>
-              <p className={s.event}>{c.eventTitle}</p>
-              <p className={s.label}>Buy <b>{l.side.toUpperCase()}</b> · {c.label}</p>
-              <div className="row xs" style={{ gap: 6, flexWrap: "wrap", margin: "-2px 0 8px" }}>
-                <span className="muted">{c.venue === "gemini" && l.action !== "buy-onchain" ? "Priced on Gemini" : VENUE_ROLE[c.venue] ?? c.venue}</span>
-                {l.crossCheck && (
-                  <a className="badge badge-polymarket" href={l.crossCheck.url} target="_blank" rel="noreferrer"
-                    title={`${l.crossCheck.exact ? "Same event" : "Similar market"} on Polymarket: ${l.crossCheck.title}`}>
-                    Cross-check · Polymarket {pct(l.crossCheck.prob)}{Math.abs(l.crossCheck.diffPts) >= 1 ? ` (${l.crossCheck.diffPts > 0 ? "+" : ""}${l.crossCheck.diffPts} pts here)` : " · agrees"}
-                  </a>
-                )}
-              </div>
+              <span className="eyebrow" style={{ display: "block", marginBottom: 6 }}>Matched hedge{l.tier ? <> · <span style={{ color: "var(--brand)" }}>{l.tier}</span></> : null}</span>
+              {/* plain-English story first; venue facts (market, side, venues, cross-check) live once, in the strip below */}
               <WhyThisHedge line={l} risk={risk} profile={profile}>
               <div className={s.stats}>
                 <div><span>Market odds</span><b className="num">{pct(l.impliedProb)}</b></div>
@@ -80,6 +66,8 @@ export function RiskCard({ risk, lines, bought, onBuy, onCover, profile }: {
               <p className={s.why}>{l.rationale}</p>
               <p className={s.basis}><b>Basis risk:</b> {l.basisRisk}</p>
               </WhyThisHedge>
+
+              <VenueCompare line={l} location={risk.location} />
 
               <div className={s.actions}>
                 {l.action === "buy-onchain" && (hedgeDone
@@ -100,7 +88,6 @@ export function RiskCard({ risk, lines, bought, onBuy, onCover, profile }: {
                   <a className="btn btn-ghost btn-sm" href={c.url || "https://www.gemini.com/predictions"} target="_blank" rel="noreferrer">Open on Gemini ↗</a>
                 )}
               </div>
-              {c.venue === "gemini" && l.action === "buy-onchain" && <p className="xs muted" style={{ margin: "6px 0 0" }}>Priced off Gemini&apos;s live book. You get Solana tokens; Hedgehog backs them with the same {l.side.toUpperCase()} contract on Gemini.</p>}
               {l.action === "open-on-gemini" && <p className="xs muted" style={{ margin: "6px 0 0" }}>Buy {l.contracts.toLocaleString()} × “{c.label}” at ≤ {cents(l.pricePerContract)} in your Gemini account.</p>}
             </div>
           );

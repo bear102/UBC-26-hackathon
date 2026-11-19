@@ -10,6 +10,8 @@ import { allStoredQuotes, lastOwner, setLastOwner } from "@/lib/client/storage";
 import { DEMO_OWNER, type CoverPolicy } from "@/lib/fixtures";
 import { cents, explorerTx, orderText, shortAddr, shortDate, timeAgo, usd, VENUE_LABEL } from "@/lib/client/format";
 import { PolicyStory, PositionStory } from "./explain/PositionStory";
+import { Provenance, venueOfId } from "./markets/Provenance";
+import { When } from "./markets/When";
 import s from "./Dashboard.module.css";
 
 type RichPosition = Position & { markPrice?: number | null; contract?: Pick<MarketContract, "id" | "venue" | "eventTitle" | "label" | "expiry"> & Partial<MarketContract> | null };
@@ -89,7 +91,7 @@ export function Dashboard() {
   // /api/positions enriches rows with { markPrice, contract }; fall back to market polling / stored quotes.
   const label = (p: Position) => {
     const m = (p as RichPosition).contract ?? markets.get(p.contractId) ?? ctx.get(p.contractId)?.line?.contract;
-    return m ? { title: m.eventTitle, sub: `${m.label} · ${VENUE_LABEL[m.venue] ?? m.venue}`, m } : { title: p.contractId, sub: "", m: undefined };
+    return m ? { title: m.eventTitle, sub: m.label, m } : { title: p.contractId, sub: "", m: undefined };
   };
   const markOf = (p: Position): number | null => {
     const mp = (p as RichPosition).markPrice;
@@ -159,7 +161,7 @@ export function Dashboard() {
             <p className={s.heroLine}>
               {heroLoss ? <>Lost ~<b>{usd(heroLoss)}</b> in sales. </> : null}Hedge paid <b>{usd(stats.hero.payoutUsd ?? stats.hero.contracts)}</b>.
             </p>
-            <p className="small" style={{ margin: 0, opacity: 0.85 }}>{heroLabel?.title} · {heroLabel?.sub} · settled {stats.hero.settledAt ? shortDate(stats.hero.settledAt) : ""}. Premium was {usd(stats.hero.costUsd, 2)}.</p>
+            <p className="small" style={{ margin: 0, opacity: 0.85 }}>{heroLabel?.title} · {heroLabel?.sub}{heroLabel?.m ? ` · ${VENUE_LABEL[heroLabel.m.venue] ?? heroLabel.m.venue}` : ""} · settled {stats.hero.settledAt ? shortDate(stats.hero.settledAt) : ""}. Premium was {usd(stats.hero.costUsd, 2)}.</p>
           </div>
           {stats.hero.redeemTxSig && <a className="btn" href={explorerTx(stats.hero.redeemTxSig, stats.hero.network)} target="_blank" rel="noreferrer">Payout tx ↗</a>}
         </section>
@@ -182,7 +184,7 @@ export function Dashboard() {
                     <span className="xs muted">{timeAgo(p.createdAt)}</span>
                   </div>
                   <h3 style={{ margin: "8px 0 2px", fontSize: "1.1rem" }}>{lb.title}</h3>
-                  <p className="small muted" style={{ margin: "0 0 10px" }}>{p.side.toUpperCase()} · {lb.sub || p.contractId}{lb.m?.expiry ? ` · expires ${shortDate(lb.m.expiry)}` : ""}</p>
+                  <p className="small muted" style={{ margin: "0 0 10px" }}>{p.side.toUpperCase()} · {lb.sub || p.contractId}{lb.m?.expiry ? <> · closes <When iso={lb.m.expiry} /></> : ""}</p>
                   <PositionStory position={p} risk={ctx.get(p.contractId)?.risk} contract={lb.m ?? null} mark={mark} />
                   <div className={s.posGrid}>
                     <div><span>Contracts</span><b className="num">{p.contracts.toLocaleString()}</b></div>
@@ -191,6 +193,7 @@ export function Dashboard() {
                     <div><span>{p.status === "open" ? "Value / P&L" : "Net"}</span>
                       <b className={`num ${pnl != null && pnl >= 0 ? "pay" : "bad"}`}>{p.status === "open" ? `${usd(value)} ` : ""}{pnl != null ? `(${pnl >= 0 ? "+" : ""}${usd(pnl)})` : "—"}</b></div>
                   </div>
+                  <Provenance venue={lb.m?.venue ?? venueOfId(p.contractId)} backing={backing.get(p.id)} />
                   <Backing h={backing.get(p.id)} />
                   <div className="row xs" style={{ marginTop: 10, gap: 14 }}>
                     {p.txSig && <a href={explorerTx(p.txSig, p.network)} target="_blank" rel="noreferrer">Buy tx ↗</a>}
@@ -212,13 +215,14 @@ export function Dashboard() {
                   <span className="xs muted">Policy #{x.policyId}</span>
                 </div>
                 <h3 style={{ margin: "8px 0 2px", fontSize: "1.1rem" }}>{x.trigger ?? x.marketRef}</h3>
-                <p className="small muted" style={{ margin: "0 0 10px" }}>{x.marketRef}{x.expiry ? ` · expires ${shortDate(x.expiry)}` : ""}</p>
+                <p className="small muted" style={{ margin: "0 0 10px" }}>{x.marketRef}{x.expiry ? <> · closes <When iso={x.expiry} /></> : ""}</p>
                 <PolicyStory status={x.status} payoutUsd={x.payoutUsd} premiumUsd={x.premiumUsd} trigger={x.trigger} expiry={x.expiry} />
                 <div className={s.posGrid}>
                   <div><span>Pays</span><b className="num pay">{usd(x.payoutUsd)}</b></div>
                   <div><span>Premium</span><b className="num cost">{usd(x.premiumUsd, 2)}</b></div>
                   <div><span>Account</span><b className="mono xs">{x.policyPda ? shortAddr(x.policyPda) : "—"}</b></div>
                 </div>
+                <Provenance venue={venueOfId(x.marketRef)} backing={x.policyPda ? backing.get(x.policyPda) : undefined} />
                 <Backing h={x.policyPda ? backing.get(x.policyPda) : undefined} />
                 <div className="row xs" style={{ marginTop: 10, gap: 14 }}>
                   {x.txSig && <a href={explorerTx(x.txSig)} target="_blank" rel="noreferrer">Buy tx ↗</a>}

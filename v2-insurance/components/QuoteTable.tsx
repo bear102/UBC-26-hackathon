@@ -1,5 +1,6 @@
 import type { Quote } from "@/lib/types";
-import { cents, pct, usd, VENUE_LABEL } from "@/lib/client/format";
+import { cents, pct, usd } from "@/lib/client/format";
+import { VenueBadge } from "./markets/VenueBadge";
 
 export function QuoteTable({ quote }: { quote: Quote }) {
   const risk = new Map(quote.risks.map((r) => [r.id, r]));
@@ -19,7 +20,7 @@ export function QuoteTable({ quote }: { quote: Quote }) {
               return (
                 <tr key={l.contractId} style={l.action === "read-only" ? { opacity: 0.6 } : undefined}>
                   <td><b>{r?.title ?? l.riskId}</b><div className="xs muted">{l.contract.label} · {l.side.toUpperCase()}{l.action === "read-only" ? " · context only" : ""}</div></td>
-                  <td className="small">{VENUE_LABEL[l.contract.venue]}</td>
+                  <td className="small"><VenueBadge venue={l.contract.venue} role={false} /></td>
                   <td className="right num bad">{usd(r?.lossUsd)}</td>
                   <td className="right num">{pct(l.impliedProb)}</td>
                   <td className="right num">{l.contracts.toLocaleString()} <span className="xs muted">@ {cents(l.pricePerContract)}</span></td>

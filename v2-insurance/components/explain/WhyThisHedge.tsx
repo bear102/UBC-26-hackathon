@@ -19,7 +19,6 @@ export function WhyThisHedge({ line, risk, profile, children }: {
 }) {
   const ex = explainLine(line, risk, profile);
   const c = line.contract;
-  const cc = line.crossCheck;
   const visiblePitfalls = ex.pitfalls.slice(0, 2);
   const morePitfalls = ex.pitfalls.slice(2);
   const sold = c.venue === "gemini" && line.action === "buy-onchain";
@@ -49,7 +48,6 @@ export function WhyThisHedge({ line, risk, profile, children }: {
           {ex.history
             ? <p className="small muted">History: it happened on <b style={{ color: "var(--ink)" }}>{ex.history.hits} of the last {ex.history.total}</b> {ex.history.unit}s.<HistoryDots h={ex.history} /></p>
             : risk?.evidence ? <p className="small muted">History: {risk.evidence}</p> : null}
-          {cc && <p className="small muted"><Term k="cross-check">Polymarket</Term> says {fmtPct(cc.prob)}{cc.exact ? "" : " (similar question)"}.</p>}
         </div>
       </div>
 
@@ -83,7 +81,6 @@ export function WhyThisHedge({ line, risk, profile, children }: {
             <dt>Market used</dt><dd>{c.eventTitle} · “{c.label}” on {VENUE_LABEL[c.venue] ?? c.venue}{line.tier ? ` · ${line.tier}` : ""}</dd>
             <dt>Price</dt><dd>{cents(line.pricePerContract)} per $1 of payout × {line.contracts.toLocaleString()} = {usd(line.premiumUsd, 2)}</dd>
             {c.depthYes != null || c.depthNo != null ? <><dt>For sale now</dt><dd>~{(line.side === "yes" ? c.depthYes : c.depthNo)?.toLocaleString() ?? "—"} contracts near this price{line.maxCoverable != null ? ` (max for you: ${Math.floor(line.maxCoverable).toLocaleString()})` : ""}</dd></> : null}
-            {cc && <><dt>Cross-check</dt><dd>Polymarket “{cc.title}”: {fmtPct(cc.prob)} vs {fmtPct(cc.lineProb)} here ({cc.diffPts > 0 ? "+" : ""}{cc.diffPts} pts){cc.url ? <> · <a href={cc.url} target="_blank" rel="noreferrer">view ↗</a></> : null}</dd></>}
             {risk?.evidence && <><dt>Backtest</dt><dd>{risk.evidence}</dd></>}
             {risk?.causalStory && risk.kind !== "proxy" && <><dt>Cause → effect</dt><dd>{risk.causalStory}</dd></>}
             {risk?.correlation && <><dt>Link strength</dt><dd>{risk.correlation}</dd></>}

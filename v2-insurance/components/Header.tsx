@@ -8,6 +8,7 @@ import { DEMO_EVENT, isMock } from "@/lib/client/mode";
 
 const LINKS = [
   { href: "/", label: "Get a quote" },
+  { href: "/markets", label: "Markets" },
   { href: "/dashboard", label: "My cover" },
   { href: "/how-it-works", label: "How it works" },
 ];
