@@ -22,15 +22,10 @@ async function call<T>(url: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-async function withFallback<T>(what: string, real: () => Promise<T>, fake: () => T, opts?: { fallbackOnError?: boolean }): Promise<T> {
+/** Demo fixtures only in explicit `?mock=1` mode; otherwise live data, and failures surface as errors (never fake data). */
+async function withFallback<T>(what: string, real: () => Promise<T>, fake: () => T): Promise<T> {
   if (isMock()) { flagDemo(what); await sleep(250); return fake(); }
-  try { return await real(); }
-  catch (e) {
-    if (opts?.fallbackOnError === false) throw e;
-    console.warn(`[hedgehog] ${what} failed, using demo data`, e);
-    flagDemo(what);
-    return fake();
-  }
+  return real();
 }
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
