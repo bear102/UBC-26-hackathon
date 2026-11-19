@@ -137,6 +137,9 @@ export interface Position {
   settledAt?: string;
   payoutUsd?: number;
   redeemTxSig?: string;
+  marketCostUsd?: number;     // contracts × market ask (cents up); costUsd = marketCostUsd + feeUsd
+  feeUsd?: number;            // Hedgehog fee (HEDGEHOG_FEE_BPS), 0 by default
+  voided?: boolean;           // market cancelled/void: payoutUsd is a refund of costUsd, not a $1/contract payout
 }
 
 /** Event for the dashboard feed (QuickNode webhook, crank, app). */

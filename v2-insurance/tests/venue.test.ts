@@ -12,7 +12,7 @@ import { VenueError } from "../lib/venue/types";
 
 const c = (o: Partial<MarketContract> = {}): MarketContract => ({
   id: "gemini:TEST", venue: "gemini", eventTitle: "Austin high", label: "95°F or above", symbol: "TEST", eventTicker: "EV",
-  peril: "heat", expiry: "2026-11-20T00:00:00Z", yesAsk: 0.07, yesBid: 0.05, noAsk: 0.95, noBid: 0.93, tradable: true, status: "open", ...o,
+  peril: "heat", expiry: "2099-11-20T00:00:00Z", yesAsk: 0.07, yesBid: 0.05, noAsk: 0.95, noBid: 0.93, tradable: true, status: "open", ...o,
 });
 
 test("priceBuy rounds premium up to whole cents and converts to base units", () => {

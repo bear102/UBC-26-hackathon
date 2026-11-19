@@ -107,9 +107,20 @@ export interface BackArgs {
  * Computes, records and (only if explicitly enabled) places the desk's backing order for a confirmed
  * Gemini-priced sale. Idempotent per (kind, refId). Returns null for non-Gemini contracts. Never throws.
  */
+const inflight = new Map<string, Promise<DeskHedge | null>>();
+
 export async function backOnGemini(a: BackArgs, opts: { place?: typeof placeGeminiOrder } = {}): Promise<DeskHedge | null> {
   if (a.contract.venue !== "gemini") return null;
   const id = `hedge:${a.kind}:${a.refId}`;
+  // Two concurrent confirms for the same sale must not place two orders (audit F9): share the in-flight call.
+  const running = inflight.get(id);
+  if (running) return running;
+  const p = backOnce(id, a, opts).finally(() => inflight.delete(id));
+  inflight.set(id, p);
+  return p;
+}
+
+async function backOnce(id: string, a: BackArgs, opts: { place?: typeof placeGeminiOrder }): Promise<DeskHedge | null> {
   const prev = store.get("hedges", id);
   if (prev) return prev;
   const base = {

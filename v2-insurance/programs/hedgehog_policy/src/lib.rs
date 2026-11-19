@@ -5,6 +5,15 @@
 //! resolution) reports the insured event happened. If the attestor never settles,
 //! anyone can expire the policy after `expiry + grace` and the premium is refunded.
 //! The underwriter PDA is seeded by its settlement mint: ["uw", mint].
+//!
+//! Security model (audit 2026-11-19, docs/FLOW-AUDIT.md):
+//! - buy_policy must be co-signed by the underwriter's attestor ("quoter"): premium, payout,
+//!   market and expiry are priced by Hedgehog's server from the live market, never chosen by the buyer.
+//!   The co-signature is bound to a recent blockhash, so a quote expires in ~60-90 s.
+//! - Policies are seeded by their underwriter: ["pol", underwriter, business, policy_id]. settle/expire
+//!   re-derive that address, so a policy can only ever be paid or refunded from its own vault
+//!   (init_underwriter is permissionless, so without this anyone could create an underwriter with a
+//!   worthless mint, buy a big-premium policy there and "refund" it from another underwriter's vault).
 use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token_interface::{self, Mint, TokenAccount, TokenInterface, TransferChecked};
@@ -16,6 +25,26 @@ pub const BIZ_SEED: &[u8] = b"biz";
 pub const POL_SEED: &[u8] = b"pol";
 pub const PERIOD_SECS: i64 = 30 * 24 * 60 * 60;
 pub const MAX_MARKET_REF: usize = 64;
+/// Policies bought before the 2026-11-19 upgrade used seeds ["pol", business, policy_id]; they all
+/// belong to this devnet underwriter (test-dollar mint FBa3PR7p...), the only one that sold policies.
+pub const LEGACY_UNDERWRITER: Pubkey = pubkey!("721j9YwEbiQmqdwXibDMSxuFZ27xeb1CMUNANiMngeQT");
+
+/// The policy must belong to `underwriter`: either the current seeds, or a pre-upgrade policy of the
+/// legacy underwriter.
+fn check_policy_underwriter(program_id: &Pubkey, underwriter: &Pubkey, pol: &Policy, policy_key: &Pubkey) -> Result<()> {
+    let id = pol.policy_id.to_le_bytes();
+    let bump = [pol.bump];
+    let current = Pubkey::create_program_address(&[POL_SEED, underwriter.as_ref(), pol.business.as_ref(), &id, &bump], program_id);
+    if current.ok().as_ref() == Some(policy_key) {
+        return Ok(());
+    }
+    let legacy = Pubkey::create_program_address(&[POL_SEED, pol.business.as_ref(), &id, &bump], program_id);
+    require!(
+        *underwriter == LEGACY_UNDERWRITER && legacy.ok().as_ref() == Some(policy_key),
+        CoverError::WrongUnderwriter
+    );
+    Ok(())
+}
 
 #[program]
 pub mod hedgehog_policy {
@@ -94,6 +123,7 @@ pub mod hedgehog_policy {
         expiry: i64,
     ) -> Result<()> {
         let now = Clock::get()?.unix_timestamp;
+        require_keys_eq!(ctx.accounts.quoter.key(), ctx.accounts.underwriter.attestor, CoverError::NotQuoter);
         require!(premium > 0 && payout > 0, CoverError::BadParams);
         require!(payout >= premium, CoverError::BadParams);
         require!(expiry > now, CoverError::BadParams);
@@ -163,6 +193,7 @@ pub mod hedgehog_policy {
     /// Attestor posts the outcome. YES pays `payout` to the owner; NO closes the policy.
     pub fn settle_policy(ctx: Context<SettlePolicy>, outcome: bool) -> Result<()> {
         require_keys_eq!(ctx.accounts.attestor.key(), ctx.accounts.underwriter.attestor, CoverError::NotAttestor);
+        check_policy_underwriter(ctx.program_id, &ctx.accounts.underwriter.key(), &ctx.accounts.policy, &ctx.accounts.policy.key())?;
         let pol = &mut ctx.accounts.policy;
         require!(pol.status == PolicyStatus::Open, CoverError::AlreadySettled);
         let payout = pol.payout;
@@ -196,6 +227,7 @@ pub mod hedgehog_policy {
     pub fn expire_policy(ctx: Context<ExpirePolicy>) -> Result<()> {
         let now = Clock::get()?.unix_timestamp;
         let grace = ctx.accounts.underwriter.grace_secs;
+        check_policy_underwriter(ctx.program_id, &ctx.accounts.underwriter.key(), &ctx.accounts.policy, &ctx.accounts.policy.key())?;
         let pol = &mut ctx.accounts.policy;
         require!(pol.status == PolicyStatus::Open, CoverError::AlreadySettled);
         require!(now > pol.expiry.saturating_add(grace), CoverError::NotExpired);
@@ -388,6 +420,8 @@ pub struct SetBudget<'info> {
 pub struct BuyPolicy<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
+    /// Hedgehog's pricing server (= underwriter.attestor) co-signs every sale.
+    pub quoter: Signer<'info>,
     #[account(mut, seeds = [UW_SEED, underwriter.mint.as_ref()], bump = underwriter.bump, has_one = mint, has_one = vault)]
     pub underwriter: Account<'info, Underwriter>,
     #[account(mut, seeds = [BIZ_SEED, owner.key().as_ref()], bump = business.bump, has_one = owner)]
@@ -396,7 +430,7 @@ pub struct BuyPolicy<'info> {
         init,
         payer = owner,
         space = 8 + Policy::INIT_SPACE,
-        seeds = [POL_SEED, business.key().as_ref(), &policy_id.to_le_bytes()],
+        seeds = [POL_SEED, underwriter.key().as_ref(), business.key().as_ref(), &policy_id.to_le_bytes()],
         bump
     )]
     pub policy: Account<'info, Policy>,
@@ -497,4 +531,8 @@ pub enum CoverError {
     NotExpired,
     #[msg("Invalid parameters")]
     BadParams,
+    #[msg("Sale must be co-signed by the underwriter's quoter (attestor)")]
+    NotQuoter,
+    #[msg("Policy does not belong to this underwriter")]
+    WrongUnderwriter,
 }

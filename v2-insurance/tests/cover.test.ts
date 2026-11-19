@@ -65,7 +65,7 @@ async function expectErr(p: Promise<unknown>, code: string) {
 const inSecs = (s: number) => Math.floor(Date.now() / 1000) + s;
 let client: CoverClient;
 
-const buy = (owner: PublicKey, o: Partial<{ premiumUsd: number; payoutUsd: number; expiry: number; monthlyBudgetUsd: number }> = {}) =>
+const buy = (owner: PublicKey, o: Partial<{ premiumUsd: number; payoutUsd: number; expiry: number; monthlyBudgetUsd: number; quoter: Keypair }> = {}) =>
   client.buildBuyTx({
     owner,
     peril: "heat",
@@ -75,6 +75,7 @@ const buy = (owner: PublicKey, o: Partial<{ premiumUsd: number; payoutUsd: numbe
     payoutUsd: o.payoutUsd ?? 40,
     expiry: o.expiry ?? inSecs(3600),
     monthlyBudgetUsd: o.monthlyBudgetUsd,
+    quoter: o.quoter ?? attestor,
   });
 
 before(async () => {
@@ -202,4 +203,40 @@ test("buildBuyTx rejects bad params client-side", async () => {
   await assert.rejects(buy(owner, { expiry: inSecs(-10) }), /expiry/);
   // businessPda is deterministic
   assert.ok(businessPda(owner) instanceof PublicKey);
+});
+
+// ---- audit 2026-11-19 (docs/FLOW-AUDIT.md F1/F2): both attacks succeeded against the pre-upgrade binary.
+
+test("F1: a sale not co-signed by the underwriter's quoter is rejected", async () => {
+  const { kp } = await newOwner(100);
+  const mallory = Keypair.generate();
+  // Buyer prices their own policy ($1 for $400) and co-signs with a key they control.
+  const r = await buy(kp.publicKey, { premiumUsd: 1, payoutUsd: 400, monthlyBudgetUsd: 100, quoter: mallory });
+  const tx = Transaction.from(Buffer.from(r.txBase64, "base64"));
+  tx.partialSign(kp);
+  await expectErr(conn.sendRawTransaction(tx.serialize()), "NotQuoter");
+});
+
+test("F2: a policy cannot be refunded or settled from another underwriter's vault", async () => {
+  // Attacker creates an underwriter for a worthless mint they control, sells themselves a big-premium policy...
+  const x = Keypair.generate();
+  await airdrop(x.publicKey, 10);
+  const junk = await createMint(conn, x, x.publicKey, null, 6);
+  const ax = new CoverClient({ connection: conn, mint: junk });
+  await ax.withSigner(x).initUnderwriter({ attestor: x.publicKey, maxExposureUsd: 1e6, graceSecs: 0 });
+  const xj = await getOrCreateAssociatedTokenAccount(conn, x, junk, x.publicKey);
+  await mintTo(conn, x, junk, xj.address, x, 10_000e6);
+  await ax.withSigner(x).fundVault(5000);
+  const xr = await ax.buildBuyTx({ owner: x.publicKey, peril: "other", marketRef: "junk", trigger: "x", premiumUsd: 99, payoutUsd: 100, expiry: inSecs(2), monthlyBudgetUsd: 1000, quoter: x });
+  await signAndSend(xr.txBase64, x);
+  await getOrCreateAssociatedTokenAccount(conn, admin, mint, x.publicKey);
+  await sleep(4000);
+  const vault = (await client.info()).vaultBalance;
+  // ...then tries to "refund" it (or have it settled) from Hedgehog's vault.
+  await expectErr(client.expirePolicy(xr.policyPda, x), "WrongUnderwriter");
+  await expectErr(client.settlePolicy(xr.policyPda, true, attestor), "WrongUnderwriter");
+  assert.equal((await client.info()).vaultBalance, vault);
+  // Its own underwriter can still refund it (in junk).
+  await ax.expirePolicy(xr.policyPda, x);
+  assert.equal((await ax.getPolicy(xr.policyPda))!.status, "refunded");
 });

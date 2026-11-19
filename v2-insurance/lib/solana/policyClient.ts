@@ -78,9 +78,10 @@ export function underwriterPda(mint: PublicKey, programId = PROGRAM_ID) {
 export function businessPda(owner: PublicKey, programId = PROGRAM_ID) {
   return PublicKey.findProgramAddressSync([Buffer.from("biz"), owner.toBuffer()], programId)[0];
 }
-export function policyPda(business: PublicKey, policyId: number | BN, programId = PROGRAM_ID) {
+/** Policy PDA: ["pol", underwriter, business, policy_id] (policies are bound to their underwriter's vault). */
+export function policyPda(underwriter: PublicKey, business: PublicKey, policyId: number | BN, programId = PROGRAM_ID) {
   const id = new BN(policyId.toString()).toArrayLike(Buffer, "le", 8);
-  return PublicKey.findProgramAddressSync([Buffer.from("pol"), business.toBuffer(), id], programId)[0];
+  return PublicKey.findProgramAddressSync([Buffer.from("pol"), underwriter.toBuffer(), business.toBuffer(), id], programId)[0];
 }
 
 /** Load a keypair JSON from keys/ (e.g. "attestor"). Never log its contents. */
@@ -228,7 +229,9 @@ export class CoverClient {
     payoutUsd: number;
     expiry: Date | number; // Date or unix seconds
     monthlyBudgetUsd?: number;
-  }): Promise<{ policyId: number; policyPda: string; businessPda: string; txBase64: string; warnings: string[]; instructions: string[] }> {
+    /** Hedgehog's quoter (= underwriter attestor) co-signs the sale; the program rejects unquoted buys. */
+    quoter: Keypair;
+  }): Promise<{ policyId: number; policyPda: string; businessPda: string; txBase64: string; warnings: string[]; instructions: string[]; quoteExpiresAt: string }> {
     const warnings: string[] = [];
     if (Buffer.byteLength(p.marketRef, "utf8") > 64) throw new Error("marketRef must be <= 64 bytes");
     if (!(p.premiumUsd > 0 && p.payoutUsd >= p.premiumUsd)) throw new Error("need premium > 0 and payout >= premium");
@@ -252,7 +255,7 @@ export class CoverClient {
     }
 
     const policyId = existing ? Number(existing.policyCount.toString()) : 0;
-    const pol = policyPda(biz, policyId, this.program.programId);
+    const pol = policyPda(this.uw, biz, policyId, this.program.programId);
     const ownerToken = getAssociatedTokenAddressSync(u.mint, p.owner, true, this.tokenProgram);
     const perilCode = typeof p.peril === "number" ? p.peril : PERIL_CODES[p.peril] ?? 0;
 
@@ -274,6 +277,7 @@ export class CoverClient {
         .buyPolicy(new BN(policyId), perilCode, p.marketRef, triggerHash(p.trigger), toUnits(p.premiumUsd), toUnits(p.payoutUsd), new BN(expirySecs))
         .accountsPartial({
           owner: p.owner,
+          quoter: p.quoter.publicKey,
           underwriter: this.uw,
           business: biz,
           policy: pol,
@@ -288,8 +292,11 @@ export class CoverClient {
 
     const { blockhash } = await this.connection.getLatestBlockhash("confirmed");
     const tx = new Transaction({ feePayer: p.owner, recentBlockhash: blockhash }).add(...ixs);
+    // The quoter's signature covers the exact premium/payout/market/expiry and dies with the blockhash (~60-90 s).
+    tx.partialSign(p.quoter);
     const txBase64 = tx.serialize({ requireAllSignatures: false, verifySignatures: false }).toString("base64");
-    return { policyId, policyPda: pol.toBase58(), businessPda: biz.toBase58(), txBase64, warnings, instructions: names };
+    const quoteExpiresAt = new Date(Date.now() + 60_000).toISOString();
+    return { policyId, policyPda: pol.toBase58(), businessPda: biz.toBase58(), txBase64, warnings, instructions: names, quoteExpiresAt };
   }
 
   // ------------------------------------------------ reads

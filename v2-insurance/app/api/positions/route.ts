@@ -25,7 +25,7 @@ export async function GET(req: Request) {
   );
   const out = rows.map((p) => {
     const c = contracts.get(p.contractId) ?? null;
-    const markPrice = p.status === "redeemed" || p.status === "won" ? 1 : p.status === "lost" ? 0 : c ? markFor(c, p.side) : null;
+    const markPrice = p.voided ? null : p.status === "redeemed" || p.status === "won" ? 1 : p.status === "lost" ? 0 : c ? markFor(c, p.side) : null;
     const markValueUsd = markPrice == null ? null : Math.round(markPrice * p.contracts * 100) / 100;
     const contract = c && { id: c.id, venue: c.venue, eventTitle: c.eventTitle, label: c.label, status: c.status, resolution: c.resolution ?? null, expiry: c.expiry, url: c.url };
     return { ...p, markPrice, markValueUsd, pnlUsd: markValueUsd == null ? null : Math.round((markValueUsd - p.costUsd) * 100) / 100, contract };

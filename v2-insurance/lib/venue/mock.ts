@@ -30,6 +30,7 @@ import { deskKeypair } from "./desk";
 import { MintRegistry } from "./mints";
 import { sendAndPoll } from "./tx";
 import { priceBuy, usdToRaw } from "./pricing";
+import { checkBacking, checkCapacity } from "./risk";
 import { VenueError, type BuyArgs, type Side, type Venue } from "./types";
 
 export const MEMO_PROGRAM_ID = new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
@@ -109,7 +110,10 @@ export class MockDflowVenue implements Venue {
     const owner = parsePubkey(a.owner);
     const settle = this.settlementMint();
     const { decimals } = await this.settlementInfo(settle);
-    const { costUsd, raw } = priceBuy(a.contract, a.side, a.contracts, decimals);
+    const { costUsd, marketCostUsd, feeUsd, raw } = priceBuy(a.contract, a.side, a.contracts, decimals);
+    // Desk risk controls (docs/FLOW-AUDIT.md F3/F6): exposure caps + pause if an earlier Gemini backing failed.
+    checkCapacity(a.contract.id, a.contracts);
+    checkBacking(a.contract.id);
 
     const ownerSettleAta = getAssociatedTokenAddressSync(settle, owner, true);
     const ownerSettle = await tryGetAccount(this.conn, ownerSettleAta);
@@ -124,7 +128,7 @@ export class MockDflowVenue implements Venue {
 
     const position: Position = {
       id: newPositionId(), businessId: a.businessId, owner: owner.toBase58(), contractId: a.contract.id, side: a.side,
-      contracts: a.contracts, costUsd, mint: mint.toBase58(), txSig: "", network: "devnet", status: "open",
+      contracts: a.contracts, costUsd, marketCostUsd, feeUsd, mint: mint.toBase58(), txSig: "", network: "devnet", status: "open",
       createdAt: new Date().toISOString(),
     };
 
@@ -183,8 +187,19 @@ export class MockDflowVenue implements Venue {
     return hit?.signature ?? null;
   }
 
+  /** Redeem a winner ($1 per token). */
   async redeem(pos: Position): Promise<{ txSig: string; payoutUsd: number }> {
+    return this.burnAndPay(pos, "redeem");
+  }
+
+  /** Market voided/cancelled (no YES/NO resolution): burn the tokens and give the premium back, pro rata. */
+  async refund(pos: Position): Promise<{ txSig: string; payoutUsd: number }> {
+    return this.burnAndPay(pos, "refund");
+  }
+
+  private async burnAndPay(pos: Position, mode: "redeem" | "refund"): Promise<{ txSig: string; payoutUsd: number }> {
     if (pos.network !== "devnet") throw new VenueError("mock venue only redeems devnet positions");
+    const memo = mode === "redeem" ? redeemMemo(pos.id) : refundMemo(pos.id);
     if (!pos.txSig) throw new VenueError(`position ${pos.id} has no confirmed buy`);
     const owner = new PublicKey(pos.owner);
     const mint = new PublicKey(pos.mint);
@@ -192,8 +207,8 @@ export class MockDflowVenue implements Venue {
 
     // Idempotency: a previous crank run may have paid but crashed before saving.
     const prev = (await this.conn.getSignaturesForAddress(ownerOutcomeAta, { limit: 50 }, "confirmed"))
-      .find((s) => !s.err && s.memo?.includes(redeemMemo(pos.id)));
-    if (prev) return { txSig: prev.signature, payoutUsd: pos.payoutUsd ?? pos.contracts };
+      .find((s) => !s.err && s.memo?.includes(memo));
+    if (prev) return { txSig: prev.signature, payoutUsd: pos.payoutUsd ?? (mode === "redeem" ? pos.contracts : pos.costUsd) };
 
     const acct = await tryGetAccount(this.conn, ownerOutcomeAta);
     const delegated = acct?.delegate?.equals(this.desk.publicKey) ? acct.delegatedAmount : 0n;
@@ -202,7 +217,9 @@ export class MockDflowVenue implements Venue {
 
     const settle = this.settlementMint();
     const { decimals, authority } = await this.settlementInfo(settle);
-    const payoutUsd = Number(burnable);
+    // redeem: $1 per burned token. refund: the premium paid, pro rata to the tokens still burnable (floored to cents).
+    const payoutUsd = mode === "redeem" ? Number(burnable) : Math.floor((pos.costUsd * 100 * Number(burnable)) / pos.contracts) / 100;
+    if (payoutUsd <= 0) return { txSig: "", payoutUsd: 0 };
     const payoutRaw = usdToRaw(payoutUsd, decimals);
     const deskAta = await this.deskSettlementAta(settle);
     const deskBal = (await getAccount(this.conn, deskAta, "confirmed")).amount;
@@ -219,12 +236,14 @@ export class MockDflowVenue implements Venue {
       createBurnInstruction(ownerOutcomeAta, mint, this.desk.publicKey, burnable),
       createAssociatedTokenAccountIdempotentInstruction(this.desk.publicKey, ownerSettleAta, owner, settle),
       createTransferCheckedInstruction(deskAta, settle, ownerSettleAta, this.desk.publicKey, payoutRaw, decimals),
-      memoIx(redeemMemo(pos.id)),
+      memoIx(memo),
     );
     const txSig = await sendAndPoll(this.conn, tx, [this.desk]);
     return { txSig, payoutUsd };
   }
 }
+
+export const refundMemo = (positionId: string) => `hedgehog:refund:${positionId}`;
 
 /** Checks a landed tx really is the buy for this position (success, memo, owner signed, outcome mint touched). */
 export function verifyBuyTx(t: ParsedTransactionWithMeta, pos: Position) {

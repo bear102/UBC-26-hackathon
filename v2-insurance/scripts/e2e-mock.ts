@@ -110,7 +110,7 @@ async function main() {
   const settled = (c: MarketContract): MarketContract => ({ ...c, status: "settled", resolution: "yes", yesAsk: null, noAsk: null });
   const stub = async (id: string) => (id === contract.id ? settled(contract) : id === coinflip.id ? settled(coinflip) : null);
   const before = new Map(store.list("positions").map((p) => [p.id, p.status]));
-  const r = await runOnce({ getContract: stub, venueFor: () => venue });
+  const r = await runOnce({ getContract: stub, venueFor: () => venue, cover: false });
   console.log("  crank:", JSON.stringify(r));
   const w = store.get("positions", win.id)!, l = store.get("positions", lose.id)!;
   sigs.redeem = w.redeemTxSig ?? "";
@@ -127,9 +127,22 @@ async function main() {
   assert(outBefore - outAfter === burnedExpected, `winning outcome tokens burned (${outBefore} -> ${outAfter})`);
 
   // 7. Idempotency: second crank pass and a direct re-redeem must not pay twice.
-  const r2 = await runOnce({ getContract: stub, venueFor: () => venue, log: () => {} });
+  const r2 = await runOnce({ getContract: stub, venueFor: () => venue, log: () => {}, cover: false });
   const again = await venue.redeem(w);
   assert(again.txSig === w.redeemTxSig && (await usdBal()) === usd2, `no double payout (crank redeemed=${r2.redeemed}, memo lookup -> same sig)`);
+
+  // 8. Voided/cancelled market (settled with no YES/NO, a day past expiry): crank burns the tokens, refunds the premium.
+  const voidC: MarketContract = { ...contract, id: `${contract.id}#e2e-void`, yesAsk: 0.3, noAsk: 0.7, yesBid: 0.29, noBid: 0.69 };
+  const v = await buyAndConfirm(voidC, "yes", 4, "buyVoid");
+  const usd3 = await usdBal();
+  const voided = async (id: string) => (id === voidC.id ? { ...voidC, status: "settled" as const, resolution: null, expiry: new Date(Date.now() - 2 * 86400e3).toISOString() } : null);
+  const r3 = await runOnce({ getContract: voided, venueFor: () => venue, log: () => {}, cover: false });
+  const vv = store.get("positions", v.id)!;
+  sigs.refundVoid = vv.redeemTxSig ?? "";
+  assert(r3.voided >= 1 && vv.status === "redeemed" && vv.voided && vv.payoutUsd === v.costUsd, `voided market refunded $${vv.payoutUsd} (premium was $${v.costUsd})`);
+  assert((await usdBal()) - usd3 === BigInt(Math.round(v.costUsd * 1e6)), "refund landed in the owner's wallet");
+  const r4 = await runOnce({ getContract: voided, venueFor: () => venue, log: () => {}, cover: false });
+  assert(r4.voided === 0 && (await usdBal()) - usd3 === BigInt(Math.round(v.costUsd * 1e6)), "no double refund");
 
   console.log("\nPASS. devnet txs:");
   for (const [k, v] of Object.entries(sigs)) console.log(`  ${k.padEnd(12)} ${v}\n               ${ex(v)}`);

@@ -20,6 +20,8 @@ export interface Venue {
   confirmBuy(positionId: string, signature: string): Promise<Position>;
   /** Pays a winning position. Throws OwnerSignatureRequired when the venue needs the owner to sign (DFlow). */
   redeem(position: Position): Promise<{ txSig: string; payoutUsd: number }>;
+  /** Market voided/cancelled: give the premium back (mock venue). Absent = venue handles it (DFlow/Kalshi refunds). */
+  refund?(position: Position): Promise<{ txSig: string; payoutUsd: number }>;
 }
 
 /** Contract lookup injected into venues/worker (defaults to getContract from "@/lib/markets"). */

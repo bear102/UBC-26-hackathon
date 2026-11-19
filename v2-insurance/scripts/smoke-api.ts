@@ -1,5 +1,7 @@
 // End-to-end smoke test through the HTTP API (what the UI does), with keys/merchant.json as the wallet.
 // Usage: dev server on :5390, then `npx tsx scripts/smoke-api.ts [presetId]`. DEVNET only.
+//        `npx tsx scripts/smoke-api.ts --flow` skips /api/advise (LLM quota): picks a live Gemini contract from
+//        /api/markets and runs the adversarial money-flow checks from docs/FLOW-AUDIT.md.
 import fs from "node:fs";
 import { Connection, Keypair, Transaction, VersionedTransaction } from "@solana/web3.js";
 
@@ -34,6 +36,60 @@ async function signSend(b64: string): Promise<string> {
     await new Promise((r) => setTimeout(r, 1500));
   }
   throw new Error("confirm timeout " + sig);
+}
+
+async function apiErr(path: string, body: unknown): Promise<{ status: number; code?: string; error?: string }> {
+  const r = await fetch(BASE + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  return { status: r.status, code: j.code, error: j.error };
+}
+function check(cond: unknown, msg: string) { if (!cond) { console.error("FAIL:", msg); process.exit(1); } console.log("  ok -", msg); }
+
+if (process.argv.includes("--flow")) {
+  const me = owner.publicKey.toBase58();
+  console.log("owner", me, "(flow mode, no advise)");
+  console.log("faucet", await api("/api/hedge/faucet", { owner: me }));
+  const markets = await api<any[]>("/api/markets?venue=gemini");
+  const m = markets.find((x) => x.status === "open" && x.tradable && x.yesAsk >= 0.05 && x.yesAsk <= 0.6 && Date.parse(x.expiry) > Date.now() + 3600e3);
+  if (!m) throw new Error("no live Gemini contract");
+  console.log(`contract ${m.id} yesAsk=${m.yesAsk} expiry=${m.expiry}`);
+  const sigs: Record<string, string> = {};
+
+  // 1. token buy: price = live ask x contracts (+ fee); desk co-signed; backing planned for the same contract/side/qty
+  const b = await api<any>("/api/hedge/buy", { owner: me, contractId: m.id, side: "yes", contracts: 2, businessId: "flow-audit" });
+  check(b.pricing.costUsd === b.position.costUsd && b.pricing.contracts === 2, `buy priced $${b.pricing.costUsd} (market $${b.pricing.marketCostUsd} + fee $${b.pricing.feeUsd})`);
+  sigs.buy = await signSend(b.txBase64);
+  const pos = await api<any>("/api/hedge/confirm", { positionId: b.positionId, signature: sigs.buy });
+  check(pos.txSig === sigs.buy && pos.backing?.symbol === m.symbol && pos.backing.outcome === "yes" && pos.backing.quantity === 2, `confirmed; backing ${pos.backing?.mode} BUY ${pos.backing?.quantity} ${pos.backing?.outcome} ${pos.backing?.symbol} @ ${pos.backing?.limitPrice}`);
+  const again = await api<any>("/api/hedge/confirm", { positionId: b.positionId, signature: sigs.buy });
+  check(again.txSig === sigs.buy && again.backing?.id === pos.backing.id, "confirm is idempotent (same backing row)");
+
+  // 2. replay: a landed signature cannot confirm a different position
+  const b2 = await api<any>("/api/hedge/buy", { owner: me, contractId: m.id, side: "yes", contracts: 1, businessId: "flow-audit" });
+  const replay = await apiErr("/api/hedge/confirm", { positionId: b2.positionId, signature: sigs.buy });
+  check(replay.status === 400 && replay.code === "mismatch", `replayed signature rejected (${replay.error})`);
+
+  // 3. stale/raised price and caps
+  const moved = await apiErr("/api/hedge/buy", { owner: me, contractId: m.id, side: "yes", contracts: 2, businessId: "flow-audit", maxCostUsd: 0.01 });
+  check(moved.status === 409 && moved.code === "price_moved", `price above what the owner saw -> 409 (${moved.error})`);
+  const cap = await apiErr("/api/hedge/buy", { owner: me, contractId: m.id, side: "yes", contracts: 5000, businessId: "flow-audit" });
+  check(cap.status === 409 && cap.code === "capacity", `per-market desk cap -> 409 (${cap.error})`);
+
+  // 4. Cover: client premium is never charged; server prices from the live ask; quoter co-signs
+  const forged = await apiErr("/api/cover/buy", { owner: me, marketRef: m.id, side: "yes", trigger: "flow audit", premiumUsd: 0.01, payoutUsd: 3 });
+  check(forged.status === 409 && forged.code === "price_moved", `cover with a forged $0.01 premium refused (${forged.error})`);
+  const cv = await api<any>("/api/cover/buy", { owner: me, businessId: "flow-audit", marketRef: m.id, side: "yes", trigger: "flow audit", contracts: 3 });
+  check(cv.premiumUsd === cv.pricing.premiumUsd && cv.payoutUsd === 3, `cover quoted: $${cv.premiumUsd} premium for $3 payout (ask ${cv.pricing.ask}), quote expires ${cv.quoteExpiresAt}`);
+  sigs.cover = await signSend(cv.txBase64);
+  const conf = await api<any>("/api/cover/confirm", { policyPda: cv.policyPda, signature: sigs.cover });
+  check(conf.premiumUsd === cv.premiumUsd && conf.payoutUsd === 3 && Date.parse(conf.expiry) > Date.parse(m.expiry), `policy on-chain matches the quote; expiry ${conf.expiry} = market expiry + buffer`);
+  check(conf.backing?.symbol === m.symbol && conf.backing.quantity === 3, `cover backed: ${conf.backing?.mode} BUY ${conf.backing?.quantity} ${conf.backing?.outcome} ${conf.backing?.symbol}`);
+
+  const reserves = await api<any>("/api/reserves");
+  console.log("reserves", JSON.stringify({ cover: reserves.cover, tokens: { exposureUsd: reserves.tokens.exposureUsd, deskUsd: reserves.tokens.deskUsd }, backing: { mode: reserves.backing.mode, unbacked: reserves.backing.unbacked.length }, pricing: reserves.pricing }));
+  console.log("\nPASS. devnet txs:");
+  for (const [k, v] of Object.entries(sigs)) console.log(`  ${k.padEnd(6)} ${v}`);
+  process.exit(0);
 }
 
 const presets = await api<any[]>("/api/presets");

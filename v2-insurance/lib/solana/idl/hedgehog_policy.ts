@@ -35,6 +35,13 @@ export type HedgehogPolicy = {
           ]
         },
         {
+          "name": "quoter",
+          "docs": [
+            "Hedgehog's pricing server (= underwriter.attestor) co-signs every sale."
+          ],
+          "signer": true
+        },
+        {
           "name": "underwriter",
           "writable": true,
           "pda": {
@@ -86,6 +93,10 @@ export type HedgehogPolicy = {
                   111,
                   108
                 ]
+              },
+              {
+                "kind": "account",
+                "path": "underwriter"
               },
               {
                 "kind": "account",
@@ -774,6 +785,16 @@ export type HedgehogPolicy = {
       "code": 6005,
       "name": "badParams",
       "msg": "Invalid parameters"
+    },
+    {
+      "code": 6006,
+      "name": "notQuoter",
+      "msg": "Sale must be co-signed by the underwriter's quoter (attestor)"
+    },
+    {
+      "code": 6007,
+      "name": "wrongUnderwriter",
+      "msg": "Policy does not belong to this underwriter"
     }
   ],
   "types": [
