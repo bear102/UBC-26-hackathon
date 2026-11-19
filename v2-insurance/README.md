@@ -1,6 +1,6 @@
 # Hedgehog v2: prediction-market insurance for small businesses
 
-**Status:** pivot started 2026-11-19. Only the concept is written down so far. No spec or code yet.
+**Status:** design locked 2026-11-19 00:00 CST ([docs/DESIGN.md](docs/DESIGN.md)). Track: DeFi & Onchain Apps + Best use of Solana + Gemini PM bounty + QuickNode Streams.
 
 ## Idea
 Small businesses face niche risks that regular insurers won't cover, or charge too much for: a heat wave that empties a patio bar, a rained-out weekend for a food truck, a home-team loss that cuts game-night traffic, a tariff or rate decision that raises supply costs. Prediction markets already price many of these events.
@@ -19,7 +19,5 @@ Long-term vision: prediction markets replace small-business insurance.
 - Hackathon facts, judging research and prize targets: `../v1-promos/docs/HACKATHON.md`, `../v1-promos/docs/research/`
 - Weather-model and pricing math: `../v1-promos/reference/scaffold-lib/`
 
-## Open questions (spec to come)
-- Is Solana still in the product (e.g. a policy record or payout escrow), or is this now Gemini + AI only? This decides which tracks we can still target.
-- Which business personas and risk types go in the demo.
-- Sizing method: how to turn expected revenue loss into a contract count.
+## Design
+See [docs/DESIGN.md](docs/DESIGN.md): decisions, prize mapping, architecture, Anchor program, build plan, user actions.

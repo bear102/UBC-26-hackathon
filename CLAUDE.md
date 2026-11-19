@@ -1,14 +1,14 @@
 # Hedgehog — agent onboarding (read this first)
 
 ## Repo layout
-- `v2-insurance/` — **ACTIVE.** Pivot (2026-11-19): prediction-market-based niche insurance for small businesses. AI looks at the business's risks and suggests how to hedge them with prediction markets (Gemini first). Start with `v2-insurance/README.md`.
+- `v2-insurance/` — **ACTIVE.** Pivot (2026-11-19): prediction-market-based niche insurance for small businesses. AI looks at the business's risks and suggests how to hedge them with prediction markets (Gemini first). Start with `v2-insurance/docs/DESIGN.md` (source of truth for v2).
 - `v1-promos/` — ARCHIVED original idea ("your drink's on us if the Spurs lose": hedged customer promos + Solana escrow). Kept for reference and reusable code (Gemini API clients, H0 gate script, hackathon research). Its `CLAUDE.md` and `docs/SPEC.md` describe v1 and **no longer drive the build**. Its devnet keypairs live in `v1-promos/keys/` (gitignored), and its scripts expect to be run from `v1-promos/`.
 
 The user chose the pivot. Don't argue for v1. Reuse its research and code where it helps.
 
 ## Hackathon
 - Devpost (ubc-hackathon-2026.devpost.com) deadline: **Fri Nov 20 2026, 12:00 PM CST (18:00 UTC)**. Aim to submit 1-2 hours early. In-person finals Sat Nov 21 at UT Austin (5-min pitch + 2-min Q&A).
-- Prior prize targets: Gemini Prediction Markets bounty (primary), Consumer Apps, Best use of Solana. Recheck them against the pivot using `v1-promos/docs/HACKATHON.md`.
+- v2 prize targets: DeFi & Onchain Apps track + Best use of Solana + Gemini PM bounty + QuickNode Streams (see DESIGN.md §2). Track rules: `v1-promos/docs/HACKATHON.md`.
 - This is the user's PRIMARY submission.
 
 ## Working rules (from the user)
