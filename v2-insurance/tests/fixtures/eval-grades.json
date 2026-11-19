@@ -63,5 +63,6 @@
  "eval-coffee-cart|Rising commodity costs|gemini:GEMI-NGAS2611202200-HI3D65|yes": 0,
  "eval-coffee-cart|Extreme Cold Morning Hedge|kalshi:KXLOWTAUS-26NOV19-T45|yes": 0,
  "eval-crypto-merch|Bitcoin price drop|gemini:GEMI-BTC2611202200-HI63500|no": 2,
- "eval-crypto-merch|Cold snap foot traffic reduction|kalshi:KXLOWTAUS-26NOV19-T45|yes": 1
+ "eval-crypto-merch|Cold snap foot traffic reduction|kalshi:KXLOWTAUS-26NOV19-T45|yes": 1,
+ "east-austin-food-truck|Unseasonable heat impacting lunch service|gemini:GEMI-WXHIGH-AUS-2611200459-HI78|yes": 1
 }

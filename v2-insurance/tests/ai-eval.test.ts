@@ -28,3 +28,17 @@ test("iter1: rankCandidates never offers gold for a copper risk or SOL for a BTC
   // a risk that names no underlying still sees every series
   assert.equal(rankCandidates(risk({ title: "Metal costs", trigger: "metal prices rise" }), profile, u, 10, now).length, 2);
 });
+
+import { guardSide } from "../lib/ai/advisor";
+test("iter2: guardSide flips a wrong side on threshold contracts and drops NO on a range bucket", () => {
+  const leg = { riskId: "r1", contractId: "g:GAS", side: "no" as const, rationale: "x", basisRisk: "y" };
+  const gas = mk("g:GAS", "US gas prices this week", "Above 3.6400", "gas", 0.37);
+  const fixed = guardSide(risk({ peril: "gas", title: "US gas price spike", trigger: "US gas prices above 3.54" }), leg, gas);
+  assert.equal(fixed?.side, "yes");
+  const sol = mk("g:SOL", "SOL price on November 30", "$73 or above", "crypto", 0.7);
+  assert.equal(guardSide(risk({ peril: "crypto", title: "SOL drawdown", trigger: "SOL falls below $73" }), { ...leg, contractId: "g:SOL" }, sol)?.side, "no");
+  const bucket = mk("g:B", "Highest temperature in Austin on Nov 19?", "74° to 75°", "heat", 0.4);
+  assert.equal(guardSide(risk({ peril: "heat", title: "Heat", trigger: "high 76°F or above" }), { ...leg, contractId: "g:B" }, bucket), null);
+  const game = mk("g:G", "Arkansas vs Texas", "Texas", "game", 0.9);
+  assert.equal(guardSide(risk({ peril: "game", title: "Texas loses", trigger: "Arkansas beats Texas" }), { ...leg, contractId: "g:G" }, game)?.side, "no");
+});

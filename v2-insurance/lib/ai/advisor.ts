@@ -183,6 +183,26 @@ export function enforceCandidates(riskId: string, picks: z.infer<typeof matchSch
   return { legs, dropped };
 }
 
+const DOWN_RE = /\b(below|under|drops?|falls?|falling|crash(es)?|lower|declines?|dips?|plunges?|slides?)\b|<|≤/i;
+/**
+ * HARD RULE (eval iter 2): the side must PAY when the risk's bad thing happens. For threshold contracts on a price or
+ * temperature ("$73 or above", "69°F or below") the right side follows from the trigger's direction; a wrong side is
+ * flipped when the other side has an insurance price, else the leg is dropped. NO on a range bucket ("74-75°F") pays
+ * mostly in harmless outcomes, so it is dropped. Games, Fed, rain and categorical labels are left to the matcher.
+ */
+export function guardSide<L extends HedgeLeg>(risk: Risk, leg: L, c: MarketContract | undefined): L | null {
+  if (!c || ["game", "fed", "rain"].includes(risk.peril) || ["game", "fed", "rain"].includes(c.peril)) return leg;
+  const b = labelBound(c.label);
+  if (b.dir === "range") return leg.side === "no" ? null : leg;
+  if (b.dir !== "up" && b.dir !== "down") return leg;
+  const wantUp = risk.peril === "heat" ? true : risk.peril === "cold" ? false : !DOWN_RE.test(risk.trigger);
+  const side: "yes" | "no" = (b.dir === "up") === wantUp ? "yes" : "no";
+  if (side === leg.side) return leg;
+  const ask = side === "yes" ? c.yesAsk : c.noAsk;
+  if (ask == null || ask > 0.85) return null;
+  return { ...leg, side, rationale: `${leg.rationale} (Side corrected to ${side.toUpperCase()}: that is the side that pays when ${wantUp ? "it goes above" : "it stays below"} "${c.label}".)` };
+}
+
 /** Deterministic pick used only if the matcher LLM is unreachable. Conservative: may return nothing. */
 export function heuristicPick(risk: Risk, candidates: MarketContract[]): HedgeLeg | null {
   const open = candidates.filter((c) => c.status === "open");
@@ -432,13 +452,16 @@ export async function advise(profile: BusinessProfile, opts: AdviseOpts = {}): P
       if (m) {
         const { legs: ok, dropped } = enforceCandidates(risk.id, m.picks, cands);
         if (dropped.length) console.warn(`[advise] ${risk.id}: dropped non-candidate picks ${dropped.join(", ")}`);
-        legs = ok.map((l, i) => ({ ...l, tier: i === 0 ? "recommended" : m.picks.find((p) => p.contractId.trim() === l.contractId)?.tier ?? "broad" }));
+        legs = ok.map((l, i): TieredLeg => ({ ...l, tier: i === 0 ? "recommended" : m.picks.find((p) => p.contractId.trim() === l.contractId)?.tier ?? "broad" }))
+          .map((l) => guardSide(risk, l, cands.find((c) => c.id === l.contractId))).filter((l): l is TieredLeg => !!l);
+        if (legs.length) legs[0] = { ...legs[0], tier: "recommended" };
         if (!legs.length) {
           uncovered.push({ riskId: risk.id, reason: m.noMatchReason?.trim() || "None of the live markets pays out when this loss happens." });
           continue;
         }
       } else {
-        const h = heuristic(risk);
+        const h0 = heuristic(risk);
+        const h = h0 && guardSide(risk, h0, cands.find((c) => c.id === h0.contractId));
         if (!h) { uncovered.push({ riskId: risk.id, reason: matched ? "The AI matcher skipped this risk and no obvious contract fits." : "AI matcher unavailable and no obvious contract found." }); continue; }
         legs = [h];
       }
