@@ -17,6 +17,7 @@ import { ClarifyQuestions, ClarifyRecap } from "./plan/ClarifyQuestions";
 import { QuoteTable } from "./QuoteTable";
 import { CheckoutDialog, type CheckoutKind, type CheckoutResult } from "./CheckoutDialog";
 import { CoverChecklist, CoverSteps, NextStepBar, coverItems } from "./plan/CoverChecklist";
+import { HeadsUp } from "./plan/HeadsUp";
 import { IconArrowRight, IconCheck } from "./Icons";
 import s from "./PlanView.module.css";
 
@@ -179,6 +180,7 @@ export function PlanView() {
       </section>
 
       <CoverSteps total={items.length} done={doneCount} />
+      <HeadsUp profile={profile} quote={quote} onCover={startCover} />
 
       <section className={s.schedGrid}>
         <div className={s.left}>

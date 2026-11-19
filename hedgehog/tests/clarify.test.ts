@@ -17,11 +17,11 @@ const failingLlm: GenerateJson = (async () => { throw new Error("429 quota exhau
 // ---------- fallback rules ----------
 test("fallback: a bar with no seating info gets the outdoor question; vehicles for catering; loan type when financing appears", () => {
   const bar = fallbackQuestions(biz("Neighborhood bar on South Congress with a patio, busy on weekends."));
-  assert.deepEqual(bar.map((q) => q.id), ["outdoor"]);
+  assert.deepEqual(bar.map((q) => q.id), ["outdoor", "game-days"]); // + discovery: Longhorns game days (Austin)
   assert.ok(bar[0].options.includes("None") && bar[0].options.length <= 5 && bar[0].why.length <= 60);
 
   const cater = fallbackQuestions(biz("We cater office lunches and weddings. We took an SBA loan for the kitchen."));
-  assert.deepEqual(cater.map((q) => q.id), ["vehicles", "loan"]);
+  assert.deepEqual(cater.map((q) => q.id), ["vehicles", "loan", "weather-cancel"]); // + discovery: weddings vs weather
   assert.ok(cater.find((q) => q.id === "vehicles")!.allowFreeText);
 
   const roofer = fallbackQuestions(biz("Roofing contractor, 2 crews, financing on our trucks"));

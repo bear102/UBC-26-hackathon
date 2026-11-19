@@ -1,9 +1,9 @@
 // Clarifying questions before a quote: ONE fast-tier LLM call (zod-validated), deterministic keyword fallback.
 // Never blocks the flow: any failure returns the fallback (or []). Server-only.
 import { z } from "zod/v4";
-import type { BusinessProfile, ClarifyQuestion } from "../types";
+import type { BusinessProfile, ClarifyQuestion, MarketContract } from "../types";
 import { generateJson as defaultLlm, type GenerateJson } from "./llm";
-import { fallbackQuestions, normalizeQuestions, profileSig } from "./clarifyRules";
+import { fallbackQuestions, normalizeQuestions, profileSig, withDiscovery } from "./clarifyRules";
 
 export { fallbackQuestions, normalizeQuestions } from "./clarifyRules";
 
@@ -27,19 +27,22 @@ Rules:
 - Never ask about weather the owner already said hurts them (e.g. "when it rains nobody comes" answers it).
 - Plain English, no jargon, no preamble, no "great question". Question <= 12 words. why <= 6 words, starting with "So", e.g. "So rain cover fits", "So we only cover busy days". 2-5 options, <= 4 words each, covering the realistic answers (include a "No"/"None" option when relevant).
 - allowFreeText true only when a number or detail helps (e.g. how many vans).
-- id: use outdoor, vehicles, loan, busy-days, game or weather when it fits; otherwise a short slug.`;
+- id: use outdoor, vehicles, loan, busy-days, game or weather when it fits; otherwise a short slug.
+- Whether game days matter at all (when the owner names no team), big local events, fuel/propane costs and delivery-app share are asked separately: don't ask about them.`;
 
 type Out = { questions: ClarifyQuestion[]; model: string };
 /** Per-profile cache (1 h; 5 min for keyword fallbacks) that also de-duplicates in-flight calls: the free Gemini quota is tiny. */
 const cache = new Map<string, { at: number; ttl: number; out: Promise<Out> }>();
 
-export function clarifyQuestions(profile: BusinessProfile, opts: { llm?: GenerateJson; noCache?: boolean } = {}): Promise<Out> {
+/** `markets`: live markets for the discovery questions (lib/ai/discovery.ts); fetched (4 s cap) when not given, except in tests (injected llm). */
+export function clarifyQuestions(profile: BusinessProfile, opts: { llm?: GenerateJson; noCache?: boolean; markets?: MarketContract[] | null } = {}): Promise<Out> {
   const useCache = !opts.noCache && !opts.llm;
   const key = `${profileSig(profile)}|${profile.avgDailyRevenueUsd}`;
   const hit = useCache ? cache.get(key) : undefined;
   if (hit && Date.now() - hit.at < hit.ttl) return hit.out;
   const entry = { at: Date.now(), ttl: 60 * 60_000, out: Promise.resolve({ questions: [], model: "" }) as Promise<Out> };
-  entry.out = ask(profile, opts.llm ?? defaultLlm).then((o) => { if (o.model === "fallback-rules") entry.ttl = 5 * 60_000; return o; });
+  const marketsP = opts.markets !== undefined || opts.llm ? Promise.resolve(opts.markets ?? null) : liveMarkets();
+  entry.out = marketsP.then((m) => ask(profile, opts.llm ?? defaultLlm, m)).then((o) => { if (o.model === "fallback-rules") entry.ttl = 5 * 60_000; return o; });
   if (useCache) {
     cache.set(key, entry);
     if (cache.size > 200) cache.delete(cache.keys().next().value!);
@@ -47,7 +50,15 @@ export function clarifyQuestions(profile: BusinessProfile, opts: { llm?: Generat
   return entry.out;
 }
 
-async function ask(profile: BusinessProfile, llm: GenerateJson): Promise<Out> {
+/** Live markets (cached by lib/markets), null when slow or down: discovery then assumes games / fuel / rain exist, events don't. */
+async function liveMarkets(): Promise<MarketContract[] | null> {
+  try {
+    const { listMarkets } = await import("../markets/index");
+    return await Promise.race([listMarkets(), new Promise<null>((r) => setTimeout(() => r(null), 4000))]);
+  } catch { return null; }
+}
+
+async function ask(profile: BusinessProfile, llm: GenerateJson, markets: MarketContract[] | null): Promise<Out> {
   try {
     const { data, model } = await llm({
       tier: "fast",
@@ -63,9 +74,9 @@ async function ask(profile: BusinessProfile, llm: GenerateJson): Promise<Out> {
         `\nReturn {"questions":[...]} (0 to 3).`,
       ].join("\n"),
     });
-    return { questions: normalizeQuestions(data.questions, profile), model };
+    return { questions: withDiscovery(normalizeQuestions(data.questions, profile), profile, markets), model };
   } catch (e) {
     console.warn(`[clarify] LLM failed, using keyword rules: ${String((e as Error)?.message).slice(0, 160)}`);
-    return { questions: fallbackQuestions(profile), model: "fallback-rules" };
+    return { questions: fallbackQuestions(profile, markets), model: "fallback-rules" };
   }
 }

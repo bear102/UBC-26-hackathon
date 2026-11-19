@@ -5,7 +5,9 @@ import { z } from "zod/v4";
 import type { BusinessProfile, HedgeLeg, MarketContract, NaturalHedge, Peril, Quote, QuoteLine, Risk } from "../types";
 import { generateJson as defaultLlm, type GenerateJson } from "./llm";
 import { getPreset } from "./presets";
-import { answersBlock, profileWithAnswers, suppressByAnswers } from "./clarifyRules";
+import { adjustByAnswers, answersBlock, profileWithAnswers, suppressByAnswers } from "./clarifyRules";
+import { applySignals, attachForecast, forecastBlock, type ForecastSummary } from "./forecast";
+import { gameDayRisks } from "./discovery";
 import type { ClarifyAnswer } from "../types";
 import {
   BRAINSTORM_SYSTEM, TIER_LABEL, brainstormPrompt, brainstormSchema, buildCatalog, buildPackages, directionalPick, evidenceText,
@@ -31,6 +33,8 @@ export interface AdvisorDeps {
   /** Optional: industry playbook seeds (lib/ai/playbook playbookIdeas). Each seed carries real candidate contracts. */
   playbookIdeas?: (profile: BusinessProfile, markets: MarketContract[]) => PlaybookSeed[] | Promise<PlaybookSeed[]>;
   hitRate?: (peril: Peril, location?: string, days?: number, opts?: { threshold?: number }) => Promise<{ settled: number; yesCount: number; threshold?: number; source: string } | null>;
+  /** Optional: 7-day weather forecast + signals for the business location (lib/ai/forecast.ts). No LLM call. */
+  forecast?: (profile: BusinessProfile, now: Date) => Promise<ForecastSummary | null>;
   now?: () => Date;
 }
 
@@ -46,8 +50,11 @@ async function resolveDeps(d: Partial<AdvisorDeps> = {}): Promise<AdvisorDeps> {
     const pb = playbookIdeas, par = await import("../markets/parametric");
     playbookIdeas = async (p, m) => pb(p, [...m, ...await Promise.race([par.listParametric(par.PARAMETRIC_PERILS, p.city).catch(() => []), new Promise<MarketContract[]>((r) => setTimeout(() => r([]), 3000))])]);
   }
+  let forecast: AdvisorDeps["forecast"];
+  try { forecast = (await import("./forecast")).forecastFor; } catch { /* optional */ }
   return {
     playbookIdeas,
+    forecast,
     llm: defaultLlm,
     findCandidates: markets.findCandidates,
     sizeQuote: quote.sizeQuote,
@@ -322,7 +329,9 @@ export function heuristicPick(risk: Risk, candidates: MarketContract[], busyDays
     // "X wins / beats Y" hurts the business (rival crowd): YES on X; otherwise "our team loses": NO on our team
     const text = `${risk.title} ${risk.trigger}`;
     const win = /\b(wins?|beats?|upsets?)\b/i.test(text) && !/\b(lose|loses|losing|loss|lost)\b/i.test(text);
-    const own = open.find((c) => words.some((w) => c.label.toLowerCase().includes(w)) && ok(win ? c.yesAsk : c.noAsk));
+    // an exact label match first ("Texas" is the Longhorns; "Texas A&M" merely contains the word)
+    const exact = (c: MarketContract) => (words.includes(c.label.trim().toLowerCase()) ? 1 : 0);
+    const own = [...open].sort((a, b) => exact(b) - exact(a)).find((c) => words.some((w) => c.label.toLowerCase().includes(w)) && ok(win ? c.yesAsk : c.noAsk));
     if (!own) return null;
     return win
       ? { riskId: risk.id, contractId: own.id, side: "yes", rationale: `Pays if ${own.label} wins.`, basisRisk: `A result does not always move your crowd. ${note}` }
@@ -437,6 +446,8 @@ Rules:
 - Prefer risks the LIVE MARKETS can hedge, but still include a material risk if no market is listed. Never stretch a one-off exposure (one game, one rainy day) into a season risk.
 - Relevance beats coverage: every risk must follow from something the owner said or an obvious trait of the business (outdoor seats, vans, a loan, crypto revenue, game-night crowds). A market existing is NOT a reason to list a risk: no fuel/gas-price risk unless the business buys meaningful fuel (vehicles, generators, equipment); no Fed/CPI risk unless it carries variable-rate debt or its revenue moves with rates/prices.
 - Weather risks must land on the owner's BUSY DAYS (or the days it operates). A weekend weather market does not hedge a Monday-Friday business: pick a weekday market or list the risk without one.
+- If a WEATHER FORECAST is given, weather risks follow it: a risky busy day in the forecast (rain >= 50%, a cold front, heat, an NWS alert) comes first, dated to that day, with the forecast in lossReasoning. A dry, mild week makes this week's weather risks less likely: keep them only if a market prices them cheaply, and prefer later dates or month totals.
+- Game-day answers: "more customers on game days" -> add the local team's game risks (the next game lost, and a season risk such as missing the playoffs / CFP, i.e. fewer home game days); "fewer customers" or "no difference" -> no game risk. Fuel / propane costs "No" -> no fuel risk. Big events "No difference" -> no event risk.
 - If the owner answered quick questions, treat the answers as facts: use them to size losses (e.g. "mostly outdoor seating", "3 vans") and drop risks they rule out (no outdoor seating -> no patio-weather risk; no own vehicles -> no fuel risk; fixed-rate loan -> no Fed risk for the loan; game result doesn't matter -> no game risk).`;
 
 const MATCH_SYSTEM = `You pick prediction-market contracts that hedge business risks (several risks at once, each with its own CANDIDATES list). Each contract is binary: a YES share pays $1 if the label resolves true, a NO share pays $1 if it resolves false.
@@ -484,7 +495,8 @@ export async function advise(owner: BusinessProfile, opts: AdviseOpts = {}): Pro
   const t0 = Date.now();
   const models = new Set<string>();
 
-  // (0) market universe
+  // (0) market universe (+ the forecast, fetched in parallel; never blocks more than 6 s)
+  const forecastP = deps.forecast ? timeout(deps.forecast(profile, now), 6000).catch(() => null) : Promise.resolve(null);
   let all: MarketContract[] = [];
   if (deps.listMarkets) {
     try { all = await timeout(deps.listMarkets(), 8000); } catch { /* optional context */ }
@@ -499,6 +511,9 @@ export async function advise(owner: BusinessProfile, opts: AdviseOpts = {}): Pro
     catch (e) { console.warn(`[advise] playbook failed: ${(e as Error).message.slice(0, 120)}`); }
   }
 
+  const fc = await forecastP;
+  const fcBlock = forecastBlock(fc);
+
   // (1) risk map || (2) brainstorm
   const [riskRes, ideaRes] = await Promise.allSettled([
     deps.llm({
@@ -508,12 +523,13 @@ export async function advise(owner: BusinessProfile, opts: AdviseOpts = {}): Pro
       prompt: [
         pb,
         `\nToday is ${today}. Next 7 days: ${nextDays(now).join(", ")}.`,
+        fcBlock,
         all.length ? seasonCalendar(all, profile, now.getTime()) : "",
         universe ? `\nLIVE MARKETS (what can be hedged right now):\n${universe}` : "",
         `\nReturn {"risks":[...]}.`,
       ].join("\n"),
     }),
-    deps.llm({ tier: "pro", system: BRAINSTORM_SYSTEM, schema: brainstormSchema, prompt: brainstormPrompt(pb, `${today}. Next 7 days: ${nextDays(now).join(", ")}${all.length ? `\n${seasonCalendar(all, profile, now.getTime())}` : ""}`, catalog, playbook.ideas) }),
+    deps.llm({ tier: "pro", system: BRAINSTORM_SYSTEM, schema: brainstormSchema, prompt: brainstormPrompt(pb, `${today}. Next 7 days: ${nextDays(now).join(", ")}${fcBlock}${all.length ? `\n${seasonCalendar(all, profile, now.getTime())}` : ""}`, catalog, playbook.ideas) }),
   ]);
   let risks: Risk[];
   if (riskRes.status === "fulfilled") {
@@ -521,16 +537,17 @@ export async function advise(owner: BusinessProfile, opts: AdviseOpts = {}): Pro
     models.add(riskRes.value.model);
   } else {
     console.warn(`[advise] risk map LLM failed, using fallback risks: ${String((riskRes.reason as Error)?.message).slice(0, 200)}`);
-    risks = fallbackRisks(profile);
+    risks = applySignals(fallbackRisks(profile), fc, profile); // a risky busy day in the forecast goes first
     models.add("fallback-risk-map");
   }
   if (answers.length) {
     const kept0 = suppressByAnswers(risks, answers);
     if (kept0.length < risks.length) console.warn(`[advise] answers ruled out: ${risks.filter((r) => !kept0.includes(r)).map((r) => r.title).join("; ")}`);
-    risks = (kept0.length ? kept0 : suppressByAnswers(fallbackRisks(profile), answers)).map((r, i) => ({ ...r, id: `r${i + 1}` }));
+    risks = adjustByAnswers(kept0.length ? kept0 : suppressByAnswers(fallbackRisks(profile), answers), answers).map((r, i) => ({ ...r, id: `r${i + 1}` }));
   }
   // long horizon (code, no LLM call): a season risk for a crowd business that names its team, a month-total risk for crews
-  const longRisks = [...futuresFallbackRisks(profile, all, now), ...periodFallbackRisks(profile, now, all)]
+  // + "More customers on game days" (discovery answer): the team's next game, when no risk covers it yet
+  const longRisks = [...futuresFallbackRisks(profile, all, now), ...periodFallbackRisks(profile, now, all), ...gameDayRisks(profile, answers, all, now).filter((g) => !risks.some((r) => r.peril === "game" && sameExposureX(r, g as Risk)))]
     .map((r, i) => ({ ...r, id: `lh${i}` }) as Risk)
     .filter((x) => !risks.some((r) => r.peril === x.peril && riskHorizon(r, now) !== "event" && (x.peril !== "game" || sameExposureX(r, x))));
   const longKept = answers.length ? suppressByAnswers(longRisks, answers) : longRisks;
@@ -747,6 +764,7 @@ export async function advise(owner: BusinessProfile, opts: AdviseOpts = {}): Pro
     ...(opts.answers ? { clarifications: answers } : {}),
   };
   quote.packages = buildPackages(quote, coveragePct);
+  attachForecast(quote, fc); // forecast vs market on weather lines (QuoteLine.forecast)
 
   // (5) summary
   quote.summary = templateSummary(profile, quote);

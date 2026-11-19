@@ -48,20 +48,22 @@ export default function Landing() {
                   <div className="cert-head">
                     <div><div className="cert-kicker">Example</div><div className="cert-title">Certificate of Cover</div></div>
                   </div>
-                  <h3>Rain washes out Saturday on the patio</h3>
-                  <p className="insured">Rainey St patio bar · rain at Austin airport, <b>Sat Nov 21</b> · <b>28%</b> chance</p>
+                  <h3>Rain or a cold snap empties the patio</h3>
+                  <p className="insured">Rainey St patio bar · <b>Sat Nov 21</b> · rain <b>28%</b> on Kalshi · cold snap <b>12%</b> on Gemini</p>
                   <div className="terms">
-                    <div className="term pay"><span className="lab">If it rains, you get</span><span className="amt">$550</span></div>
-                    <div className="term cost"><span className="lab">You pay</span><span className="amt">$154</span></div>
+                    <div className="term pay"><span className="lab">You get up to</span><span className="amt">$950</span></div>
+                    <div className="term cost"><span className="lab">You pay</span><span className="amt">$202</span></div>
                   </div>
                   <table className={s.swing}>
-                    <thead><tr><th /><th>Normal Saturday</th><th>Rainy Saturday</th></tr></thead>
+                    <thead><tr><th>Saturday</th><th>Without cover</th><th>With cover</th></tr></thead>
                     <tbody>
-                      <tr><th>Without cover</th><td>$0</td><td className={s.bad}>−$1,100</td></tr>
-                      <tr><th>With cover</th><td>−$154</td><td>−$704</td></tr>
+                      <tr><th>Normal</th><td>$0</td><td>−$202</td></tr>
+                      <tr><th>Rainy</th><td className={s.bad}>−$1,100</td><td>−$752</td></tr>
+                      <tr><th>Cold</th><td className={s.bad}>−$800</td><td>−$602</td></tr>
+                      <tr className={s.worst}><th>Rainy and cold</th><td className={s.bad}>−$1,900</td><td>−$952</td></tr>
                     </tbody>
                   </table>
-                  <p className={s.swingNote}>A known <b>$154</b> means a rainy Saturday costs you <b>$704</b>, not <b>$1,100</b>.</p>
+                  <p className={s.swingNote}>A known <b>$202</b> cuts your worst Saturday in half: <b>$952</b> instead of <b>$1,900</b>.</p>
                 </div>
                 <GuillocheBand tone="red" />
               </div>

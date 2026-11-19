@@ -11,6 +11,7 @@ import { DEMO_OWNER, type CoverPolicy } from "@/lib/fixtures";
 import { cents, explorerTx, orderText, shortAddr, shortDate, timeAgo, usd, VENUE_LABEL } from "@/lib/client/format";
 import { PolicyStory, PositionStory } from "./explain/PositionStory";
 import { PastQuotes } from "./PastQuotes";
+import { HeadsUp } from "./plan/HeadsUp";
 import { Provenance, venueOfId } from "./markets/Provenance";
 import { When } from "./markets/When";
 import { GuillocheBand, Rosette, Seal } from "./Engraving";
@@ -187,6 +188,7 @@ export function Dashboard() {
         <div><span className="label">Paid out to you</span><b className="fig">{usd(stats.paidOut)}</b><small>settled hedges</small></div>
       </section>
 
+      <HeadsUp />
       <PastQuotes eyebrow="Quotes" />
 
       {stats.hero && (

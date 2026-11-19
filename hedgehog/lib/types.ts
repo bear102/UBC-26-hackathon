@@ -118,6 +118,9 @@ export interface QuoteLine extends HedgeLeg {
   tier?: string;
   /** Optional cross-venue price check (Polymarket, read-only): its probability that this line pays. */
   crossCheck?: { venue: "polymarket"; contractId: string; title: string; prob: number; lineProb: number; diffPts: number; exact: boolean; url?: string };
+  /** Weather lines whose date has a forecast (lib/ai/forecast.ts): the forecast's chance this line pays vs the market's.
+   *  `note` only when they differ by >= 15 pts ("Forecast 70% vs market 23%: cheap cover"). */
+  forecast?: { prob: number; marketProb: number; source: "NWS" | "Open-Meteo"; date: string; note?: string };
 }
 
 export interface Quote {
