@@ -7,15 +7,15 @@ export type VenueRole = "primary" | "buyable" | "reference";
 export const VENUES: Record<VenueId, { name: string; role: VenueRole; roleLabel: string; desc: string; cls: string }> = {
   gemini: {
     name: "Gemini", role: "primary", roleLabel: "Primary · hedged", cls: "badge-gemini",
-    desc: "Our main market. Its live prices set your cost, and Hedgehog backs every sale with a matching order on Gemini.",
+    desc: "Our main market. Its prices set your cost, and we back every sale with a matching Gemini order.",
   },
   kalshi: {
     name: "Kalshi", role: "buyable", roleLabel: "via DFlow on Solana", cls: "badge-kalshi",
-    desc: "Used where Gemini lists nothing (rain, snow, Texas power, lake levels, diesel, CPI) or has no sellers. Kalshi markets are tokenized on Solana by DFlow, so you hold an SPL outcome token.",
+    desc: "Used when Gemini has no market (rain, snow, Texas power, diesel, CPI). Tokenized on Solana by DFlow.",
   },
   polymarket: {
     name: "Polymarket", role: "reference", roleLabel: "Reference only", cls: "badge-polymarket",
-    desc: "Reference only — Polymarket isn't available to US desks. A second opinion on the odds (and the only venue for some disaster events); we never buy there.",
+    desc: "A second opinion on the odds. We never buy there.",
   },
 };
 export const VENUE_ORDER: VenueId[] = ["gemini", "kalshi", "polymarket"];

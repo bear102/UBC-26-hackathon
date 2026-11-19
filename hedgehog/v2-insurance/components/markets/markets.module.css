@@ -2,7 +2,7 @@
    Only tokens; square corners (≤3px); no ornament behind numbers. */
 
 /* ---------- page header extras ---------- */
-.headMeta { font-family: var(--mono); font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); text-align: right; line-height: 1.7; }
+.headMeta { font-family: var(--sans); font-size: 11.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); text-align: right; line-height: 1.7; }
 .intro { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; margin: 0 0 24px; flex-wrap: wrap; }
 .intro > p { flex: 1 1 520px; }
 .legend { margin: 0 0 18px; }
@@ -25,13 +25,13 @@
 .stat { display: grid; grid-template-columns: 1.3fr repeat(4, 1fr) 1.2fr; border: 1px solid var(--ink); border-bottom: 3px double var(--ink); background: var(--surface); margin: 0 0 22px; }
 .stat > div { padding: 14px 18px 16px; border-left: 1px solid var(--line-2); display: flex; flex-direction: column; justify-content: space-between; gap: 8px; min-width: 0; }
 .stat > div:first-child { border-left: 0; }
-.stat span { font-family: var(--mono); font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+.stat span { font-family: var(--sans); font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
 .stat b { font-size: 34px; color: var(--ink); }
 .statMain b { font-size: 44px; }
 .st_gemini span, .st_kalshi span, .st_polymarket span { display: inline-flex; align-items: center; gap: 7px; }
 .st_gemini span::before, .st_kalshi span::before, .st_polymarket span::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .st_gemini span { color: var(--gemini); } .st_kalshi span { color: var(--kalshi); } .st_polymarket span { color: var(--poly); }
-.statAsOf time { font-family: var(--mono); font-size: 13px; color: var(--ink-2); line-height: 1.4; }
+.statAsOf time { font-family: var(--sans); font-size: 13px; color: var(--ink-2); line-height: 1.4; }
 @media (max-width: 1080px) {
   .stat { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .stat > div:nth-child(4) { border-left: 0; }
@@ -53,8 +53,8 @@
 .filters { display: grid; gap: 14px; margin: 0 0 26px; }
 .filters > :global(.doc-head) { margin-bottom: 2px; }
 .filterRow { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px; align-items: start; }
-.filterRow > label { font-family: var(--mono); font-size: 11px; color: var(--ink-2); font-weight: 500; text-transform: uppercase; letter-spacing: .14em; padding-top: 10px; }
-.count { opacity: .6; font-weight: 500; font-family: var(--mono); font-size: 12px; }
+.filterRow > label { font-family: var(--sans); font-size: 11px; color: var(--ink-2); font-weight: 500; text-transform: uppercase; letter-spacing: .05em; padding-top: 10px; }
+.count { opacity: .6; font-weight: 500; font-family: var(--sans); font-size: 12px; }
 .venueChip .vdot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
 .vc_gemini .vdot { color: var(--gemini); } .vc_kalshi .vdot { color: var(--kalshi); } .vc_polymarket .vdot { color: var(--poly); }
 .venueChip[aria-pressed="true"] .vdot { color: var(--surface); box-shadow: 0 0 0 1.5px currentColor; background: transparent; }
@@ -73,30 +73,30 @@
 .events { display: grid; gap: 14px; }
 .ev { background: var(--surface); border: 1px solid var(--ink); border-radius: var(--radius); padding: 0; min-width: 0; }
 .evHead { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--ink); }
-.evIx { font-family: var(--mono); font-size: 12px; color: var(--red); letter-spacing: .08em; }
+.evIx { font-family: var(--sans); font-size: 12px; color: var(--red); letter-spacing: .05em; }
 .evIcon { width: 34px; height: 34px; border: 1px solid var(--line-2); display: grid; place-items: center; color: var(--ink); background: var(--bg); }
 .evMain { min-width: 0; }
 .evTitle { margin: 0; font-weight: 600; font-size: 15.5px; font-family: var(--sans); letter-spacing: 0; line-height: 1.3; }
-.evMeta { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-top: 3px; letter-spacing: .02em; }
+.evMeta { font-family: var(--sans); font-size: 11.5px; color: var(--muted); margin-top: 3px; letter-spacing: .02em; }
 .evVenues { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .gap { color: var(--gold); font-weight: 600; }
 .agreeTag { color: var(--pay); font-weight: 600; }
 .gridWrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .grid { width: 100%; border-collapse: collapse; font-size: 14px; }
-.grid th { text-align: right; font-family: var(--sans); font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 600; padding: 9px 18px; border-bottom: 1px solid var(--line-2); white-space: nowrap; }
+.grid th { text-align: right; font-family: var(--sans); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; padding: 9px 18px; border-bottom: 1px solid var(--line-2); white-space: nowrap; }
 .grid th:first-child, .grid td:first-child { text-align: left; }
 .grid td { text-align: right; padding: 9px 18px; border-bottom: 1px solid var(--line); white-space: nowrap; vertical-align: top; }
 .grid td:first-child { white-space: normal; min-width: 140px; font-weight: 500; }
 .grid tr:last-child td { border-bottom: 0; }
 .grid tbody tr:hover { background: var(--brand-soft); }
-.cell { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.cell { font-family: var(--sans); font-variant-numeric: tabular-nums; }
 .cell b { font-weight: 600; font-size: 14.5px; }
 .cell span { color: var(--muted); font-size: 12px; margin-left: 6px; }
 .odd { display: block; height: 3px; width: 64px; margin: 5px 0 0 auto; background: var(--line); }
 .odd > i { display: block; height: 100%; background: var(--ink); }
 .v_gemini, .v_kalshi, .v_polymarket { font-weight: 600; }
 .grid th.v_gemini { color: var(--gemini); } .grid th.v_kalshi { color: var(--kalshi); } .grid th.v_polymarket { color: var(--poly); }
-.evMore { margin: 0; border-top: 1px dashed var(--line-2); width: 100%; justify-content: flex-start; border-radius: 0; padding-left: 18px; font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+.evMore { margin: 0; border-top: 1px dashed var(--line-2); width: 100%; justify-content: flex-start; border-radius: 0; padding-left: 18px; font-family: var(--sans); font-size: 12px; letter-spacing: .05em; text-transform: uppercase; }
 .moreBtn { justify-self: center; margin-top: 8px; }
 .footnote { margin: 26px 0 0; padding-top: 14px; border-top: 3px double var(--ink); font-size: 12.5px; color: var(--muted); max-width: 900px; }
 .footnote a svg, .buyNote a svg { vertical-align: -1px; }
@@ -122,7 +122,7 @@
 .line:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .vals { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 4px; }
 .val { white-space: nowrap; }
-.val :global(.num) { font-family: var(--mono); }
+.val :global(.num) { font-family: var(--sans); }
 .dot { color: var(--muted); margin: 0 4px 0 2px; }
 .v_gemini { color: var(--gemini); } .v_kalshi { color: var(--kalshi); } .v_polymarket { color: var(--poly); }
 .verdict { margin-left: 4px; font-weight: 600; }
@@ -130,7 +130,7 @@
 .close { color: var(--ink-2); }
 .differ { color: var(--gold); }
 .single { color: var(--muted); font-weight: 500; }
-.more { display: inline-flex; align-items: center; gap: 4px; color: var(--ink); font-family: var(--mono); font-weight: 600; white-space: nowrap; font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; }
+.more { display: inline-flex; align-items: center; gap: 4px; color: var(--ink); font-family: var(--sans); font-weight: 600; white-space: nowrap; font-size: 11.5px; letter-spacing: .05em; text-transform: uppercase; }
 .flag { display: flex; gap: 8px; align-items: flex-start; margin: 8px 0 0; font-size: 13px; color: var(--ink-2); background: var(--gold-soft); border: 1px solid var(--line-2); border-left: 4px solid var(--gold-rule); border-radius: 0; padding: 8px 10px; }
 .flagIc { color: var(--gold); flex: none; margin-top: 2px; }
 .detail { margin-top: 10px; }

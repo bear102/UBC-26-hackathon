@@ -33,7 +33,7 @@ export function RiskCard({ risk, lines, bought, onBuy, onCover, profile }: {
         <h3 className={s.title}>{risk.title}</h3>
         <p className={s.trigger}><span className={s.tlab}>Trigger</span>{risk.trigger}</p>
         <div className={s.loss}>
-          <span className="label">Estimated loss if it happens</span>
+          <span className="label">Estimated loss</span>
           <b className="num bad">~{usd(risk.lossUsd)}</b>
         </div>
         <p className="small" style={{ color: "var(--ink-2)" }}>{risk.lossReasoning}</p>
@@ -62,8 +62,8 @@ export function RiskCard({ risk, lines, bought, onBuy, onCover, profile }: {
                 <div><span className="label">Costs</span><b className="num cost">{usd(l.premiumUsd, 2)}</b></div>
                 <div><span className="label">Contracts</span><b className="num">{l.contracts.toLocaleString()}</b></div>
               </div>
-              {l.maxCoverable != null && l.contracts > 0 && l.contracts >= Math.floor(l.maxCoverable) && <p className="xs" style={{ color: "var(--gold)", margin: "0 0 8px" }}>Book depth limits this hedge to {l.maxCoverable.toLocaleString()} contracts.</p>}
-              {zero && <p className="xs" style={{ color: "var(--gold)", margin: "0 0 8px" }}>Left out to stay inside your monthly budget. Raise the budget or lower coverage.</p>}
+              {l.maxCoverable != null && l.contracts > 0 && l.contracts >= Math.floor(l.maxCoverable) && <p className="xs" style={{ color: "var(--gold)", margin: "0 0 8px" }}>Only {l.maxCoverable.toLocaleString()} contracts for sale at this price.</p>}
+              {zero && <p className="xs" style={{ color: "var(--gold)", margin: "0 0 8px" }}>Left out to stay within budget.</p>}
               <p className={s.why}>{l.rationale}</p>
               <p className={s.basis}><b>Basis risk:</b> {l.basisRisk}</p>
               </WhyThisHedge>

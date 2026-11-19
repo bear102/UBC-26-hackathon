@@ -34,8 +34,8 @@ export function Header() {
             {LINKS.map((l) => <Link key={l.href} href={l.href} aria-current={active(l.href) ? "page" : undefined}>{l.label}</Link>)}
           </nav>
           <div className="header-right">
-            {demo && <span className="badge badge-demo hide-sm" title="Some data on this page is demo/fixture data (API unavailable or ?mock=1)">Demo data</span>}
-            <span className="badge badge-devnet" title="All onchain actions run on Solana devnet with test USDC">Devnet</span>
+            {demo && <span className="badge badge-demo hide-sm" title="Some data here is demo data">Demo data</span>}
+            <span className="badge badge-devnet" title="Solana devnet, test USDC">Devnet</span>
             <WalletButton />
           </div>
         </div>

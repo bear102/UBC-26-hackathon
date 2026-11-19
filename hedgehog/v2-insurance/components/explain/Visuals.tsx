@@ -59,7 +59,7 @@ export function Scenarios({ ex }: { ex: LineExplain }) {
         <span className={s.scHead}>If it doesn&apos;t</span>
         <Bar label="No hedge" value={doesnt.without} max={max} kind="soft" />
         <Bar label="With hedge" value={doesnt.withHedge} max={max} kind="cost" />
-        <p className={s.scNote}>A normal day. You&apos;re out the {money(ex.premiumUsd)}, like an insurance premium.</p>
+        <p className={s.scNote}>A normal day. You&apos;re out the {money(ex.premiumUsd)} premium.</p>
       </div>
     </div>
   );

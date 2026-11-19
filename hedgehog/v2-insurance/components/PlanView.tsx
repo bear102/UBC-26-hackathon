@@ -124,7 +124,7 @@ export function PlanView() {
     <div className="container">
       <section className="page-head">
         <div>
-          <span className="eyebrow">Step 3 · Your hedge plan · proposed cover</span>
+          <span className="eyebrow">Step 3 · Your hedge plan</span>
           <h1 className={s.title}>{profile.name}</h1>
         </div>
         <p className={s.meta}>{profile.city}{profile.zip ? ` · ${profile.zip}` : ""} · {usd(profile.avgDailyRevenueUsd)}/day · busy {profile.busyDays.join(", ") || "—"}
@@ -139,18 +139,17 @@ export function PlanView() {
               <span className="meta" title="Model that produced this plan">AI RISK ADVISOR · {quote.model}</span>
             </div>
             <p className={s.summary}>{quote.summary}</p>
-            <p className="xs muted" style={{ margin: 0 }}>Every contract below is a real listing picked from live order books. Prices move; we re-quote at checkout.</p>
             <p className={`xs ${s.venues}`}>
               <span className="badge badge-gemini">Priced &amp; hedged on Gemini</span>
               <span className="badge badge-kalshi">Settled on Solana</span>
-              <span className="muted">You buy Solana tokens or a Cover policy; Hedgehog backs Gemini-priced cover with the same contract on Gemini. <Link href="/how-it-works">How</Link></span>
+              <span className="muted">We back each sale with the same contract on Gemini. <Link href="/how-it-works">How</Link></span>
             </p>
           </div>
 
           <QuoteTable quote={quote} />
 
           <div className="fine">
-            <b>Basis risk, in plain print.</b> Each line pays on the market&apos;s official result, not on your actual loss. Each risk below spells out where the market and your bad day can differ.
+            <b>Basis risk.</b> Each line pays on the market&apos;s official result, not on your actual loss.
           </div>
         </div>
 
@@ -173,13 +172,13 @@ export function PlanView() {
             </div>
             <p className={s.bindSummary}>
               Covers {cov}% of ~{usd(totalLoss)} in estimated losses across {coveredRisks.length} risk{coveredRisks.length === 1 ? "" : "s"}.
-              {local && <> Resized locally at current prices. <button className={s.linkBtn} onClick={() => runAdvise(profile, cov)} disabled={loading}>{loading ? "Re-running…" : "Re-run AI"}</button></>}
+              {local && <> Resized at current prices. <button className={s.linkBtn} onClick={() => runAdvise(profile, cov)} disabled={loading}>{loading ? "Re-running…" : "Re-run AI"}</button></>}
             </p>
             <a className="btn btn-buy" href="#risks"><IconShieldCheck size={20} />Review &amp; buy each hedge</a>
             <div className="signline"><span className="x">x</span><span className="l" /><span>Your wallet signs</span></div>
             <ul className="assure">
-              <li><IconCheck size={14} />Prices move; we re-quote at checkout. You see the exact cost before you sign.</li>
-              <li><IconCheck size={14} />Pays automatically to your wallet on Solana devnet when the market settles. No claim forms.</li>
+              <li><IconCheck size={14} />You see the exact cost before you sign.</li>
+              <li><IconCheck size={14} />Pays to your wallet when the market settles. No claim forms.</li>
             </ul>
           </div>
         </aside>
@@ -212,7 +211,7 @@ export function PlanView() {
           </div>
           <div className="grid grid-2">
             {[...notCoverable, ...quote.risks.filter((r) => !linesByRisk.has(r.id) && !uncoveredIds.has(r.id))
-              .map((r) => ({ riskId: r.id, reason: "No live market matched this risk closely enough to hedge it." }))].map((u) => {
+              .map((r) => ({ riskId: r.id, reason: "No live market matches this risk closely enough." }))].map((u) => {
               const r = risksById.get(u.riskId);
               return (
                 <div key={u.riskId} className={`card card-dashed ${s.excl}`}>

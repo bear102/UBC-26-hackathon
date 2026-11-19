@@ -13,7 +13,7 @@ export function Provenance({ venue, backing }: {
   const backed = backing
     ? <><span className="badge badge-gemini">Gemini · {backing.mode === "live" ? backing.status : backing.status === "error" ? "not placed" : "dry-run order"}</span></>
     : v === "gemini" ? <span className="muted">Gemini order not recorded yet</span>
-    : v === "kalshi" ? <span className="muted">not re-hedged: Gemini doesn&apos;t list this market</span>
+    : v === "kalshi" ? <span className="muted">not on Gemini</span>
     : <span className="muted">n/a (reference only)</span>;
   return (
     <div className="row xs" style={{ gap: 6, margin: "10px 0 0", alignItems: "center", fontFamily: "var(--mono)", letterSpacing: ".04em" }}>

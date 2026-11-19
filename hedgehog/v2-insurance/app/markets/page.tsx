@@ -37,10 +37,9 @@ export default async function MarketsPage({ searchParams }: { searchParams: Prom
 
       <div className={s.intro}>
         <p className="lede" style={{ margin: 0 }}>
-          Three venues, one list. When the same event trades in more than one place we put the prices side by side, so you can see
-          whether the markets agree before you pay for cover.
+          Three venues, one list. When an event trades in more than one place, you see the prices side by side.
         </p>
-        <Link href="/" className="btn btn-primary">Get a plan for your business <IconArrowRight size={16} /></Link>
+        <Link href="/" className="btn btn-primary">Get a quote <IconArrowRight size={16} /></Link>
       </div>
 
       <section className={`card ${s.legend}`} aria-label="Venues">

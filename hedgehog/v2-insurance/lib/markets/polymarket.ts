@@ -260,7 +260,10 @@ async function fetchDisasters(): Promise<MarketContract[]> {
 
 // ---------- fetch + cache ----------
 
-const cache = new Map<string, { t: number; v: MarketContract[]; p?: Promise<MarketContract[]> }>();
+// Shared across Next bundles (see srcCache in index.ts).
+type PolyCache = Map<string, { t: number; v: MarketContract[]; p?: Promise<MarketContract[]> }>;
+const G = globalThis as { __hhPolyCache?: PolyCache };
+const cache: PolyCache = (G.__hhPolyCache ??= new Map());
 
 async function fetchSource(src: PolySource, now = new Date()): Promise<MarketContract[]> {
   const min = new Date(now.getTime() - 6 * 3600_000).toISOString();
@@ -280,12 +283,13 @@ export const WEATHER_SOURCE: PolySource = { key: "weather", tagId: 103040, peril
 async function cachedSource(src: PolySource): Promise<MarketContract[]> {
   const c = cache.get(src.key);
   if (c && Date.now() - c.t < TTL) return c.v;
-  if (c?.p) return c.p;
+  const stale = c && c.v.length ? c.v : null; // serve the last good list while a refresh runs
+  if (c?.p) return stale ?? c.p;
   const p = (src.key === "weather" ? fetchWeather() : src.key === "disaster" ? fetchDisasters() : fetchSource(src))
     .then((v) => { cache.set(src.key, { t: Date.now(), v }); return v; })
     .catch(() => { cache.set(src.key, { t: Date.now() - TTL + 15_000, v: c?.v ?? [] }); return c?.v ?? []; }); // retry in 15s
   cache.set(src.key, { t: c?.t ?? 0, v: c?.v ?? [], p });
-  return p;
+  return stale ?? p;
 }
 
 /** Polymarket contracts for the given perils. Never throws. */

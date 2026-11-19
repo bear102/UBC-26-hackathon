@@ -1,6 +1,6 @@
 // Market explorer data (/markets): the live universe the AI searches, grouped into events by risk type and place,
 // with the same event on Gemini / Kalshi / Polymarket merged into one row and outcomes aligned across venues.
-// Server-only; cached 60s (listMarkets itself caches each venue for 45-60s).
+// Server-only; cached 60s with stale-while-revalidate, kept warm by instrumentation.ts (listMarkets caches each venue 45-60s).
 import type { MarketContract, Peril, VenueId } from "../types";
 import { listMarkets } from "./index";
 import { boundsKey, boundsOf, eventDay, family, gameInfo, sideProb, underlying } from "./compare";
@@ -136,18 +136,39 @@ export function buildExplorer(markets: MarketContract[], now = Date.now()): Expl
   return { asOf: new Date(now).toISOString(), total: counts.gemini + counts.kalshi + counts.polymarket, counts, events, places };
 }
 
-let cache: { t: number; v: ExplorerData; p?: Promise<ExplorerData> } | null = null;
+type ExplorerCache = { t: number; v: ExplorerData; p?: Promise<ExplorerData> } | null;
+// On globalThis so the /markets page and the background warmer (instrumentation.ts) share one cache.
+const G = globalThis as { __hhExplorer?: ExplorerCache };
 const TTL = 60_000;
+/** How old a good snapshot may be and still be shown instantly while a refresh runs (a cold venue pass takes ~20s). */
+const STALE_MAX = 30 * 60_000;
 
-/** Cached explorer data (60s, stale-on-error). */
+/** Cached explorer data: fresh for 60s, then stale-while-revalidate (up to 30 min), stale-on-error. */
 export async function getExplorerData(): Promise<ExplorerData> {
-  if (cache && Date.now() - cache.t < TTL) return cache.v;
-  const staleOk = !!cache && cache.v.total > 0 && Date.now() - cache.t < 5 * 60_000; // serve stale while refreshing
+  const cache = G.__hhExplorer ?? null;
+  if (cache && cache.v.total > 0 && Date.now() - cache.t < TTL) return cache.v;
+  const staleOk = !!cache && cache.v.total > 0 && Date.now() - cache.t < STALE_MAX;
   if (cache?.p) return staleOk ? cache.v : cache.p;
-  const prev = cache;
+  const p = refresh(cache);
+  return staleOk ? cache!.v : p;
+}
+
+function refresh(prev: ExplorerCache): Promise<ExplorerData> {
   const p = listMarkets({ venues: ["gemini", "kalshi", "polymarket"] })
-    .then((ms) => { const v = buildExplorer(ms); cache = { t: Date.now(), v }; return v; })
-    .catch((e) => { if (prev) { cache = { t: prev.t, v: prev.v }; return prev.v; } cache = null; throw e; });
-  cache = { t: prev?.t ?? 0, v: prev?.v ?? { asOf: "", total: 0, counts: { gemini: 0, kalshi: 0, polymarket: 0 }, events: [], places: [] }, p };
-  return staleOk ? prev!.v : p;
+    .then((ms) => {
+      const v = buildExplorer(ms);
+      // keep the previous snapshot if every venue came back empty (outage), but retry soon
+      G.__hhExplorer = v.total > 0 || !prev ? { t: Date.now(), v } : { t: prev.t, v: prev.v };
+      return G.__hhExplorer.v;
+    })
+    .catch((e) => { if (prev) { G.__hhExplorer = { t: prev.t, v: prev.v }; return prev.v; } G.__hhExplorer = null; throw e; });
+  G.__hhExplorer = { t: prev?.t ?? 0, v: prev?.v ?? { asOf: "", total: 0, counts: { gemini: 0, kalshi: 0, polymarket: 0 }, events: [], places: [] }, p };
+  return p;
+}
+
+/** Background warmer: refresh if older than the TTL so a visitor never waits for a cold venue pass. */
+export async function warmExplorer(): Promise<void> {
+  const c = G.__hhExplorer;
+  if (c?.p || (c && c.v.total > 0 && Date.now() - c.t < TTL - 10_000)) return;
+  await refresh(c ?? null).catch(() => undefined);
 }

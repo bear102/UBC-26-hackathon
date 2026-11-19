@@ -4,6 +4,7 @@ import { ConnectionProvider, WalletProvider, useWallet } from "@solana/wallet-ad
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import type { Adapter, WalletError } from "@solana/wallet-adapter-base";
 import "@solana/wallet-adapter-react-ui/styles.css";
+import { usePathname, useRouter } from "next/navigation";
 import { DEVNET_RPC } from "@/lib/client/tx";
 import { initMockFromUrl } from "@/lib/client/mode";
 
@@ -52,13 +53,27 @@ function RememberGoodWallet() {
  *  The wallet restored from storage on page load is left to autoConnect above. */
 function ConnectOnSelect() {
   const { wallet, connected, connecting, connect } = useWallet();
+  const router = useRouter();
+  const pathname = usePathname();
   const prev = useRef<string | null | undefined>(undefined);
+  const userPicked = useRef(false);
   useEffect(() => {
     const name = wallet?.adapter.name ?? null;
     const first = prev.current === undefined;
     const changed = !first && name !== prev.current;
     prev.current = name;
-    if (changed && name && !connected && !connecting) connect().catch(() => { /* surfaced via onError */ });
+    if (changed && name && !connected && !connecting) {
+      userPicked.current = true;
+      connect().catch(() => { userPicked.current = false; /* surfaced via onError */ });
+    }
   }, [wallet, connected, connecting, connect]);
+  // After a user-initiated connect from the landing page, go straight to the business scan (intake).
+  // Not on page-load auto-connects, and not mid-checkout on other pages.
+  useEffect(() => {
+    if (connected && userPicked.current) {
+      userPicked.current = false;
+      if (pathname === "/") router.push("/intake");
+    }
+  }, [connected, pathname, router]);
   return null;
 }

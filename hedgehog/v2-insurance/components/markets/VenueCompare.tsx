@@ -54,7 +54,7 @@ export function VenueCompare({ line, location }: { line: QuoteLine; location?: s
         </span>
         <span className={s.more}>{open ? "Hide" : "Compare"} {open ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />}</span>
       </button>
-      {cmp.flags.length > 0 && <p className={s.flag}><IconWarning size={15} className={s.flagIc} /><span>{cmp.flags.join(" · ")}. We price off {venueName(used.venue)}; a gap usually means one market hasn&apos;t caught up yet.</span></p>}
+      {cmp.flags.length > 0 && <p className={s.flag}><IconWarning size={15} className={s.flagIc} /><span>{cmp.flags.join(" · ")}. We use the {venueName(used.venue)} price.</span></p>}
 
       {open && (
         <div className={s.detail}>
@@ -88,8 +88,7 @@ export function VenueCompare({ line, location }: { line: QuoteLine; location?: s
           </div>
           <p className="xs" style={{ margin: "8px 0 0", color: "var(--ink-2)" }}><b>Why {venueName(used.venue)}:</b> {cmp.why}</p>
           <p className="xs muted" style={{ margin: "4px 0 0" }}>
-            Chance = midpoint of buy and sell prices. Cost = what $1 of payout costs right now. For sale = contracts (each pays $1) offered within 2¢. Times in your timezone.
-            {" "}<Link href={marketsHref(c.peril, location ?? c.location)}>See all markets for this risk <IconArrowRight size={12} /></Link>
+            <Link href={marketsHref(c.peril, location ?? c.location)}>See all markets for this risk <IconArrowRight size={12} /></Link>
           </p>
         </div>
       )}

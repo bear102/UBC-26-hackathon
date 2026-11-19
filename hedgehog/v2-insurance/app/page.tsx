@@ -21,12 +21,12 @@ export default function Landing() {
           <div className={s.copy}>
             <span className="eyebrow">Insurance for your worst business day</span>
             <h1 className={s.h1}>
-              <span className={s.q}>What&apos;s your worst business day?</span>{" "}
-              <em className={s.hedge}>Hedge it.<Swash /></em>
+              Insure your business against{" "}
+              <em className={s.hedge}>anything<Swash /></em>
             </h1>
             <p className={`lede ${s.lede}`}>
-              Hedgehog&apos;s AI reads your business, finds the days that hurt, and builds cover from live prediction markets.
-              You see it like an insurance quote: <b>what it pays if the bad day happens, what it costs if it doesn&apos;t.</b>
+              Our AI finds the days that would hurt your business and builds cover from live prediction markets.
+              <b> You see what it pays if the bad day happens, and what it costs if it doesn&apos;t.</b>
             </p>
             <div className={s.cta}>
               <a href="#pick" className="btn btn-primary btn-lg">Get my quote <IconArrowRight size={16} /></a>
@@ -74,7 +74,7 @@ export default function Landing() {
         <div className="container">
           <div className="sec-head">
             <div><span className="eyebrow">Step 1</span><h2>Pick a business, <em>or describe yours</em></h2></div>
-            <span className="muted small">Three Austin examples · about 30 seconds to a quote</span>
+            <span className="muted small">Three Austin examples · a quote in about 30 seconds</span>
           </div>
           <PresetGrid />
         </div>
@@ -84,23 +84,23 @@ export default function Landing() {
         <div className="container">
           <div className="sec-head">
             <div><span className="eyebrow">The terms, in three clauses</span><h2>From your worst day <em>to a payout</em></h2></div>
-            <Link href="/how-it-works" className="btn btn-sm">Read how it works <IconArrowRight size={14} /></Link>
+            <Link href="/how-it-works" className="btn btn-sm">How it works <IconArrowRight size={14} /></Link>
           </div>
           <ol className={s.clauses}>
             <li className={s.clause}>
               <span className={s.cno}>§ 1</span>
               <h3>AI maps your risks</h3>
-              <p>Rain, cold fronts, game nights, fuel spikes. Each with a trigger, a dollar loss and the reasoning behind it.</p>
+              <p>Rain, cold fronts, game nights, fuel spikes. Each gets a trigger and a dollar loss.</p>
             </li>
             <li className={s.clause}>
               <span className={s.cno}>§ 2</span>
               <h3>Matched to live markets</h3>
-              <p>Gemini and Kalshi contracts that pay when that bad day happens, with the odds, the price and an honest basis-risk note.</p>
+              <p>Gemini and Kalshi contracts that pay when that day comes, with the odds and the price.</p>
             </li>
             <li className={s.clause}>
               <span className={s.cno}>§ 3</span>
               <h3>One signature on Solana</h3>
-              <p>Buy the hedge as outcome tokens, or take a Hedgehog Cover policy from the onchain underwriter. Payouts land in your wallet.</p>
+              <p>Buy the hedge as tokens or as a Hedgehog Cover policy. Payouts land in your wallet.</p>
             </li>
           </ol>
         </div>

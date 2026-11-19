@@ -56,7 +56,7 @@ export default function WalletDebug() {
       </div>
       <div className="card">
         <div className="doc-head"><span className="caps-title">Phantom provider log</span><span className="meta">NO WALLET-ADAPTER</span></div>
-        <p className="muted">Talks to Phantom directly (no wallet-adapter). Copy the log below and send it over.</p>
+        <p className="muted">Copy the log below and send it over.</p>
         <div className="row" style={{ margin: "16px 0" }}>
           <button className="btn btn-sm" onClick={env}>1. Check environment</button>
           <button className="btn btn-sm btn-primary" onClick={() => connect(false)}>2. Connect (popup)</button>

@@ -39,8 +39,8 @@ export function CreativeHedges({ quote, coverage, onChange }: { quote: Quote; co
     <section className="section" style={{ paddingTop: 0 }}>
       {ideas.length > 0 && <>
         <div className="sec-head">
-          <div><span className="eyebrow">Riders · AI scanned every live market</span><h2>You might not <em>have thought of</em></h2></div>
-          <span className="muted small" style={{ maxWidth: "34em" }}>Markets that move with your costs or your customers&apos; wallets, not just your weather. Looser fit, so we show how strong the link is.</span>
+          <div><span className="eyebrow">Riders</span><h2>You might not <em>have thought of</em></h2></div>
+          <span className="muted small" style={{ maxWidth: "34em" }}>Markets tied to your costs or your customers&apos; spending. A looser fit, so each shows how strong the link is.</span>
         </div>
         <div className={s.ideas}>
           {ideas.map((r) => {
@@ -64,7 +64,7 @@ export function CreativeHedges({ quote, coverage, onChange }: { quote: Quote; co
                     <div className="xs muted">{shown.contract.eventTitle} · {cents(shown.pricePerContract)} per $1 · closes {shortExpiry(shown.contract.expiry)}</div>
                     {inPlan && line && <div className="xs">In plan: {usd(line.premiumUsd, 2)} premium for {usd(line.payoutUsd)} payout</div>}
                   </div>
-                ) : <div className={s.market}><span className="muted">No live market for this right now; we&apos;ll keep watching.</span></div>}
+                ) : <div className={s.market}><span className="muted">No live market for this right now.</span></div>}
                 {r.worthIt && <p className={s.worth}><b>Worth it?</b> {r.worthIt}</p>}
                 {opt && opt.choices.length > 1 && (
                   <div className={s.choices}>
@@ -91,7 +91,7 @@ export function CreativeHedges({ quote, coverage, onChange }: { quote: Quote; co
       </>}
       {natural.length > 0 && <>
         <h3 className={s.natHead}>Natural hedges: don&apos;t pay to insure these</h3>
-        <p className="muted small" style={{ marginTop: 0 }}>Some &ldquo;risks&rdquo; actually help you. Hedging them would cost premium and cancel a gain.</p>
+        <p className="muted small" style={{ marginTop: 0 }}>These help you. Hedging them would cancel the gain.</p>
         <div className="grid grid-2">
           {natural.map((n, i) => (
             <div key={i} className={s.nat}>

@@ -23,7 +23,11 @@ const GEMINI_CATEGORY: Partial<Record<Peril, string[]>> = {
   heat: ["Weather"], cold: ["Weather"], rain: ["Weather"], game: ["Sports"], oil: ["Commodities"], gas: ["Commodities", "Economics"],
   natgas: ["Commodities"], metals: ["Commodities"], other: ["Commodities", "Economics", "Politics"], crypto: ["Crypto"], fed: ["Economics"], cpi: ["Economics"],
 };
-const srcCache = new Map<string, { t: number; v: MarketContract[]; p?: Promise<MarketContract[]> }>();
+// On globalThis: Next bundles pages, route handlers and instrumentation separately, so a module-level Map would give
+// each its own cold cache. One shared cache lets the background warmer (instrumentation.ts) serve every caller.
+type SrcCache = Map<string, { t: number; v: MarketContract[]; p?: Promise<MarketContract[]> }>;
+const G = globalThis as { __hhSrcCache?: SrcCache };
+const srcCache: SrcCache = (G.__hhSrcCache ??= new Map());
 
 /** Serve a stale (< STALE_MAX) list while a refresh runs in the background: a full Kalshi pass is ~120 series. */
 const STALE_MAX = 5 * 60_000;

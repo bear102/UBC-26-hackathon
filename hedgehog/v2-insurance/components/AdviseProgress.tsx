@@ -6,7 +6,7 @@ const STAGES = [
   { at: 0, label: "Mapping your risks", sub: "Reading your business and the Austin forecast" },
   { at: 5, label: "Scanning Gemini + Kalshi markets", sub: "Weather, sports, commodity and macro contracts" },
   { at: 14, label: "Matching each risk to a contract", sub: "Picking the side that pays on your bad day" },
-  { at: 22, label: "Sizing your cover", sub: "Walking the order book, fitting your budget" },
+  { at: 22, label: "Sizing your cover", sub: "Fitting your budget" },
 ];
 
 export function AdviseProgress({ name }: { name?: string }) {
@@ -33,7 +33,7 @@ export function AdviseProgress({ name }: { name?: string }) {
           </li>
         ))}
       </ol>
-      <p className="xs muted" style={{ marginTop: 20, marginBottom: 0, paddingTop: 12, borderTop: "1px solid var(--line-2)" }}>Usually 10–40 seconds. The AI can only pick contracts that exist on the live books.</p>
+      <p className="xs muted" style={{ marginTop: 20, marginBottom: 0, paddingTop: 12, borderTop: "1px solid var(--line-2)" }}>Usually 10–40 seconds.</p>
     </div>
   );
 }

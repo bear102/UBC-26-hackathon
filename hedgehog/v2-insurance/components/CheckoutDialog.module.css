@@ -1,6 +1,6 @@
 /* Checkout = a binding document. Plain sheet; the only ornament is the receipt certificate after success. */
 .kindRow { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 6px; }
-.title { font-size: 1.7rem; font-weight: 600; margin: 4px 0 6px; font-variation-settings: 'opsz' 28; }
+.title { font-size: 1.7rem; font-weight: 600; margin: 4px 0 6px; }
 .lede { font-size: 14px; color: var(--ink-2); margin: 0 0 16px; }
 .lede b { color: var(--ink); }
 .terms { margin: 0 0 16px; }

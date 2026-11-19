@@ -100,7 +100,7 @@ export function CheckoutDialog({ kind, line, risk, businessId, onClose, onDone }
   const cur = stage === "error" ? failedAt : stage;
   const steps: { id: Stage; label: string }[] = [
     { id: "connect", label: connected || mock ? `Wallet ${mock ? "(simulated)" : shortAddr(publicKey?.toBase58())}` : "Connect Phantom (devnet)" },
-    { id: "build", label: isCover ? "Building policy transaction" : "Building hedge transaction (desk co-signs)" },
+    { id: "build", label: isCover ? "Building policy transaction" : "Building hedge transaction" },
     { id: "signing", label: "Approve in your wallet" },
     { id: "sending", label: "Sending to Solana devnet" },
     { id: "confirming", label: "Waiting for confirmation" },
@@ -121,7 +121,7 @@ export function CheckoutDialog({ kind, line, risk, businessId, onClose, onDone }
         </div>
         <h2 id="co-title" className={s.title}>{risk?.title ?? line.contract.eventTitle}</h2>
         <p className={s.lede}>{isCover
-          ? <>Pay the premium in test USDC to the Hedgehog underwriter program. If <b>{risk?.trigger ?? line.contract.label}</b>, the program pays you from its vault.</>
+          ? <>Pay the premium in test USDC. If <b>{risk?.trigger ?? line.contract.label}</b>, the Hedgehog program pays you from its vault.</>
           : <>{line.contracts.toLocaleString()} × <b>{line.contract.label}</b> on {VENUE_LABEL[line.contract.venue]} at ~{cents(line.pricePerContract)}. Each token pays $1 if it happens.</>}
         </p>
 
@@ -135,10 +135,11 @@ export function CheckoutDialog({ kind, line, risk, businessId, onClose, onDone }
         {stage === "review" && (
           <>
             <p className={`xs muted ${s.trust}`}>{isCover
-              ? "Trust model: Hedgehog's attestor settles the policy from the market's official result. If it never settles, you can reclaim the premium after expiry."
-              : "The trade desk partially signs the transaction; your wallet adds your signature. You receive SPL outcome tokens you can see in your wallet."}
-              {gemini && " Priced off Gemini's live book; Hedgehog backs your cover with the same contract on Gemini."}</p>
-            {mock && <div className="alert alert-info small" style={{ marginBottom: 12 }}>Demo mode: this checkout is simulated, nothing is sent onchain.</div>}
+              ? "Hedgehog settles it from the market's official result. If it never settles, you can reclaim the premium after expiry."
+              : "The outcome tokens go straight to your wallet."}
+              {gemini && " Backed by the same contract on Gemini."}
+              {" "}Devnet prototype, not an insurance product. Pays on the market's result, not your actual loss.</p>
+            {mock && <div className="alert alert-info small" style={{ marginBottom: 12 }}>Demo mode: simulated, nothing goes onchain.</div>}
             <div className={s.actions}>
               <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
               <button className="btn btn-primary" onClick={start}>{connected || mock ? (isCover ? "Buy cover" : "Buy hedge") : "Connect wallet & buy"}</button>

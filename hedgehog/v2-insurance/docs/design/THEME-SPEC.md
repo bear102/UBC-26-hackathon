@@ -1,3 +1,8 @@
+> **Typography override (2026-11-19, user feedback: "too hard to read"). This supersedes every font rule below.**
+> - One family site-wide: **IBM Plex Sans** (`--sans`; `--serif` and `--fig` both point to it). No Bodoni, no serif, no italic display type anywhere (including the § numerals, the logo wordmark, red emphasis words and signature lines; `<em>` in headings is upright red).
+> - IBM Plex Mono (`--mono`) only for wallet addresses, tx ids and the seal ring text, never for labels or numbers. Numbers use Plex Sans with `tabular-nums`.
+> - Uppercase labels: letter-spacing ≤ .05em. No condensed (`font-stretch`) figures.
+
 # Hedgehog redesign — DESIGN SPEC: "The Printed Policy"
 
 Winner of the 4-way bake-off (space / sketch / policy / forecast). This spec is the single source of truth for

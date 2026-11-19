@@ -43,7 +43,7 @@ export function PresetGrid() {
         <div className="fno"><span>Form · Blank</span><span>Any</span></div>
         <IconBlankForm className="ico" />
         <h3>Describe your business</h3>
-        <p>Tell us in one sentence what you sell and what ruins a day. The AI maps your risks to live markets.</p>
+        <p>One sentence: what you sell and what ruins a day.</p>
         <div className="lines" aria-hidden="true"><i /><i /></div>
         <div className="go"><span>Start from scratch</span><IconArrowRight size={15} /></div>
       </Link>

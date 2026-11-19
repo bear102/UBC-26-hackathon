@@ -374,14 +374,14 @@ export function untilPhrase(iso: string): string {
 // ---------- glossary ----------
 
 export const GLOSSARY: Record<string, string> = {
-  "market odds": "What traders, betting real money, think the chance is. A 28% price means they think it happens about 28 times in 100.",
-  premium: "What you pay up front for the hedge. If the bad thing doesn't happen, that's the whole cost.",
-  payout: "What you receive if the bad thing happens. It's paid automatically from the market, not by a claims adjuster.",
-  "prediction market": "An exchange where people trade on yes/no questions like “Will it rain in Austin Saturday?”. Prices are the crowd's odds.",
-  token: "Your receipt for the hedge, held in your wallet. It turns into $1 each if the event happens, $0 if not.",
-  "basis risk": "The gap between what the market measures and what actually hurts you (e.g. rain at the airport vs. on your patio).",
-  settles: "When the official result is published (weather station reading, final score, price index) and winners get paid.",
-  "Hedgehog Cover": "The same protection as a simple policy: you pay Hedgehog the premium and Hedgehog pays you if the trigger hits. No tokens to hold.",
-  devnet: "Solana's test network. Everything here uses test dollars, so you can try it without real money.",
-  "cross-check": "We look up the same event on a second market (Polymarket). If both agree on the odds, the price is probably fair.",
+  "market odds": "The chance traders put on it, with real money behind it.",
+  premium: "What you pay up front. If nothing happens, that's your whole cost.",
+  payout: "What you get if it happens. Paid automatically, no claim to file.",
+  "prediction market": "An exchange for yes/no questions like “Will it rain in Austin Saturday?”",
+  token: "Your hedge, held in your wallet. Worth $1 if it happens, $0 if not.",
+  "basis risk": "The gap between what the market measures and what hurts you (rain at the airport vs. on your patio).",
+  settles: "When the official result comes out and winners get paid.",
+  "Hedgehog Cover": "A simple policy: you pay Hedgehog, Hedgehog pays you if the trigger hits. No tokens to hold.",
+  devnet: "Solana's test network. Test dollars only.",
+  "cross-check": "The same event's odds on a second market (Polymarket). If they agree, the price is probably fair.",
 };

@@ -37,9 +37,9 @@ export function PlanExplainer({ quote, profile }: { quote: Quote; profile?: Pick
       <div>
         <span className="eyebrow">How it works for you</span>
         <ol className={s.steps3} style={{ marginTop: 8 }}>
-          <li><div><b>Pay once, now</b><span>One approval in your wallet. On this demo it&apos;s <Term k="devnet">test dollars</Term>.</span></div></li>
-          <li><div><b>The day plays out</b><span>We watch the official result: the weather station, the final score, the price index.</span></div></li>
-          <li><div><b>Money lands automatically</b><span>If it happened, the payout arrives in your wallet within hours. No claim forms. If not, you&apos;re done.</span></div></li>
+          <li><div><b>Pay once, now</b><span>One wallet approval. This demo uses <Term k="devnet">test dollars</Term>.</span></div></li>
+          <li><div><b>The day plays out</b><span>We check the official result: weather station, final score or price index.</span></div></li>
+          <li><div><b>Money lands automatically</b><span>If it happened, the payout hits your wallet within hours. No claim forms.</span></div></li>
         </ol>
       </div>
     </section>

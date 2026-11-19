@@ -36,7 +36,7 @@ export function QuoteTable({ quote }: { quote: Quote }) {
                 <td className={s.ix}>{String(i + 1).padStart(2, "0")}</td>
                 <td className={s.risk}>
                   <b>{r?.title ?? l.riskId}</b>
-                  <span>{l.contract.label} · {l.side.toUpperCase()}{ref ? " · reference price · context only" : ""}</span>
+                  <span>{l.contract.label} · {l.side.toUpperCase()}{ref ? " · reference only" : ""}</span>
                   <div className={s.ven}><VenueBadge venue={l.contract.venue} role={false} /></div>
                 </td>
                 <td className="right num bad" data-l="Est. loss">{usd(r?.lossUsd)}</td>

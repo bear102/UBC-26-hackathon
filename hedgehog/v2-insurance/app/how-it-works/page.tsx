@@ -8,7 +8,7 @@ import s from "./page.module.css";
 
 export const metadata = { title: "How it works — Hedgehog" };
 
-/** Diagram box: a square-cut ink document with a red serial number, an Archivo title and a mono sub-line. */
+/** Diagram box: a square-cut ink document with a red serial number, a sans title and a mono sub-line. */
 function Box({ x, y, w, h, n, title, sub, tone }: { x: number; y: number; w: number; h: number; n: string; title: string; sub?: string; tone?: string }) {
   return (
     <g>
@@ -114,7 +114,7 @@ export default function HowItWorks() {
         <section className="sec" aria-labelledby="ex-b">
           <div className="sec-head">
             <div><span className="eyebrow">Exhibit B</span><h2 id="ex-b">A worst day, <em>on paper</em></h2></div>
-            <span className="muted small">Illustrative: the bar preset with 50% coverage, the same specimen as the home page certificate.</span>
+            <span className="muted small">Example: the patio bar at 50% coverage.</span>
           </div>
           <div className={`card ${s.dayCard}`}>
             <DayBars normalUsd={3200} lossUsd={1100} payoutUsd={550} premiumUsd={154} normalLabel="Normal day" badLabel="Rainy Saturday" />
@@ -131,19 +131,19 @@ export default function HowItWorks() {
               <span className={s.cno}>§ 1</span>
               <span className="badge badge-gemini">Gemini Prediction Markets</span>
               <h3>Priced &amp; hedged on Gemini</h3>
-              <p>Gemini is the primary venue. Its live books (Austin daily highs, NBA/NFL games, WTI and Brent) price the cover: every line shows ask, depth and odds, sized by walking the book. When a business buys, Hedgehog&apos;s desk <b>backs the exposure with the same contract on Gemini</b> through the Trader API, like an insurer reinsuring. Kalshi (tokenized on Solana by DFlow) fills perils Gemini doesn&apos;t list: rain, snow, Texas power, lake levels, diesel, CPI. Polymarket is a read-only price check.</p>
+              <p>Gemini is the primary venue. Its live books (Austin highs, NBA/NFL games, WTI and Brent) price the cover. When a business buys, Hedgehog&apos;s desk <b>backs the exposure with the same contract on Gemini</b> via the Trader API, like an insurer reinsuring. Kalshi (on Solana via DFlow) fills what Gemini doesn&apos;t list: rain, snow, Texas power, lake levels, diesel, CPI. Polymarket is a read-only price check.</p>
             </li>
             <li className={s.clause}>
               <span className={s.cno}>§ 2</span>
               <span className="badge badge-kalshi">Solana</span>
               <h3>Settled on Solana</h3>
-              <p>Each hedge is an SPL outcome token (the DFlow model) minted at the venue&apos;s live ask. The desk co-signs, the owner signs in Phantom, and winning tokens pay $1 of USDC automatically. <b>Hedgehog Cover</b> is our Anchor program: premiums go into a USDC vault PDA, a monthly budget mandate is enforced onchain, and payouts are parametric.</p>
+              <p>Each hedge is an SPL outcome token (the DFlow model) minted at the venue&apos;s live ask. The desk co-signs, the owner signs in Phantom, and winning tokens pay $1 USDC. <b>Hedgehog Cover</b> is our Anchor program: premiums go into a USDC vault, a monthly budget cap is enforced onchain, and payouts are parametric.</p>
             </li>
             <li className={s.clause}>
               <span className={s.cno}>§ 3</span>
               <span className="badge badge-neutral">QuickNode Streams</span>
               <h3>The live coverage feed</h3>
-              <p>A QuickNode Stream filtered to the owner&apos;s outcome-token mints and the policy program pushes fills, transfers, resolutions and payouts to our webhook. The dashboard turns them into plain words: “Hedge filled”, “Market resolved YES”, “Paid $480”.</p>
+              <p>A QuickNode Stream on the owner&apos;s token mints and the policy program pushes fills, resolutions and payouts to our webhook. The dashboard shows them in plain words: “Hedge filled”, “Paid $480”.</p>
             </li>
           </ol>
         </section>
@@ -153,24 +153,24 @@ export default function HowItWorks() {
             <div>
               <span className="eyebrow">Venues</span>
               <h2 className={s.h2}>One market layer, <em>three venues</em></h2>
-              <p className={s.intro}>You never have to pick a venue. <b>Gemini first · Kalshi on Solana where Gemini lists nothing · Polymarket reference.</b> Every hedge carries the same three badges, and each one means one thing:</p>
+              <p className={s.intro}>You never pick a venue. <b>Gemini first, Kalshi where Gemini has nothing, Polymarket for reference.</b></p>
               <div className={`card ${s.legend}`}><VenueLegend /></div>
               <h3 className={s.h3}>What&apos;s on the menu</h3>
               <ul className={s.ledger}>
                 <li><b>Gemini:</b> daily highs in 60+ cities, games, crude, natural gas, metals, crypto, Fed decisions.</li>
                 <li><b>Kalshi via DFlow on Solana:</b> rain (daily and monthly totals in 30+ cities), daily highs and lows, December snowfall by city, ski-resort snowfall, season snow days, ERCOT power prices, Lake Mead, heating degree days, weekly diesel and gas, CPI, tornado counts.</li>
-                <li><b>Polymarket (reference only, it isn&apos;t available to US desks):</b> Mississippi River low water, Lake Powell, Great Salt Lake, LA earthquake, US tornado totals.</li>
-                <li><b>Not hedgeable on any venue today:</b> wildfire, flood, hail and air quality. We say so instead of forcing a bad proxy. Hurricanes are out of season (the Atlantic season ends Nov 30).</li>
+                <li><b>Polymarket (reference only):</b> Mississippi River low water, Lake Powell, Great Salt Lake, LA earthquake, US tornado totals.</li>
+                <li><b>Not hedgeable anywhere yet:</b> wildfire, flood, hail, air quality. We say so rather than force a bad proxy.</li>
               </ul>
             </div>
             <div>
               <span className="eyebrow">Selection</span>
               <h2 className={s.h2}>How we choose, <em>and show it</em></h2>
               <ol className={`${s.ledger} ${s.numbered}`}>
-                <li><b>Same event, side by side.</b> Each hedge has a one-line check, e.g. <span className={s.sample}>Gemini 11% · Kalshi 12% · Polymarket 11% — markets agree</span>. Open it to see chance, cost per $1, how much is for sale and when it closes on each venue, with <b>Best price</b> and <b>What we use</b> marked.</li>
-                <li><b>Gemini first.</b> Gemini prices the cover and the desk backs it there. Code (not the AI) moves a pick from Kalshi to the identical Gemini contract when it costs no more than 1¢ extra. Kalshi stays when Gemini doesn&apos;t list the event, has no sellers, or is clearly dearer.</li>
-                <li><b>Disagreement is flagged.</b> If another venue is 4+ points away (“Polymarket is 8 pts higher”), the plan says so. Similar-but-not-identical questions are marked ≈ and never count as agreement.</li>
-                <li><b>Same story on the dashboard.</b> Each position shows where its price came from and where it&apos;s backed (Gemini desk order, dry-run for now).</li>
+                <li><b>Same event, side by side.</b> Each hedge shows a one-line check, e.g. <span className={s.sample}>Gemini 11% · Kalshi 12% · Polymarket 11% — markets agree</span>, that opens into a full comparison.</li>
+                <li><b>Gemini first.</b> Code (not the AI) swaps a Kalshi pick for the identical Gemini contract if it costs at most 1¢ more. Otherwise Kalshi stays.</li>
+                <li><b>Disagreement is flagged.</b> A venue 4+ points away gets a warning. Similar-but-not-identical questions are marked ≈.</li>
+                <li><b>Same on the dashboard.</b> Each position shows where its price came from and where it&apos;s backed.</li>
               </ol>
               <Link href="/markets?cross=1" className="btn">Browse every live market <IconArrowRight size={14} /></Link>
             </div>
@@ -183,11 +183,11 @@ export default function HowItWorks() {
               <span className="eyebrow">Disclosures</span>
               <h2 className={s.h2}>Trust assumptions, <em>stated plainly</em></h2>
               <ol className={s.articles}>
-                <li><b>The AI can&apos;t invent markets.</b> It picks from candidate contract IDs that our code pulled from live venue APIs; sizing and budget allocation are deterministic code.</li>
+                <li><b>The AI can&apos;t invent markets.</b> It picks from contract IDs our code pulled from live venue APIs. Sizing and budget are plain code.</li>
                 <li><b>Basis risk is real.</b> Rain at the airport ≠ rain on your patio; a loss ≠ an empty bar. Every line shows its mismatch note.</li>
-                <li><b>Desk solvency.</b> Gemini-priced tokens are a promise from Hedgehog&apos;s desk, backed by an offsetting Gemini position and a USDC vault whose balance anyone can check onchain (below). Backing orders are <b>dry-run</b> until the desk&apos;s Gemini account is funded; each one is shown on the dashboard.</li>
-                <li><b>Settlement attestor.</b> Cover policies are settled by a single attestor key (our crank) from the venue&apos;s official result. If it never settles, the owner can reclaim the premium after expiry. Future: oracle or multisig.</li>
-                <li><b>Devnet only.</b> Hedges and Cover run on Solana devnet with test USDC. The outcome-token desk mirrors real Gemini/Kalshi prices but is our own venue; the DFlow mainnet path (Kalshi) is the same interface.</li>
+                <li><b>Desk solvency.</b> Gemini-priced tokens are a promise from Hedgehog&apos;s desk, backed by an offsetting Gemini position and a USDC vault anyone can check onchain (below). Backing orders are <b>dry-run</b> until the desk&apos;s Gemini account is funded.</li>
+                <li><b>Settlement.</b> One attestor key (our crank) settles Cover policies from the venue&apos;s official result. If it never settles, the owner can reclaim the premium after expiry. Next: oracle or multisig.</li>
+                <li><b>Devnet only.</b> Everything runs on Solana devnet with test USDC. The token desk mirrors real Gemini/Kalshi prices but is our own venue; the DFlow mainnet path uses the same interface.</li>
                 <li><b>Not an insurer.</b> Hedgehog is an advisor plus self-directed hedges; the Cover program is a prototype of the long-term product.</li>
               </ol>
               <Link href="/" className="btn btn-primary">Try it with a preset <IconArrowRight size={14} /></Link>

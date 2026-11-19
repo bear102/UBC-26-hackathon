@@ -145,7 +145,7 @@ export function Dashboard() {
                 <Seal className={s.connectSeal} />
                 <div>
                   <h2 className={s.connectTitle}>Connect your wallet <em>to see your cover</em></h2>
-                  <p className={s.connectText}>Your hedges are SPL outcome tokens and Cover policies on Solana devnet, tied to your wallet.</p>
+                  <p className={s.connectText}>Your hedges and policies live in your wallet on Solana devnet.</p>
                   <div className="row">
                     <button className="btn btn-primary" onClick={() => setVisible(true)}><IconWallet size={16} /> Connect Phantom</button>
                     <a className="btn" href="/dashboard?mock=1">View demo dashboard</a>
@@ -217,7 +217,7 @@ export function Dashboard() {
           <div className={s.secHead}><h2>Hedges</h2><span className={s.secMeta}>{positions ? `${positions.length} on file` : ""}</span></div>
           <div className={s.list}>
           {positions === null ? <div className="empty"><span className="spinner" /> Loading positions…</div>
-            : positions.length === 0 ? <div className="empty">No hedges yet. <Link href="/">Get a quote</Link> and buy one on devnet.</div>
+            : positions.length === 0 ? <div className="empty">No hedges yet. <Link href="/">Get a quote</Link>.</div>
             : positions.map((p) => {
               const lb = label(p);
               const mark = markOf(p);
@@ -259,7 +259,7 @@ export function Dashboard() {
           <div className={s.secHead} style={{ marginTop: 40 }}><h2>Hedgehog Cover policies</h2><span className={s.secMeta}>{policies ? `${policies.length} on file` : ""}</span></div>
           <div className={s.list}>
           {policies === null ? <div className="empty"><span className="spinner" /> Loading policies…</div>
-            : policies.length === 0 ? <div className="empty">No Cover policies. On a quote, choose “Get Hedgehog Cover instead”.</div>
+            : policies.length === 0 ? <div className="empty">No Cover policies yet.</div>
             : policies.map((x) => (
               <article key={x.policyId + (x.policyPda ?? "")} className={`stub ${s.stub}`}>
                 <div className="stub-left">
@@ -307,7 +307,7 @@ function Backing({ h }: { h?: DeskHedge }) {
       </div>
       <div className={s.order}>{h.limitPrice > 0 ? orderText(h) : `${h.outcome.toUpperCase()} ${h.symbol}`}</div>
       <div className="muted" style={{ marginTop: 4 }}>
-        {h.error ? h.error : <>Desk spends ≤ {usd(h.notionalUsd, 2)}{h.soldForUsd != null ? ` vs ${usd(h.soldForUsd, 2)} received` : ""}; pays $1/contract exactly when you are owed $1.</>}
+        {h.error ? h.error : <>Desk spends ≤ {usd(h.notionalUsd, 2)}{h.soldForUsd != null ? ` vs ${usd(h.soldForUsd, 2)} received` : ""}. It pays out exactly when you&apos;re owed.</>}
         {h.url && <> · <a href={h.url} target="_blank" rel="noreferrer">Gemini market <Ext /></a></>}
       </div>
     </div>
@@ -321,7 +321,7 @@ function FeedPanel({ feed }: { feed: FeedEvent[] }) {
         <span className="caps-title">Live feed</span>
         <span className="badge badge-good"><span className="dot live" /> Live · 5s</span>
       </div>
-      <p className={s.feedIntro}>Onchain events from QuickNode Streams, the settlement crank and the Cover program.</p>
+      <p className={s.feedIntro}>Onchain events via QuickNode Streams.</p>
       {feed.length === 0 ? <div className="empty small">Waiting for events…</div> : (
         <ol className={s.events}>
           {feed.map((e) => {

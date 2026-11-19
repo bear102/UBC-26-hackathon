@@ -29,7 +29,7 @@ export function PlanChoices({ quote, coverage, onChange }: { quote: Quote; cover
     <section className="section" style={{ paddingTop: 56, paddingBottom: 8 }}>
       <div className="sec-head">
         <div><span className="eyebrow">Options</span><h2>Pick <em>a plan</em></h2></div>
-        <span className="muted small">Same live markets, different trade-offs. Every option fits your {usd(quote.budgetUsd)}/mo budget.</span>
+        <span className="muted small">Every option fits your {usd(quote.budgetUsd)}/mo budget.</span>
       </div>
       {pkgs.length > 0 && (
         <div className={s.pkgs} role="group" aria-label="Plan packages">
@@ -49,7 +49,7 @@ export function PlanChoices({ quote, coverage, onChange }: { quote: Quote; cover
       )}
       {multi.length > 0 && (
         <details className={s.tune} open>
-          <summary>Fine-tune each hedge: cheaper tail cover, broader cover, or another date</summary>
+          <summary>Fine-tune each hedge</summary>
           <div className={s.rows}>
             {multi.map((o) => {
               const r = risk(o.riskId);

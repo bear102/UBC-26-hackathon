@@ -11,12 +11,11 @@
 .stage { grid-area: cert; }
 .pricedMob { display: none !important; }
 
-.h1 { margin: 22px 0 34px; font-variation-settings: 'opsz' 18; text-wrap: wrap; }
-.q { display: block; }
+.h1 { margin: 22px 0 34px; text-wrap: wrap; font-size: clamp(40px, 4.7vw, 68px); }
 .hedge { display: inline-block; position: relative; margin-top: 8px; }
 .lede { margin: 0 0 30px; max-width: 540px; }
 .cta { display: flex; gap: 12px; flex-wrap: wrap; }
-.priced { margin-top: 34px; display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-3); font-family: var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+.priced { margin-top: 34px; display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-3); font-family: var(--sans); letter-spacing: .06em; text-transform: uppercase; }
 .priced > span { display: inline-flex; align-items: center; gap: 14px; }
 .sep { width: 4px; height: 4px; background: var(--ink-3); transform: rotate(45deg); display: inline-block; }
 .venue { margin-top: 3px; }
@@ -26,7 +25,7 @@
 .clauses { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--surface); border: 1px solid var(--ink); }
 .clause { padding: 24px 26px 28px; position: relative; }
 .clause + .clause { border-left: 1px solid var(--ink); }
-.cno { display: block; font-family: var(--serif); font-style: italic; font-weight: 700; font-size: 44px; line-height: 1; color: var(--red); margin-bottom: 14px; }
+.cno { display: block; font-family: var(--serif); font-style: normal; font-weight: 700; font-size: 44px; line-height: 1; color: var(--red); margin-bottom: 14px; }
 .clause h3 { font-size: 24px; margin: 0 0 8px; }
 .clause p { margin: 0; color: var(--ink-2); font-size: 15px; }
 

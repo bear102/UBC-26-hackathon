@@ -61,8 +61,8 @@ export function MarketExplorer({ data, initial }: { data: ExplorerData; initial:
   return (
     <>
       <p className={s.note}>
-        <b>Gemini first</b> · Kalshi on Solana (via DFlow) where Gemini lists nothing · Polymarket as reference only (it isn&apos;t available to US desks).{" "}
-        Wildfire, flood, hail and air quality aren&apos;t hedgeable on any venue today. Hurricanes are out of season (the Atlantic season ends Nov 30).
+        <b>Gemini first</b>, Kalshi (on Solana via DFlow) where Gemini has nothing, Polymarket for reference.{" "}
+        No venue lists wildfire, flood, hail or air quality yet.
       </p>
       <div className={s.stat}>
         <div className={s.statMain}><span>Live contracts</span><b className="fig">{data.total.toLocaleString()}</b></div>
@@ -119,9 +119,8 @@ export function MarketExplorer({ data, initial }: { data: ExplorerData; initial:
         </div>
       )}
       <p className={s.footnote}>
-        Chance = midpoint of the buy and sell price. Cost = price of $1 of payout (YES side). For sale = contracts offered at that price, when the venue publishes it.
-        Rows are merged when the venues list the same game (same teams and day) or the same city/day/measure; outcomes line up by team or by threshold.
-        The AI only ever picks from this list. <Link href="/how-it-works">How venues are used <IconArrowRight size={12} /></Link>
+        Chance = midpoint price. Cost = price of $1 of payout (YES). The same event on several venues shares one row.
+        The AI only picks from this list. <Link href="/how-it-works">How venues are used <IconArrowRight size={12} /></Link>
       </p>
     </>
   );

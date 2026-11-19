@@ -46,7 +46,7 @@ export function IntakeForm() {
   function submit(e: FormEvent) {
     e.preventDefault();
     const rev = Number(revenue), bud = Number(budget);
-    if (description.trim().length < 12) return setErr("Tell us a little more about the business (one sentence is enough).");
+    if (description.trim().length < 12) return setErr("Tell us a bit more (one sentence is enough).");
     if (!name.trim()) return setErr("Add a business name.");
     if (!(rev > 0)) return setErr("Average daily revenue must be a positive number.");
     if (!(bud > 0)) return setErr("Monthly hedge budget must be a positive number.");
@@ -78,7 +78,7 @@ export function IntakeForm() {
 
         <div className={s.q}>
           <Seal withText={false} className={s.seal} />
-          <p><span className={s.qn}>Q1</span>Hi, I&apos;m Hedgehog. In a sentence or two: what do you sell, where, and what kind of day hurts your sales?</p>
+          <p><span className={s.qn}>Q1</span>What do you sell, where, and what kind of day hurts your sales?</p>
         </div>
         <label className={s.you}>
           <span className="sr-only">Describe your business</span>
@@ -112,12 +112,12 @@ export function IntakeForm() {
           <div className="seg" role="group" aria-label="Coverage">
             {([25, 50, 100] as const).map((c) => <button type="button" key={c} aria-pressed={coverage === c} onClick={() => setCoverage(c)}>{c}%</button>)}
           </div>
-          <p className="muted xs" style={{ marginTop: 8, marginBottom: 0 }}>You can change this on the quote. The total always stays inside your monthly budget.</p>
+          <p className="muted xs" style={{ marginTop: 8, marginBottom: 0 }}>You can change this later. It always stays within your budget.</p>
         </fieldset>
 
         {err && <div className="alert alert-bad" role="alert" style={{ marginTop: 18 }}>{err}</div>}
         <div className={s.submit}>
-          <span className="muted small">The AI only picks from real, live markets. No account needed to get a quote.</span>
+          <span className="muted small">Built only from live markets.</span>
           <button className="btn btn-primary btn-lg" type="submit">Build my hedge plan <IconArrowRight size={16} /></button>
         </div>
       </div>

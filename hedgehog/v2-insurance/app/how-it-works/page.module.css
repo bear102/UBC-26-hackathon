@@ -4,12 +4,12 @@
 .headWrap { position: relative; overflow: hidden; }
 .headRosette { position: absolute; width: 640px; height: 640px; right: -160px; top: -250px; opacity: .16; pointer-events: none; }
 .head { align-items: flex-end; }
-.head h1 { font-variation-settings: 'opsz' 18; }
+.head h1 { }
 .lede { margin: 18px 0 0; max-width: 40em; }
 .headMeta { margin: 0; display: grid; gap: 0; min-width: 250px; border: 1px solid var(--ink); background: var(--surface); position: relative; }
 .headMeta > div { padding: 9px 14px; }
 .headMeta > div + div { border-top: 1px solid var(--line); }
-.headMeta dt { font-family: var(--mono); font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+.headMeta dt { font-family: var(--sans); font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
 .headMeta dd { margin: 2px 0 0; font-weight: 600; font-size: 14px; color: var(--ink); }
 
 /* Exhibit A: architecture diagram */
@@ -19,9 +19,9 @@
 .diagram svg { width: 100%; min-width: 720px; height: auto; display: block; }
 .dTitle { fill: var(--ink); font-family: var(--sans); font-size: 14px; font-weight: 600; }
 .dSub { fill: var(--ink-2); font-family: var(--sans); font-size: 11.5px; }
-.dN { fill: var(--red); font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: .12em; paint-order: stroke; stroke: var(--surface); stroke-width: 6px; stroke-linejoin: round; }
-.dLabel { fill: var(--ink-2); font-family: var(--mono); font-size: 10.5px; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
-.dZone { fill: var(--ink); font-family: var(--mono); font-size: 10.5px; letter-spacing: .18em; font-weight: 600; }
+.dN { fill: var(--red); font-family: var(--sans); font-size: 10px; font-weight: 600; letter-spacing: .05em; paint-order: stroke; stroke: var(--surface); stroke-width: 6px; stroke-linejoin: round; }
+.dLabel { fill: var(--ink-2); font-family: var(--sans); font-size: 10.5px; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+.dZone { fill: var(--ink); font-family: var(--sans); font-size: 10.5px; letter-spacing: .05em; font-weight: 600; }
 .scrollHint { display: none; }
 
 /* Exhibit B */
@@ -31,7 +31,7 @@
 .clauses { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--surface); border: 1px solid var(--ink); }
 .clause { padding: 24px 26px 28px; position: relative; }
 .clause + .clause { border-left: 1px solid var(--ink); }
-.cno { display: block; font-family: var(--serif); font-style: italic; font-weight: 700; font-size: 44px; line-height: 1; color: var(--red); margin-bottom: 14px; }
+.cno { display: block; font-family: var(--serif); font-style: normal; font-weight: 700; font-size: 44px; line-height: 1; color: var(--red); margin-bottom: 14px; }
 .clause h3 { font-size: 24px; margin: 14px 0 8px; }
 .clause p { margin: 0; color: var(--ink-2); font-size: 15px; }
 .clause p b { color: var(--ink); }
@@ -50,13 +50,13 @@
 .ledger b { color: var(--ink); }
 .numbered { counter-reset: n; border-top: 0; }
 .numbered li { counter-increment: n; position: relative; padding-left: 40px; }
-.numbered li::before { content: counter(n, decimal-leading-zero); position: absolute; left: 0; top: 15px; font-family: var(--mono); font-size: 12px; color: var(--red); letter-spacing: .08em; }
+.numbered li::before { content: counter(n, decimal-leading-zero); position: absolute; left: 0; top: 15px; font-family: var(--sans); font-size: 12px; color: var(--red); letter-spacing: .05em; }
 .numbered li:first-child { border-top: 3px double var(--ink); }
 
 /* disclosures as articles */
 .articles { list-style: none; counter-reset: a; margin: 0 0 22px; padding: 0; border-top: 3px double var(--ink); }
 .articles li { counter-increment: a; position: relative; padding: 13px 0 13px 74px; border-bottom: 1px solid var(--line-2); color: var(--ink-2); font-size: 15px; }
-.articles li::before { content: "Art. " counter(a); position: absolute; left: 0; top: 13px; font-family: var(--serif); font-style: italic; font-weight: 700; font-size: 17px; color: var(--red); line-height: 1.4; }
+.articles li::before { content: "Art. " counter(a); position: absolute; left: 0; top: 13px; font-family: var(--serif); font-style: normal; font-weight: 700; font-size: 17px; color: var(--red); line-height: 1.4; }
 .articles b { color: var(--ink); }
 .last { border-bottom: 0; }
 
@@ -72,7 +72,7 @@
   .exhibit { padding: 16px 16px 12px; }
   .exhibit :global(.doc-head) { margin: -16px -16px 12px; padding: 12px 16px; flex-direction: column; align-items: flex-start; gap: 4px; }
   .diagram { margin: 0 -16px; padding: 0 16px; }
-  .scrollHint { display: flex; align-items: center; gap: 6px; justify-content: flex-end; margin: 8px 0 0; font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  .scrollHint { display: flex; align-items: center; gap: 6px; justify-content: flex-end; margin: 8px 0 0; font-family: var(--sans); font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
   .dayCard { padding: 18px 16px; }
   .clause { padding: 20px; }
   .cno { font-size: 36px; }
