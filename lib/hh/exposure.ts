@@ -3,6 +3,7 @@
 import crypto from "node:crypto";
 import { searchEvents, book, type GEvent, type Book } from "./gemini";
 import { quoteBin } from "./pricing";
+import { flipBook, noLabel } from "./hedgeDesk";
 import { env } from "./env";
 import { kindOf, templateCards } from "./catalog";
 import { venueFor, liveCapable, bookBase, isSandbox, hostOf, type Venue } from "./venue";
@@ -17,6 +18,7 @@ export type ExposureRow = {
   id: string;
   event_ticker: string; event_title: string; category: string; expiry?: string;
   symbols: string[]; labels: string[];
+  side: "yes" | "no";          // "no" = pays if a ladder price ends BELOW the threshold
   shape: Shape; channel: Channel; action: Action; action_forced?: string;
   impact_usd: number; impact_source: "ai" | "default";
   why: string; basis_note: string; settles_on: string;
@@ -178,6 +180,7 @@ export const SCHEMA = {
         properties: {
           event_ticker: { type: "string" },
           symbols: { type: "array", items: { type: "string" }, description: "instrumentSymbols that pay in the scenario that HURTS the business; for a ladder event exactly one" },
+          side: { type: "string", enum: ["yes", "no"], description: "ladder only: 'yes' pays if the price ends at/above the threshold (a rise hurts), 'no' pays if it ends BELOW (a drop hurts). Use 'yes' for exclusive events." },
           channel: { type: "string", enum: ["revenue", "cost", "financing"] },
           action: { type: "string", enum: ["promo", "hedge", "plan"] },
           impact_usd: { type: "number", description: "rough $ hit to this business if the bad scenario happens" },
@@ -196,13 +199,13 @@ const SYSTEM =
   "list up to 6 markets whose outcome would hurt this business (revenue, costs or financing). Use ONLY tickers and instrumentSymbols from the catalog (the part before '='). " +
   "Catalog line: ticker|category|title|shape|expiry|symbol=\"label\" ask in cents; ... " +
   "`symbols` = the contracts that pay in the scenario that hurts the business. 'exclusive' events: all bins of that scenario, never every bin. " +
-  "'ladder' events: exactly ONE threshold; a ladder contract pays only if the price ends AT OR ABOVE the threshold, so use a ladder only when a price RISE hurts " +
-  "(input costs like natural gas) or for a customer promo that pays out on a rally. " +
+  "'ladder' events: exactly ONE threshold, plus side: 'yes' pays if the price ends AT OR ABOVE it (a rise hurts, e.g. natural gas costs), 'no' pays if it ends BELOW it " +
+  "(a drop hurts, e.g. a shop holding crypto payments). Customer promos use side 'yes' only. " +
   "action: 'promo' = turn it into a customer money-back promo (weather, local games, BTC rally promo for crypto-friendly shops); 'hedge' = the business buys cover directly (costs like natural gas); " +
   "'plan' = just plan around it (macro like Fed, unemployment, GDP). impact_usd = a rough, conservative dollar hit for a business this size (one day/event, not a year). " +
   "Never invent odds or prices; those come from the market. Keep why/basis_note short and plain. Sort by importance.";
 
-type LlmRow = { event_ticker: string; symbols: string[]; channel: Channel; action: Action; impact_usd: number; why: string; basis_note: string };
+type LlmRow = { event_ticker: string; symbols: string[]; side?: "yes" | "no"; channel: Channel; action: Action; impact_usd: number; why: string; basis_note: string };
 
 const CHANNELS: Channel[] = ["revenue", "cost", "financing"];
 const ACTIONS: Action[] = ["promo", "hedge", "plan"];
@@ -221,6 +224,7 @@ export function validateLlmRows(rows: unknown, byTicker: Map<string, GEvent>): L
     if (!symbols.length) continue;
     out.push({
       event_ticker: e.ticker, symbols,
+      side: r.side === "no" && shapeOf(e) === "ladder" ? "no" : "yes",
       channel: CHANNELS.includes(r.channel as Channel) ? (r.channel as Channel) : "revenue",
       action: ACTIONS.includes(r.action as Action) ? (r.action as Action) : "plan",
       impact_usd: Math.min(IMPACT_MAX, Math.max(0, Number(r.impact_usd) || 0)),
@@ -275,6 +279,7 @@ async function enrich(e: Raw, r: LlmRow, impactSource: "ai" | "default"): Promis
   const symbols = pickSymbols(e, r.symbols ?? []);
   if (!symbols) return null;
   const shape = shapeOf(e);
+  const side: "yes" | "no" = r.side === "no" && shape === "ladder" && symbols.length === 1 ? "no" : "yes";
   const contracts = symbols.map((s) => e.contracts.find((c) => c.instrumentSymbol === s)!);
   const flags: string[] = [];
   // Numbers come from the book of the venue this risk would actually be hedged on (sandbox when it lists the event AND
@@ -295,7 +300,7 @@ async function enrich(e: Raw, r: LlmRow, impactSource: "ai" | "default"): Promis
     if (!flags.includes("stale")) flags.push("stale"); // book call slow: event-list top of book, depth unknown
     return e.venueHint === "trade" && venue.mode !== "live" ? EMPTY : topOfBook(contracts[i]);
   };
-  const bins = symbols.map((s, i) => quoteBin(s, bookOf(i), env.limitSlippage()));
+  const bins = symbols.map((s, i) => quoteBin(s, side === "no" ? flipBook(bookOf(i)) : bookOf(i), env.limitSlippage()));
   const { p_bad, cost, depth } = stripNumbers(bins);
 
   if (cost == null) flags.push("no-book");
@@ -307,6 +312,7 @@ async function enrich(e: Raw, r: LlmRow, impactSource: "ai" | "default"): Promis
   let forced: string | undefined;
   const promoOk = kindOf(e) != null;
   if (action === "promo" && !promoOk) { action = "hedge"; forced = "not a promo market"; }
+  if (action === "promo" && side === "no") { action = "hedge"; forced = "promos pay on the YES side"; }
   if (e.category === "Economics" || e.category === "Politics") { if (action !== "plan") forced = "macro markets are plan-only"; action = "plan"; }
   else if (cost != null && cost > 0.75 && action !== "plan") { action = "plan"; forced = `cover costs ${Math.round(cost * 100)}¢ per $1`; }
   else if (cost == null && action !== "plan") { action = "plan"; forced = "no order book"; }
@@ -314,9 +320,9 @@ async function enrich(e: Raw, r: LlmRow, impactSource: "ai" | "default"): Promis
   const settles = settlesOn(e);
   const impact = Math.min(IMPACT_MAX, Math.max(0, Math.round(Number(r.impact_usd) || 0)));
   return {
-    id: crypto.createHash("sha256").update(`${e.ticker}|${symbols.join(",")}`).digest("hex").slice(0, 12),
+    id: crypto.createHash("sha256").update(`${e.ticker}|${symbols.join(",")}|${side}`).digest("hex").slice(0, 12),
     event_ticker: e.ticker, event_title: e.title, category: e.category, expiry: e.expiryDate,
-    symbols, labels: contracts.map((c) => c.label), shape,
+    symbols, labels: contracts.map((c) => (side === "no" ? noLabel(c.label) : c.label)), side, shape,
     channel: r.channel, action, action_forced: forced,
     impact_usd: impact || 100, impact_source: impact ? impactSource : "default",
     why: cleanText(r.why).slice(0, 120),
@@ -369,6 +375,8 @@ async function fallbackRows(text: string, cat: Raw[]): Promise<{ profile: Profil
   ]);
   if (gas) rows.push({ event_ticker: gas.e.ticker, symbols: [gas.c.instrumentSymbol], channel: "cost", action: "hedge", impact_usd: 300, why: "Gas griddles and ovens: a price spike raises next month's bill.", basis_note: "Your utility bill follows the index with a lag." });
   // A ladder contract pays when BTC ends at/above the strike: that covers a "coffee's on us if BTC rallies" promo, not a drop.
+  // A shop that holds crypto payments loses when BTC DROPS: the NO side of the same threshold pays "below $X".
+  if (btc) rows.push({ event_ticker: btc.e.ticker, symbols: [btc.c.instrumentSymbol], side: "no", channel: "revenue", action: "hedge", impact_usd: 100, why: "Crypto payments held until close lose value if BTC drops.", basis_note: "Gemini's BTC index at expiry, not your sale price." });
   if (btc) rows.push({ event_ticker: btc.e.ticker, symbols: [btc.c.instrumentSymbol], channel: "revenue", action: "promo", impact_usd: 100, why: `Crypto fans: "coffee's on us if BTC ends ${btc.c.label}"; this contract pays the refunds.`, basis_note: "Gemini's BTC index at expiry, not your sale price." });
   if (/loan|sba|credit|mortgage|lease|rate/.test(t)) {
     const fed = cat.find((e) => /^FED/.test(e.ticker));

@@ -178,3 +178,11 @@ test("llm helpers: thinking off for 2.5 Flash, retry only on 429/5xx, within() b
   assert.equal(await within(Promise.reject(new Error("x")), 1000, "fb"), "fb");
   assert.equal(await within(Promise.resolve("ok"), 1000, "fb"), "ok");
 });
+
+test("NO side: flipBook turns YES bids into NO asks; noLabel", async () => {
+  const { flipBook, noLabel } = await import("../../lib/hh/hedgeDesk");
+  const f = flipBook(bk([[0.4, 37]], [[0.36, 100], [0.3, 50]]));
+  assert.deepEqual(f.asks.map((l) => [l.price, l.amount]), [["0.64", "100"], ["0.70", "50"]]);
+  assert.deepEqual(f.bids.map((l) => l.price), ["0.60"]);
+  assert.equal(noLabel("$62,500 or above"), "Below $62,500");
+});

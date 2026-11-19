@@ -20,13 +20,13 @@ export type DeskLeg = {
   maxSpend: number | null; // qty × limit: worst case for this IOC leg
 };
 export type DeskQuote = {
-  event_ticker: string; event_title: string; expiry?: string; symbols: string[]; payout_usd: number;
+  event_ticker: string; event_title: string; expiry?: string; symbols: string[]; outcome: "yes" | "no"; payout_usd: number;
   legs: DeskLeg[]; premium: number | null; fair: number | null; spread: number | null; p_bad: number | null;
   expected_payout: number | null; fillable: boolean; max_spend: number | null;
   venue: { mode: "live" | "paper"; host: string; sandbox: boolean; why?: string };
   tradeable: boolean; reason?: string; plain: string; quotedAt: number;
 };
-export type DeskFill = { symbol: string; orderId: string; qty: number; filled: number; avgPx?: number; price: number; status: string };
+export type DeskFill = { outcome?: "yes" | "no"; symbol: string; orderId: string; qty: number; filled: number; avgPx?: number; price: number; status: string };
 export type DeskTicket = {
   id: string; createdAt: number; quote: DeskQuote; maxUsd: number;
   status: "FILLED" | "PARTIAL" | "REJECTED";
@@ -152,7 +152,17 @@ export function parseBatch(res: unknown, reqs: { symbol: string; quantity: numbe
 const EMPTY: Book = { bids: [], asks: [] };
 const paperVenue = (why: string): Venue => ({ data: env.geminiPublic(), trade: env.geminiTrade(), mode: "paper", resolve: env.geminiPublic(), why });
 
-export async function quoteDesk(input: { event_ticker: string; symbols: string[]; payout_usd: number }): Promise<DeskQuote> {
+/** NO side of a binary contract: buying NO at p matches a YES bid at 1-p (and vice versa). */
+export function flipBook(b: Book): Book {
+  const f = (l: { price: string; amount: string; timestamp?: string }) => ({ ...l, price: (Math.round((1 - Number(l.price)) * 100) / 100).toFixed(2) });
+  return { asks: (b.bids || []).map(f).sort((x, y) => Number(x.price) - Number(y.price)), bids: (b.asks || []).map(f).sort((x, y) => Number(y.price) - Number(x.price)) };
+}
+/** "$62,500 or above" → "Below $62,500" (the NO side of a ladder threshold). */
+export const noLabel = (label: string) => /or (above|more)/i.test(label) ? `Below ${label.replace(/\s*or (above|more)\s*/i, "").trim()}` : `Not: ${label}`;
+
+export async function quoteDesk(input: { event_ticker: string; symbols: string[]; payout_usd: number; outcome?: "yes" | "no" }): Promise<DeskQuote> {
+  const outcome: "yes" | "no" = input.outcome === "no" ? "no" : "yes";
+  if (outcome === "no" && new Set(input.symbols).size !== 1) throw Object.assign(new Error("'Below' cover works on one threshold at a time"), { status: 400 });
   const payout = Math.max(1, Math.min(10_000, Math.floor(Number(input.payout_usd) || 0)));
   let venue: Venue = await within(venueFor(input.event_ticker, input.symbols), 5_000, paperVenue("venue check timed out"));
   const load = async (base: string) => {
@@ -161,7 +171,8 @@ export async function quoteDesk(input: { event_ticker: string; symbols: string[]
     const syms = [...new Set(input.symbols)].filter((s) => e.contracts.some((c) => c.instrumentSymbol === s)).slice(0, 8);
     const legs = await Promise.all(syms.map(async (s) => {
       const c = e.contracts.find((x) => x.instrumentSymbol === s)!;
-      return { symbol: s, label: c.label, meta: c as LegMeta, book: await within(book(s, 3_000, base), 4_000, EMPTY) };
+      const bk = await within(book(s, 3_000, base), 4_000, EMPTY);
+      return { symbol: s, label: outcome === "no" ? noLabel(c.label) : c.label, meta: c as LegMeta, book: outcome === "no" ? flipBook(bk) : bk };
     }));
     return { e, syms, legs };
   };
@@ -181,11 +192,11 @@ export async function quoteDesk(input: { event_ticker: string; symbols: string[]
   else if (z.legs.some((l) => l.qty <= 0)) reason = "Payout is below the contract's minimum size";
   else if (!z.fillable) reason = `Not enough depth for ${payout} contracts within ${Math.round(env.limitSlippage() * 100)}¢ of the ask`;
   else if (z.premium > deskMax()) reason = `Over the desk limit ($${deskMax()})`;
-  const scen = syms.map((s) => e.contracts.find((c) => c.instrumentSymbol === s)!.label).join(" or ");
+  const scen = legs.map((l) => l.label).join(" or ");
   const plain = z.premium == null ? "No live price for this cover right now." :
     `You pay $${z.premium.toFixed(2)} now. If "${scen}" happens, Gemini pays you $${payout.toFixed(2)}. Otherwise you lose the $${z.premium.toFixed(2)}.`;
   return {
-    event_ticker: e.ticker, event_title: e.title, expiry: e.expiryDate, symbols: syms, payout_usd: payout, ...z,
+    event_ticker: e.ticker, event_title: e.title, expiry: e.expiryDate, symbols: syms, outcome, payout_usd: payout, ...z,
     venue: { mode: venue.mode, host: hostOf(venue.mode === "live" ? venue.trade : venue.data), sandbox, why: venue.why },
     tradeable: !reason, reason, plain, quotedAt: Date.now(),
   };
@@ -203,7 +214,7 @@ function saveTicket(t: DeskTicket) {
   } catch (e) { log("error", "desk", `ticket ${t.id} not saved: ${String((e as Error).message ?? e).slice(0, 200)}`); }
 }
 
-export async function buyDesk(input: { event_ticker: string; symbols: string[]; payout_usd: number; max_usd: number }): Promise<DeskTicket> {
+export async function buyDesk(input: { event_ticker: string; symbols: string[]; payout_usd: number; max_usd: number; outcome?: "yes" | "no" }): Promise<DeskTicket> {
   if (!isSandbox(env.geminiTrade())) throw new Error("Hedge Desk buys are enabled on the Gemini sandbox only");
   const maxUsd = Number(input.max_usd);
   if (!(maxUsd > 0)) throw new Error("type the most you'll pay");
@@ -212,12 +223,12 @@ export async function buyDesk(input: { event_ticker: string; symbols: string[]; 
   if ((q.premium as number) > maxUsd + 1e-9) throw new Error(`Price moved: cover now costs $${(q.premium as number).toFixed(2)}, over your max of $${maxUsd.toFixed(2)}`);
   const lim = limitsWithin(q.legs, maxUsd);
   if ("error" in lim) throw new Error(lim.error);
-  const reqs = q.legs.map((l, i) => ({ symbol: l.symbol, side: "buy" as const, outcome: "yes" as const, price: lim.prices[i], quantity: l.qty }));
+  const reqs = q.legs.map((l, i) => ({ symbol: l.symbol, side: "buy" as const, outcome: q.outcome, price: lim.prices[i], quantity: l.qty }));
   const id = `desk-${Date.now()}-${crypto.randomBytes(2).toString("hex")}`;
   let fills: DeskFill[] = [];
   let note: string | undefined;
   try {
-    fills = parseBatch(await G.batchOrder(reqs, "A"), reqs);
+    fills = parseBatch(await G.batchOrder(reqs, "A"), reqs).map((f) => ({ ...f, outcome: q.outcome }));
     const rej = fills.find((f) => f.status.startsWith("rejected"));
     if (rej) note = rej.status.replace(/^rejected: /, "");
   } catch (e) {
@@ -232,7 +243,7 @@ export async function buyDesk(input: { event_ticker: string; symbols: string[]; 
   saveTicket(ticket); // persist the fills BEFORE the memo, so a memo failure can never lose the ticket
 
   if (status !== "REJECTED") {
-    const commit = { v: 1, id, venue: q.venue.host, event: q.event_ticker, fills: fills.map((f) => ({ s: f.symbol, o: f.orderId, q: f.filled, p: f.avgPx ?? f.price })), spent, covered };
+    const commit = { v: 1, id, venue: q.venue.host, event: q.event_ticker, outcome: q.outcome, fills: fills.map((f) => ({ s: f.symbol, o: f.orderId, q: f.filled, p: f.avgPx ?? f.price })), spent, covered };
     const text = `hh:desk:v1:${crypto.createHash("sha256").update(JSON.stringify(commit)).digest("hex")}`;
     ticket.memo = { text };
     try {
