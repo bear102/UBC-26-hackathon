@@ -1,5 +1,7 @@
 # Hedgehog — agent onboarding (read this first)
 
+> **Repo layout (2026-11-19 ~05:00Z):** the user and teammate Gatik pivoted to **`cover/`**: an AI that scans a business and offers prediction markets as insurance (ice-cream shop hedges a cold day). The previous project (hedged promos + suite) lives in **`promos/`** (run it with `cd promos`). Paths below that start with `docs/SPEC.md`, `reference/` etc. now live under `promos/`. Shared hackathon docs stay in `docs/HACKATHON.md` and `docs/research/`.
+
 You are picking up a hackathon project. Everything you need is in this folder. Do NOT redo ideation: the design has been through ~10 rounds of critic review and a red-team pass. Your job is to BUILD it per the spec.
 
 ## The project
