@@ -73,3 +73,9 @@ test("iter5: one game hedged once; different matchups of the same team stay sepa
   assert.equal(sameExposureX(risk({ peril: "game", title: "Our team loses", trigger: "Los Angeles C beats our team (Los Angeles C vs San Antonio, Nov 21)" }), a), true);
   assert.equal(sameExposureX(risk({ peril: "game", title: "Longhorns lose", trigger: "Southern Utah vs Texas on Nov 21" }), risk({ peril: "game", title: "Our team loses", trigger: "Arkansas beats our team (Arkansas vs Texas, Nov 23)" })), false);
 });
+
+test("iter5b: heuristic Fed pick never buys a cut for a 'no cut' risk (Gemini 'Cut >25bps' labels)", () => {
+  const f = [mk("g:CUT", "Fed decision in December?", "Cut >25bps", "fed", 0.05), mk("g:HOLD", "Fed decision in December?", "Fed maintains rate", "fed", 0.3)];
+  const leg = heuristicPick(risk({ peril: "fed", title: "Rates stay high (no Fed cut)", trigger: "No Fed rate cut at the next FOMC meeting" }), f);
+  assert.deepEqual([leg?.contractId, leg?.side], ["g:HOLD", "yes"]);
+});

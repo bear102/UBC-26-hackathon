@@ -257,6 +257,17 @@ export function heuristicPick(risk: Risk, candidates: MarketContract[], busyDays
       ? { riskId: risk.id, contractId: own.id, side: "yes", rationale: `Pays if ${own.label} wins.`, basisRisk: `A result does not always move your crowd. ${note}` }
       : { riskId: risk.id, contractId: own.id, side: "no", rationale: `Pays if ${own.label} does not win.`, basisRisk: `A loss does not always mean an empty venue. ${note}` };
   }
+  if (risk.peril === "fed") {
+    // categorical Fed labels ("Hike 25bps", "Cut >25bps", "Fed maintains rate"): ">" in "Cut >25bps" is not "above"
+    const text = `${risk.title} ${risk.trigger}`;
+    const hike = /\bhike|raise/i.test(text) && !/no (rate )?hike/i.test(text);
+    const isHold = (l: string) => /maintain|hold|no change|unchanged|pause/i.test(l), isCut = (l: string) => /\bcut/i.test(l), isHike = (l: string) => /hike|raise|increase/i.test(l);
+    const yesOn = (f: (l: string) => boolean) => { const c = open.find((x) => f(x.label) && ok(x.yesAsk)); return c ? { c, side: "yes" as const } : null; };
+    const noOnCut = () => { const c = open.find((x) => isCut(x.label) && ok(x.noAsk)); return c ? { c, side: "no" as const } : null; };
+    const pick = hike ? yesOn(isHike) : yesOn(isHold) ?? noOnCut();
+    if (pick) return { riskId: risk.id, contractId: pick.c.id, side: pick.side, rationale: `Pays if the Fed ${pick.side === "yes" ? `outcome is "${pick.c.label}"` : `does not "${pick.c.label}"`}.`, basisRisk: `Your loan or deal flow follows market rates, which move before and after the Fed. ${note}` };
+    if (open.some((c) => isHold(c.label) || isCut(c.label) || isHike(c.label))) return null;
+  }
   if (risk.peril === "rain") {
     // "Will it rain in <city> on <day> / this weekend" (label = the city) beats monthly rainfall totals; candidates are already ranked by date fit
     const onBusyDay = (c: MarketContract) => { const d = marketDays(c); return !busyDays.length || !d || d.some((x) => busyDays.includes(x)); };
