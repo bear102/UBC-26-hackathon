@@ -1,0 +1,1228 @@
+{
+  "address": "6x27yJQSb1iGRNumQG6Et8nB8x7Zq7qiKEzLkZhbQraf",
+  "metadata": {
+    "name": "hedgehog_promise",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Hedgehog: hedge-gated money-back promises with a USDC escrow vault"
+  },
+  "instructions": [
+    {
+      "name": "attest_hedge",
+      "discriminator": [
+        201,
+        60,
+        3,
+        125,
+        56,
+        237,
+        181,
+        30
+      ],
+      "accounts": [
+        {
+          "name": "attestor",
+          "signer": true,
+          "address": "5LQKRaTS8nkd1ag37huyKVNBc5iaFDRG1LnCYTvCu5Es"
+        },
+        {
+          "name": "promise",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "phase",
+          "type": "u8"
+        },
+        {
+          "name": "qty_centi",
+          "type": {
+            "vec": "u32"
+          }
+        },
+        {
+          "name": "premium_micros",
+          "type": "u64"
+        },
+        {
+          "name": "orders_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "observed_at",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "attest_outcome",
+      "discriminator": [
+        115,
+        210,
+        81,
+        230,
+        222,
+        14,
+        85,
+        209
+      ],
+      "accounts": [
+        {
+          "name": "relayer",
+          "signer": true,
+          "address": "FtVpLmYRmwrC7mdyLqRCF3sTpAF2PweFj2V2zpbZkVZr"
+        },
+        {
+          "name": "promise",
+          "writable": true
+        },
+        {
+          "name": "merchant",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "promise.merchant",
+                "account": "Promise"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "winning_symbol",
+          "type": "string"
+        },
+        {
+          "name": "canonical_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "resolved_at",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "close_receipts",
+      "discriminator": [
+        144,
+        230,
+        36,
+        140,
+        163,
+        61,
+        224,
+        177
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "promise"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "create_promise",
+      "discriminator": [
+        233,
+        170,
+        35,
+        24,
+        34,
+        120,
+        82,
+        200
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "merchant",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "promise",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  109,
+                  105,
+                  115,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              },
+              {
+                "kind": "arg",
+                "path": "promise_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "promise"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority_usdc",
+          "writable": true
+        },
+        {
+          "name": "usdc_mint",
+          "address": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "rent",
+          "address": "SysvarRent111111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "promise_id",
+          "type": "u64"
+        },
+        {
+          "name": "event_ticker",
+          "type": "string"
+        },
+        {
+          "name": "strip",
+          "type": {
+            "vec": "string"
+          }
+        },
+        {
+          "name": "refund_units",
+          "type": "u64"
+        },
+        {
+          "name": "cap",
+          "type": "u32"
+        },
+        {
+          "name": "sales_close_ts",
+          "type": "i64"
+        },
+        {
+          "name": "expected_resolve_ts",
+          "type": "i64"
+        },
+        {
+          "name": "terms_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "issue_receipt",
+      "discriminator": [
+        128,
+        231,
+        32,
+        119,
+        210,
+        139,
+        80,
+        68
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "merchant",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "promise",
+          "writable": true
+        },
+        {
+          "name": "receipt",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  99,
+                  101,
+                  105,
+                  112,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "promise"
+              },
+              {
+                "kind": "account",
+                "path": "promise.sold",
+                "account": "Promise"
+              }
+            ]
+          }
+        },
+        {
+          "name": "holder"
+        },
+        {
+          "name": "holder_ata"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "code_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "refund_crank",
+      "discriminator": [
+        22,
+        80,
+        109,
+        43,
+        247,
+        68,
+        152,
+        244
+      ],
+      "accounts": [
+        {
+          "name": "cranker",
+          "signer": true
+        },
+        {
+          "name": "promise",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "promise"
+              }
+            ]
+          }
+        },
+        {
+          "name": "merchant",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "promise.merchant",
+                "account": "Promise"
+              }
+            ]
+          }
+        },
+        {
+          "name": "usdc_mint",
+          "address": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "release",
+      "discriminator": [
+        253,
+        249,
+        15,
+        206,
+        28,
+        127,
+        193,
+        241
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "merchant",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "promise",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "promise"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority_usdc",
+          "writable": true
+        },
+        {
+          "name": "usdc_mint",
+          "address": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": []
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Merchant",
+      "discriminator": [
+        71,
+        235,
+        30,
+        40,
+        231,
+        21,
+        32,
+        64
+      ]
+    },
+    {
+      "name": "Promise",
+      "discriminator": [
+        172,
+        179,
+        140,
+        81,
+        180,
+        237,
+        23,
+        191
+      ]
+    },
+    {
+      "name": "Receipt",
+      "discriminator": [
+        39,
+        154,
+        73,
+        106,
+        80,
+        102,
+        145,
+        153
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "HedgeAttested",
+      "discriminator": [
+        113,
+        236,
+        31,
+        235,
+        110,
+        63,
+        36,
+        63
+      ]
+    },
+    {
+      "name": "OutcomeAttested",
+      "discriminator": [
+        249,
+        112,
+        243,
+        78,
+        100,
+        115,
+        176,
+        160
+      ]
+    },
+    {
+      "name": "PromiseCreated",
+      "discriminator": [
+        5,
+        187,
+        200,
+        165,
+        198,
+        146,
+        52,
+        208
+      ]
+    },
+    {
+      "name": "ReceiptIssued",
+      "discriminator": [
+        233,
+        140,
+        157,
+        214,
+        59,
+        46,
+        229,
+        231
+      ]
+    },
+    {
+      "name": "RefundPaid",
+      "discriminator": [
+        191,
+        158,
+        89,
+        168,
+        130,
+        235,
+        207,
+        139
+      ]
+    },
+    {
+      "name": "RefundSkipped",
+      "discriminator": [
+        241,
+        248,
+        182,
+        6,
+        231,
+        154,
+        196,
+        167
+      ]
+    },
+    {
+      "name": "Released",
+      "discriminator": [
+        232,
+        229,
+        255,
+        136,
+        101,
+        189,
+        15,
+        220
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "SalesClosed",
+      "msg": "Sales are closed for this promise"
+    },
+    {
+      "code": 6001,
+      "name": "SoldOut",
+      "msg": "All promises at this price are taken"
+    },
+    {
+      "code": 6002,
+      "name": "Unhedged",
+      "msg": "No hedge, no promise: hedged capacity is used up"
+    },
+    {
+      "code": 6003,
+      "name": "LiabilityLocked",
+      "msg": "The vault is locked until the promise settles"
+    },
+    {
+      "code": 6004,
+      "name": "UnauthorizedAttestor",
+      "msg": "Signer is not the authorized attestor/relayer"
+    },
+    {
+      "code": 6005,
+      "name": "AlreadyRefunded",
+      "msg": "Receipt already refunded"
+    },
+    {
+      "code": 6006,
+      "name": "NotSettled",
+      "msg": "Promise is not settled YES"
+    },
+    {
+      "code": 6007,
+      "name": "AlreadySettled",
+      "msg": "Promise already settled"
+    },
+    {
+      "code": 6008,
+      "name": "InvalidStrip",
+      "msg": "Invalid strip or ticker"
+    },
+    {
+      "code": 6009,
+      "name": "InvalidAmount",
+      "msg": "Invalid amount"
+    },
+    {
+      "code": 6010,
+      "name": "InvalidTimes",
+      "msg": "Invalid times"
+    },
+    {
+      "code": 6011,
+      "name": "TooEarly",
+      "msg": "Too early"
+    },
+    {
+      "code": 6012,
+      "name": "StaleAttestation",
+      "msg": "Stale attestation"
+    },
+    {
+      "code": 6013,
+      "name": "ReceiptMismatch",
+      "msg": "Receipt / token account mismatch"
+    },
+    {
+      "code": 6014,
+      "name": "WrongMint",
+      "msg": "Wrong mint"
+    },
+    {
+      "code": 6015,
+      "name": "NotMerchant",
+      "msg": "Signer is not the merchant"
+    }
+  ],
+  "types": [
+    {
+      "name": "HedgeAttested",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "promise",
+            "type": "pubkey"
+          },
+          {
+            "name": "phase",
+            "type": "u8"
+          },
+          {
+            "name": "capacity",
+            "type": "u32"
+          },
+          {
+            "name": "held_bps",
+            "type": "u16"
+          },
+          {
+            "name": "orders_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "observed_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Merchant",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "promises_created",
+            "type": "u32"
+          },
+          {
+            "name": "promises_closed",
+            "type": "u32"
+          },
+          {
+            "name": "cutoff_held_full",
+            "type": "u32"
+          },
+          {
+            "name": "hedge_breaks",
+            "type": "u32"
+          },
+          {
+            "name": "receipts_issued",
+            "type": "u64"
+          },
+          {
+            "name": "refunds_paid",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OutcomeAttested",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "promise",
+            "type": "pubkey"
+          },
+          {
+            "name": "yes",
+            "type": "bool"
+          },
+          {
+            "name": "winning_symbol",
+            "type": "string"
+          },
+          {
+            "name": "canonical_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "resolved_at",
+            "type": "i64"
+          },
+          {
+            "name": "held_bps_min",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Promise",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "promise_id",
+            "type": "u64"
+          },
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "event_ticker",
+            "type": "string"
+          },
+          {
+            "name": "strip_len",
+            "type": "u8"
+          },
+          {
+            "name": "strip",
+            "type": {
+              "array": [
+                {
+                  "array": [
+                    "u8",
+                    48
+                  ]
+                },
+                6
+              ]
+            }
+          },
+          {
+            "name": "hedged_centi",
+            "type": {
+              "array": [
+                "u32",
+                6
+              ]
+            }
+          },
+          {
+            "name": "refund_units",
+            "type": "u64"
+          },
+          {
+            "name": "cap",
+            "type": "u32"
+          },
+          {
+            "name": "sold",
+            "type": "u32"
+          },
+          {
+            "name": "refunded",
+            "type": "u32"
+          },
+          {
+            "name": "hedged_capacity",
+            "type": "u32"
+          },
+          {
+            "name": "held_bps_cutoff",
+            "type": "u16"
+          },
+          {
+            "name": "held_bps_min",
+            "type": "u16"
+          },
+          {
+            "name": "phases_done",
+            "type": "u8"
+          },
+          {
+            "name": "premium_micros",
+            "type": "u64"
+          },
+          {
+            "name": "orders_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "sales_close_ts",
+            "type": "i64"
+          },
+          {
+            "name": "expected_resolve_ts",
+            "type": "i64"
+          },
+          {
+            "name": "terms_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "type": "u8"
+          },
+          {
+            "name": "winning_symbol",
+            "type": {
+              "array": [
+                "u8",
+                48
+              ]
+            }
+          },
+          {
+            "name": "outcome_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "resolved_at",
+            "type": "i64"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "vault_bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PromiseCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "promise",
+            "type": "pubkey"
+          },
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "event_ticker",
+            "type": "string"
+          },
+          {
+            "name": "strip_len",
+            "type": "u8"
+          },
+          {
+            "name": "refund_units",
+            "type": "u64"
+          },
+          {
+            "name": "cap",
+            "type": "u32"
+          },
+          {
+            "name": "sales_close_ts",
+            "type": "i64"
+          },
+          {
+            "name": "terms_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Receipt",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "promise",
+            "type": "pubkey"
+          },
+          {
+            "name": "index",
+            "type": "u32"
+          },
+          {
+            "name": "holder",
+            "type": "pubkey"
+          },
+          {
+            "name": "holder_ata",
+            "type": "pubkey"
+          },
+          {
+            "name": "code_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "issued_at",
+            "type": "i64"
+          },
+          {
+            "name": "refunded",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ReceiptIssued",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "promise",
+            "type": "pubkey"
+          },
+          {
+            "name": "index",
+            "type": "u32"
+          },
+          {
+            "name": "holder",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RefundPaid",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "promise",
+            "type": "pubkey"
+          },
+          {
+            "name": "index",
+            "type": "u32"
+          },
+          {
+            "name": "holder",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RefundSkipped",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "promise",
+            "type": "pubkey"
+          },
+          {
+            "name": "index",
+            "type": "u32"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Released",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "promise",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "cancelled",
+            "type": "bool"
+          }
+        ]
+      }
+    }
+  ]
+}

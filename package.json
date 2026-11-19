@@ -1,0 +1,39 @@
+{
+  "name": "hedgehog",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev -p 5380",
+    "build": "next build",
+    "start": "next start -p 5380",
+    "worker": "tsx scripts/worker.ts",
+    "gate": "tsx scripts/h0-gate.ts",
+    "setup": "tsx scripts/setup.ts",
+    "keys": "tsx scripts/keys.ts",
+    "test": "node --import tsx --test tests/unit/*.test.ts tests/program/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "test:program": "node --import tsx --test tests/program/*.test.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.10.0",
+    "@coral-xyz/anchor": "^0.31.1",
+    "@solana/spl-token": "^0.4.15",
+    "@solana/web3.js": "^1.99.0",
+    "bs58": "^6.0.0",
+    "dotenv": "^18.0.10",
+    "next": "^15.5.29",
+    "qrcode": "^1.5.4",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tweetnacl": "^1.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.3.0",
+    "litesvm": "^0.8.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
+  }
+}
