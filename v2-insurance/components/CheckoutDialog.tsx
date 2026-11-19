@@ -64,7 +64,8 @@ export function CheckoutDialog({ kind, line, risk, businessId, onClose, onDone }
         const res: CheckoutResult = { kind, signature: sig, network: "devnet", policyId: r.policyId, policyPda: r.policyPda, backing };
         setResult(res); go("done"); onDone(res);
       } else {
-        const r = await hedgeBuy({ owner, contractId: line.contractId, side: line.side, contracts: line.contracts, businessId });
+        // maxCostUsd = what the owner was shown; the server refuses (409 price_moved) if the live price is higher.
+        const r = await hedgeBuy({ owner, contractId: line.contractId, side: line.side, contracts: line.contracts, businessId, maxCostUsd: line.premiumUsd });
         const net: Network = r.network === "mainnet" ? "mainnet" : "devnet";
         const sig = await signAndSend(signTransaction, r.txBase64, net, (s) => go(s));
         go("record");

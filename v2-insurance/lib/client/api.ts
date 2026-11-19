@@ -73,7 +73,7 @@ export const getPolicies = (owner: string) =>
 export const getCoverInfo = () => withFallback<CoverInfo>("cover-info", () => call<CoverInfo>("/api/cover/info"), () => fixtureCoverInfo());
 
 // --- writes (no silent fallback: a failed buy must be shown as failed) ---
-export type HedgeBuyReq = { owner: string; contractId: string; side: "yes" | "no"; contracts: number; businessId: string };
+export type HedgeBuyReq = { owner: string; contractId: string; side: "yes" | "no"; contracts: number; businessId: string; maxCostUsd?: number };
 export type HedgeBuyRes = { positionId: string; txBase64: string; network: "devnet" | "mainnet" };
 export const hedgeBuy = (b: HedgeBuyReq) => call<HedgeBuyRes>("/api/hedge/buy", post(b));
 /** The desk's backing order on Gemini for a Gemini-priced sale (dry-run unless the server runs HEDGE_LIVE=1). */
