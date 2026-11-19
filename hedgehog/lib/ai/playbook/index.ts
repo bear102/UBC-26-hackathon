@@ -2,6 +2,8 @@
 // marketQuery against the live market list. No LLM, no network. Pure and test-safe.
 import type { BusinessProfile, MarketContract } from "../../types";
 import { INDUSTRIES, PLAYBOOK, REJECTED, type HedgeIdea, type Industry, type MarketQuery } from "./industries";
+import { futureLeague } from "../../markets/futures";
+import { contractMeta } from "../../markets/normalize";
 
 export { INDUSTRIES, PLAYBOOK, REJECTED };
 export type { HedgeIdea, Industry, MarketQuery };
@@ -76,6 +78,15 @@ function leagueOf(c: MarketContract): string {
 export function sideFor(q: MarketQuery, c: MarketContract, profileText = ""): "yes" | "no" | null {
   if (q.labelRe && !re(q.labelRe).test(c.label)) return null;
   if (q.hurtWhen === "event") return "yes";
+  if (q.hurtWhen === "team-misses") {
+    // season future on the owner's team (league from the ticker: "Houston" is the Rockets only in the NBA): NO pays on a short season
+    const lg = futureLeague(c.venue === "kalshi" ? c.eventTicker : c.eventTicker || c.symbol);
+    if (!lg) return null;
+    const lab = c.label.trim().toLowerCase(), title = c.eventTitle.toLowerCase();
+    const teams = TEAMS.filter((t) => t.re.test(profileText) && t.league.includes(lg));
+    const mine = teams.some((t) => t.label.includes(lab) || (/\bwins?\b/.test(lab) && t.label.some((n) => title.startsWith(`${n} total wins`) || title.includes(`: ${n} total wins`))));
+    return mine ? "no" : null;
+  }
   if (q.hurtWhen === "team-loses") {
     const lg = leagueOf(c);
     const teams = TEAMS.filter((t) => t.re.test(profileText) && t.league.includes(lg));
@@ -111,7 +122,9 @@ export function resolveQuery(q: MarketQuery, profile: Pick<BusinessProfile, "cit
   for (const c of markets) {
     if (c.status !== "open" || !q.venues.includes(c.venue) || !q.perils.includes(c.peril)) continue;
     const exp = Date.parse(c.expiry);
-    if (Number.isFinite(exp) && (exp <= now.getTime() + (q.minHours ?? 6) * 3_600_000 || exp > horizon)) continue;
+    const obsEnd = contractMeta(c.id)?.eventEnd; // season futures: Kalshi lists placeholder 2029 closes; the outcome is known at eventEnd
+    const last = obsEnd ? Math.min(exp, Date.parse(`${obsEnd}T23:00:00Z`)) : exp;
+    if (Number.isFinite(exp) && (exp <= now.getTime() + (q.minHours ?? 6) * 3_600_000 || last > horizon)) continue;
     if (series && !series.includes(seriesOf(c))) continue;
     if (q.titleRe && !re(q.titleRe).test(c.eventTitle)) continue;
     if (q.location === "profile-city" && normCity(c.location) !== city) continue;
@@ -124,7 +137,9 @@ export function resolveQuery(q: MarketQuery, profile: Pick<BusinessProfile, "cit
   }
   const target = q.strike?.targetAsk ?? 0.25;
   // Gemini is the primary venue (priced + backed there): a Kalshi line must be clearly closer to the target to rank first
-  const dist = (x: ResolvedCandidate) => Math.abs(x.ask - target) + (x.contract.venue === "kalshi" ? 0.05 : 0);
+  // a book known to be a handful of contracts deep is not insurance (Kalshi KXDIESELYE T6.00: 5 contracts at the ask)
+  const thin = (x: ResolvedCandidate) => { const d = x.side === "yes" ? x.contract.depthYes : x.contract.depthNo; return d !== undefined && d < 50 ? 0.5 : 0; };
+  const dist = (x: ResolvedCandidate) => Math.abs(x.ask - target) + (x.contract.venue === "kalshi" ? 0.05 : 0) + thin(x);
   out.sort((a, b) => dist(a) - dist(b) || Date.parse(a.contract.expiry) - Date.parse(b.contract.expiry));
   // at most 2 strikes per event so different dates/series stay visible
   const perEvent = new Map<string, number>();
@@ -138,6 +153,8 @@ export interface PlaybookSeedIdea {
   id: string; industry: string; problem: string; title: string; trigger: string; causalStory: string; peril: HedgeIdea["peril"];
   correlation: HedgeIdea["correlation"]; basisRisk: string; naturalHedgeNote?: string; evidence: string; marketQuery: string;
   side: "yes" | "no"; location: string; window: string; worthIt: string; lossUsd?: number; lossReasoning?: string;
+  /** season = a season future (the team's playoffs / wins); else parsed from the window by the advisor. */
+  horizon?: "event" | "month" | "season";
 }
 export interface PlaybookResult { idea: PlaybookSeedIdea; entry: HedgeIdea; candidates: MarketContract[]; sides: Record<string, "yes" | "no"> }
 
@@ -145,10 +162,21 @@ const STRENGTH = { strong: 0, medium: 1, weak: 2 } as const;
 const usd = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 const shortDate = (iso: string) => { const d = new Date(iso); return isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric" }); };
 
-function triggerText(e: HedgeIdea, best: ResolvedCandidate): string {
+/** "through May 31, 2027" from the observation end (season futures: Kalshi lists placeholder 2029 closes), else "until <expiry>". */
+function windowFor(c: MarketContract): string {
+  const end = contractMeta(c.id)?.eventEnd;
+  if (!end) return `until ${shortDate(c.expiry)}`;
+  return `through ${new Date(`${end}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" })}`;
+}
+
+function triggerText(e: HedgeIdea, best: ResolvedCandidate, profileText = ""): string {
   const c = best.contract; const d = labelDir(c.label);
   const when = shortDate(c.expiry);
   if (e.marketQuery.hurtWhen === "team-loses") return `${c.label} beats our team (${c.eventTitle}, ${when})`;
+  if (e.marketQuery.hurtWhen === "team-misses") {
+    const nick = TEAMS.map((t) => profileText.match(t.re)?.[0]).find((x) => x) ?? "Our team";
+    return `${nick} fall short of "${c.label}" (${c.eventTitle}, settles ${when}): NO pays`;
+  }
   if (e.marketQuery.hurtWhen === "event") return `${c.eventTitle.replace(/\?$/, "")}: ${c.label} (settles ${when})`;
   const v = d.v !== null ? (c.label.includes("$") ? `$${d.v.toLocaleString("en-US")}` : String(d.v)) : c.label;
   const what = c.eventTitle.replace(/\?$/, "");
@@ -176,6 +204,7 @@ export function playbookIdeas(profile: BusinessProfile, markets: MarketContract[
   for (const { e } of scored) {
     const qKey = JSON.stringify(e.marketQuery); // same market for two ideas (e.g. rain): keep the more relevant one
     if (usedQueries.has(qKey)) continue;
+    if (out.filter((o) => o.entry.peril === e.peril).length >= 2) continue; // 4 fuel ideas for one van fleet is one exposure, not four
     const res = resolveQuery(e.marketQuery, profile, markets, now, opts.perIdea ?? 6);
     if (!res.length) continue;
     usedQueries.add(qKey);
@@ -186,11 +215,12 @@ export function playbookIdeas(profile: BusinessProfile, markets: MarketContract[
       candidates: res.map((r) => r.contract),
       sides: Object.fromEntries(res.map((r) => [r.contract.id, r.side])),
       idea: {
-        id: e.id, industry: e.industry, problem: e.problem, title: e.title, trigger: triggerText(e, best), causalStory: e.causalStory,
+        id: e.id, industry: e.industry, problem: e.problem, title: e.title, trigger: triggerText(e, best, text), causalStory: e.causalStory,
         peril: e.peril, correlation: e.correlation, basisRisk: e.basisRisk, naturalHedgeNote: e.naturalHedgeNote,
         evidence: e.evidence.map((x) => `${x.claim} (${x.source})`).join(" "), marketQuery: e.marketQuery.describe, side: best.side,
         location: e.marketQuery.location === "profile-city" || e.marketQuery.cities ? profile.city.split(",")[0].trim() : e.marketQuery.location === "team" ? best.contract.eventTitle : "US",
-        window: `until ${shortDate(best.contract.expiry)}`,
+        window: windowFor(best.contract),
+        ...(e.marketQuery.hurtWhen === "team-misses" ? { horizon: "season" as const } : {}),
         worthIt: `${e.correlation === "strong" ? "Direct link" : e.correlation === "medium" ? "Real but partial link" : "Loose link; keep it small"}; protective side costs ${Math.round(best.ask * 100)}¢ per $1. ${e.basisRisk}`,
         lossUsd: loss,
         lossReasoning: loss ? `Playbook: ~${Math.round((e.lossShareOfDay ?? 0) * 100)}% of a ${usd(profile.avgDailyRevenueUsd)} day when it hits.` : undefined,

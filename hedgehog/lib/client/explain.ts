@@ -57,18 +57,24 @@ const PERIL_EVENT: Record<Peril, string> = {
   storm: "severe storms hit",
   natgas: "natural gas prices spike",
   metals: "metal prices jump",
+  flood: "the river floods",
+  smoke: "the air turns unhealthy",
+  hail: "hail hits",
+  wildfire: "a wildfire breaks out nearby",
 };
 const PERIL_EVENT_PAST: Record<Peril, string> = {
   rain: "it rained", heat: "the heat wave hit", cold: "the cold snap hit", game: "the game went the wrong way",
   oil: "oil prices spiked", gas: "gas prices climbed", fed: "rates moved", cpi: "inflation ran hot", crypto: "crypto prices swung", other: "it happened",
   snow: "the snow came", power: "power prices spiked", water: "the water level dropped", quake: "the earthquake hit", storm: "the storms hit",
   natgas: "natural gas prices spiked", metals: "metal prices jumped",
+  flood: "the river flooded", smoke: "the air turned unhealthy", hail: "the hail hit", wildfire: "the wildfire broke out",
 };
 const PERIL_NOUN: Record<Peril, string> = {
   rain: "rain", heat: "the heat", cold: "the cold snap", game: "the game result", oil: "an oil-price spike", gas: "a gas-price jump",
   fed: "a rate move", cpi: "hot inflation", crypto: "a crypto swing", other: "this event",
   snow: "heavy snow", power: "a power-price spike", water: "low water", quake: "an earthquake", storm: "severe storms",
   natgas: "a natural-gas price spike", metals: "a metal-price jump",
+  flood: "a flood", smoke: "unhealthy air", hail: "hail", wildfire: "a nearby wildfire",
 };
 
 /** " on Sat Nov 21" / " through Dec 31" / "" */
@@ -100,6 +106,8 @@ export const perilNoun = (peril?: Peril | string) => PERIL_NOUN[(peril ?? "other
 
 /** Best-effort peril guess for positions we have no context for (ticker text). */
 export function guessPeril(text: string): Peril {
+  const hh = text.match(/hedgehog:(flood|aqi|hail|wildfire):/);
+  if (hh) return hh[1] === "aqi" ? "smoke" : (hh[1] as Peril);
   if (/SNOW/i.test(text)) return "snow";
   if (/ERCOT|PJM|MISO/i.test(text)) return "power";
   if (/MEAD|POWELL|MISSISSIPPI|SALT-LAKE/i.test(text)) return "water";
@@ -357,6 +365,10 @@ function negatePast(peril: Peril, what: string): string {
     case "water": return "the water held up";
     case "quake": return "no big quake hit";
     case "storm": return "the storms stayed away";
+    case "flood": return "the river stayed below flood stage";
+    case "smoke": return "the air stayed clean";
+    case "hail": return "no big hail fell nearby";
+    case "wildfire": return "no big fire started nearby";
     default: return `${lowerFirst(what)} didn't happen`;
   }
 }

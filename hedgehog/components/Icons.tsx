@@ -68,6 +68,7 @@ const PERIL_ICONS = {
   heat: IconSun, cold: IconSnowflake, rain: IconCloudRain, game: IconBall, oil: IconBarrel, gas: IconFuelPump,
   fed: IconBank, cpi: IconChartUp, crypto: IconCoin, other: IconDots, snow: IconSnowflake, power: IconBolt,
   water: IconWave, quake: IconWarning, storm: IconStorm, natgas: IconFlame, metals: IconPick,
+  flood: IconWave, smoke: IconWarning, hail: IconStorm, wildfire: IconFlame, parametric: IconWarning,
   // market explorer categories
   all: IconGrid, disaster: IconWave, games: IconBall, energy: IconBarrel, commodities: IconFlame, rates: IconBank,
 } as const;

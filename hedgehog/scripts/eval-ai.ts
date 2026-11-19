@@ -15,6 +15,7 @@ import { advise, teamWords, type AdvisorDeps } from "../lib/ai/advisor";
 import { generateJson, toJsonSchema, type GenerateJson } from "../lib/ai/llm";
 import { PRESETS } from "../lib/ai/presets";
 import { labelBound } from "../lib/ai/ideas";
+import { futuresSide, ownTeamsIn, riskHorizon } from "../lib/ai/horizon";
 import type { BusinessProfile, MarketContract, Peril, Quote, QuoteLine, Risk } from "../lib/types";
 
 const ROOT = process.cwd();
@@ -41,7 +42,7 @@ interface Snapshot { t: string; contracts: MarketContract[]; meta: Record<string
 async function snapshot() {
   const m = await import("../lib/markets/index");
   const n = await import("../lib/markets/normalize");
-  const contracts = await m.listMarkets({ venues: ["gemini", "kalshi", "polymarket"] });
+  const contracts = await m.listMarkets({ venues: ["gemini", "kalshi", "polymarket"], futures: true }); // + season futures (lib/markets/futures.ts)
   const meta: Record<string, unknown> = {};
   for (const c of contracts) { const x = n.contractMeta(c.id); if (x) meta[c.id] = x; }
   writeJson(SNAP, { t: new Date().toISOString(), contracts, meta } satisfies Snapshot);
@@ -121,12 +122,17 @@ function contractDir(c: MarketContract, meta: any): "up" | "down" | "range" | "c
 export function paysWhenHurt(risk: Risk, line: { side: "yes" | "no"; contract: MarketContract }, meta: any): boolean | null {
   const c = line.contract; const text = `${risk.title} ${risk.trigger}`;
   if (risk.peril === "game" || c.peril === "game") {
+    // season futures on the owner's own team: NO pays on a bad season (miss / early exit / few wins); YES only funds a win promo
+    if (meta?.futureKind) {
+      const fs = futuresSide(risk, meta, ownTeamsIn(`${risk.title} ${risk.trigger}`));
+      if (fs) return line.side === fs;
+    }
     // subject = the team before the first win/lose verb ("Texas loses to Arkansas", "Arkansas wins", "Spurs loss to ...")
-    const VERB = /\b(lose|loses|losing|loss|lost|defeat(ed)?|beaten|wins?|winning|beats?|victory|does not win|doesn'?t win)\b/i;
+    const VERB = /\b(lose|loses|losing|loss|lost|defeat(ed)?|beaten|miss(es|ing)?|eliminated|fail(s)? to (make|reach)|knocked out|early exit|run ends|wins?|winning|beats?|victory|does not win|doesn'?t win)\b/i;
     let subject = "", verb = "";
     for (const t of [risk.title, risk.trigger]) { const m = t.match(VERB); if (m && m.index! > 0) { subject = t.slice(0, m.index); verb = m[0].toLowerCase(); break; } }
     if (!subject) return null;
-    const lose = /los|defeat|beaten|not win|n't win/.test(verb);
+    const lose = /los|defeat|beaten|not win|n't win|miss|eliminat|fail|knocked|exit|ends/.test(verb);
     const win = !lose;
     const words = [...teamWords(subject), ...(subject.match(/\b[A-Z][a-zA-Z&]{2,}\b/g) ?? []).map((w) => w.toLowerCase())].filter((w) => !["the", "home", "game", "night", "big", "major"].includes(w));
     if (!words.length) return null;
@@ -234,6 +240,8 @@ export interface BizScore {
   maxAsk: number; premium: number; payout: number; budget: number;
   basisOk: number; basisTotal: number; overstated: string[]; heuristicLines: number; pricey: number; offDay: number;
   llmCalls: number; liveCalls: number; misses: number; seconds: number; model: string; error?: string;
+  /** long-horizon metrics (docs/AI-EVAL.md "Long-term & creative hedges loop") */
+  hz30: number; seasonElig: number; season: number; period: number; fut: number; futOk: number; perMonth: number; lng7: number;
 }
 
 export function scoreQuote(p: BusinessProfile, q: Quote, ctx: { snapIds: Map<string, MarketContract>; now: Date; meta: Record<string, any>; grades: Record<string, number>; parseWindow: any }): BizScore {
@@ -242,7 +250,8 @@ export function scoreQuote(p: BusinessProfile, q: Quote, ctx: { snapIds: Map<str
   const s: BizScore = { id: p.id, risks: q.risks.length, direct: direct.length, proxy: proxy.length, lines: q.lines.length, choices: 0,
     valid: 0, checked: 0, sideUnknown: 0, invalid: [], directCovered: 0, directInPlan: 0, creative: 0, natural: q.naturalHedges?.length ?? 0,
     graded: 0, gradeSum: 0, ungraded: [], maxAsk: 0, premium: q.totalPremiumUsd, payout: q.totalPayoutUsd, budget: q.budgetUsd,
-    basisOk: 0, basisTotal: 0, overstated: [], heuristicLines: 0, pricey: 0, offDay: 0, llmCalls: 0, liveCalls: 0, misses: 0, seconds: 0, model: q.model };
+    basisOk: 0, basisTotal: 0, overstated: [], heuristicLines: 0, pricey: 0, offDay: 0, llmCalls: 0, liveCalls: 0, misses: 0, seconds: 0, model: q.model,
+    hz30: 0, seasonElig: SEASON_BIZ.test(p.description) ? 1 : 0, season: 0, period: 0, fut: 0, futOk: 0, perMonth: 0, lng7: 0 };
   const validRisk = new Set<string>();
   const all = [...q.lines.map((l) => ({ l, plan: true })), ...(q.options ?? []).flatMap((o) => o.choices.map((l) => ({ l, plan: false })))];
   const seen = new Set<string>();
@@ -255,6 +264,9 @@ export function scoreQuote(p: BusinessProfile, q: Quote, ctx: { snapIds: Map<str
     s.checked++;
     if (ch.ok) { s.valid++; if (l.action !== "read-only") validRisk.add(l.riskId); } else s.invalid.push(`${r.id} "${r.title}" ${l.side.toUpperCase()} ${l.contract.label} [${l.contract.eventTitle}]: ${ch.why.join(",")}`);
     if (!ch.sideKnown) s.sideUnknown++;
+    const m = ctx.meta[l.contractId];
+    if (m?.futureKind) { s.fut++; if (paysWhenHurt(r, l, m) === true) s.futOk++; }
+    if (plan && ch.ok && l.action !== "read-only" && longRisk(r, ctx.now, ctx.parseWindow) && (m?.futureKind || periodDays(m) >= 25)) s.season = s.seasonElig ? 1 : 0;
   }
   for (const l of q.lines) {
     const r = risk(l.riskId);
@@ -262,6 +274,13 @@ export function scoreQuote(p: BusinessProfile, q: Quote, ctx: { snapIds: Map<str
     s.maxAsk = Math.max(s.maxAsk, ask);
     if (l.action !== "read-only" && ask > 0.6) s.pricey++;
     if (offDay(p, l, ctx.meta[l.contractId])) s.offDay++;
+    const m = ctx.meta[l.contractId];
+    const obsEnd = m?.eventEnd ?? m?.eventDate ?? l.contract.expiry.slice(0, 10);
+    if (obsEnd > addDay(ctx.now.toISOString().slice(0, 10), 30)) s.hz30++;
+    if (["heat", "cold", "rain", "snow"].includes(l.contract.peril) && periodDays(m) >= 25) s.period++;
+    s.perMonth += l.action === "read-only" ? 0 : l.premiumPerMonth ?? l.premiumUsd;
+    const w = ctx.parseWindow(r.window, ctx.now);
+    if (dayDiff(w.start, w.end) <= 14 && obsEnd > addDay(w.end, 30)) s.lng7++;
     s.basisTotal++;
     if (l.basisRisk && l.basisRisk.length >= 25 && !HEURISTIC_NOTE.test(l.basisRisk)) s.basisOk++;
     if (HEURISTIC_NOTE.test(l.basisRisk) || HEURISTIC_NOTE.test(l.rationale)) s.heuristicLines++;
@@ -278,16 +297,29 @@ export function scoreQuote(p: BusinessProfile, q: Quote, ctx: { snapIds: Map<str
   return s;
 }
 
+const SEASON_BIZ = /spurs|rockets|mavs|mavericks|texans|cowboys|longhorns|landscap/i;
+const addDay = (d: string, k: number) => new Date(Date.parse(`${d}T12:00:00Z`) + k * 86_400_000).toISOString().slice(0, 10);
+const dayDiff = (a: string, b: string) => Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 86_400_000);
+const periodDays = (m: any) => (m?.eventDate && m?.eventEnd ? dayDiff(m.eventDate, m.eventEnd) : 0);
+/** A month/season risk: tagged so, or its window spans >= 25 days. */
+function longRisk(r: Risk, now: Date, parseWindow: any): boolean {
+  if (r.horizon === "month" || r.horizon === "season" || riskHorizon({ window: r.window }, now) !== "event") return true;
+  const w = parseWindow(r.window, now);
+  return dayDiff(w.start, w.end) >= 25 && !/next \d+ days|week/i.test(r.window ?? "");
+}
+
 const pct = (a: number, b: number) => (b ? `${Math.round((100 * a) / b)}%` : "-");
 function table(rows: BizScore[], title: string): string {
-  const h = ["business", "risks d/p", "plan", "valid", "cov", "inPlan", "creat", "nat", "rel", "maxAsk", ">0.6", "offDay", "prem/pay", "budget", "basis", "over", "heur", "llm(live/miss)", "s"];
+  const h = ["business", "risks d/p", "plan", "valid", "cov", "inPlan", "creat", "nat", "rel", "maxAsk", ">0.6", "offDay", "prem/pay", "budget", "basis", "over", "heur", "hz30", "season", "period", "futSide", "$/mo", "lng7", "llm(live/miss)", "s"];
   const body = rows.map((s) => [s.id.slice(0, 24), `${s.direct}/${s.proxy}`, String(s.lines), pct(s.valid, s.checked), pct(s.directCovered, s.direct), pct(s.directInPlan, s.direct), String(s.creative), String(s.natural),
     s.graded ? (s.gradeSum / s.graded).toFixed(2) : "-", s.maxAsk.toFixed(2), String(s.pricey), String(s.offDay), s.payout ? (s.premium / s.payout).toFixed(2) : "-", pct(s.premium, s.budget), pct(s.basisOk, s.basisTotal), String(s.overstated.length), String(s.heuristicLines),
+    pct(s.hz30, s.lines), s.seasonElig ? `${s.season}/1` : "-", String(s.period), s.fut ? pct(s.futOk, s.fut) : "-", pct(s.perMonth, s.budget), String(s.lng7),
     `${s.llmCalls}(${s.liveCalls}/${s.misses})`, s.seconds.toFixed(1)]);
   const T = (k: keyof BizScore) => rows.reduce((a, s) => a + (s[k] as number), 0);
   const tot = ["TOTAL", `${T("direct")}/${T("proxy")}`, String(T("lines")), pct(T("valid"), T("checked")), pct(T("directCovered"), T("direct")), pct(T("directInPlan"), T("direct")), String(T("creative")), String(T("natural")),
     T("graded") ? (T("gradeSum") / T("graded")).toFixed(2) : "-", Math.max(...rows.map((s) => s.maxAsk)).toFixed(2), String(T("pricey")), String(T("offDay")), T("payout") ? (T("premium") / T("payout")).toFixed(2) : "-", pct(T("premium"), T("budget")), pct(T("basisOk"), T("basisTotal")),
-    String(rows.reduce((a, s) => a + s.overstated.length, 0)), String(T("heuristicLines")), `${T("llmCalls")}(${T("liveCalls")}/${T("misses")})`, T("seconds").toFixed(1)];
+    String(rows.reduce((a, s) => a + s.overstated.length, 0)), String(T("heuristicLines")),
+    pct(T("hz30"), T("lines")), `${T("season")}/${T("seasonElig")}`, String(T("period")), T("fut") ? pct(T("futOk"), T("fut")) : "-", pct(T("perMonth"), T("budget")), String(T("lng7")), `${T("llmCalls")}(${T("liveCalls")}/${T("misses")})`, T("seconds").toFixed(1)];
   const all = [h, ...body, tot];
   const w = h.map((_, i) => Math.max(...all.map((r) => r[i].length)));
   const fmt = (r: string[]) => "| " + r.map((x, i) => x.padEnd(w[i])).join(" | ") + " |";

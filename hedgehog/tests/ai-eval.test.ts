@@ -79,3 +79,51 @@ test("iter5b: heuristic Fed pick never buys a cut for a 'no cut' risk (Gemini 'C
   const leg = heuristicPick(risk({ peril: "fed", title: "Rates stay high (no Fed cut)", trigger: "No Fed rate cut at the next FOMC meeting" }), f);
   assert.deepEqual([leg?.contractId, leg?.side], ["g:HOLD", "yes"]);
 });
+
+// ---------- long-term & creative hedges loop, iteration 2 (lib/ai/horizon.ts) ----------
+import { readFileSync } from "node:fs";
+import { parseWindow } from "../lib/markets/index";
+import { setMeta } from "../lib/markets/normalize";
+import { sizeQuote } from "../lib/markets/quote";
+import { advise } from "../lib/ai/advisor";
+
+test("hz2: parseWindow understands seasons and months (NBA playoffs end in June 2027; December is Dec 1-31)", () => {
+  const w = parseWindow("through the NBA playoffs", now);
+  assert.equal(w.end.slice(0, 7), "2027-06");
+  assert.deepEqual([parseWindow("December", now).start, parseWindow("December", now).end], ["2026-12-01", "2026-12-31"]);
+  assert.equal(parseWindow("next 7 days", now).end, "2026-11-26"); // short windows unchanged
+});
+
+test("hz2: a landscaper's month-rain risk ranks the monthly total above daily rain", () => {
+  const month = { ...mk("kalshi:KXRAINAUSM-26NOV-5", "Rain in Austin in Nov 2026?", "Above 5 inches", "rain", 0.2), venue: "kalshi" as const, location: "Austin", eventTicker: "KXRAINAUSM-26NOV" };
+  const day = { ...mk("kalshi:KXRAINTHANKSGIVING-26NOV26-AUS", "Where will it rain on Thanksgiving?", "Austin", "rain", 0.17), venue: "kalshi" as const, location: "Austin", eventTicker: "KXRAINTHANKSGIVING-26NOV26" };
+  setMeta(month.id, { eventDate: "2026-11-01", eventEnd: "2026-11-30", bounds: { lo: 5, loInclusive: false, hiInclusive: false, unit: "in", text: ">5 in" } });
+  setMeta(day.id, { eventDate: "2026-11-26" });
+  const land: BusinessProfile = { ...profile, description: "landscaping crews", busyDays: ["Mon", "Tue", "Wed", "Thu", "Fri"] };
+  const r = risk({ peril: "rain", title: "A soaked November rains out crew days", trigger: "Austin gets more than 5 inches of rain in November", location: "Austin", window: "November", horizon: "month" });
+  assert.equal(rankCandidates(r, land, [day, month], 5, now)[0].id, month.id);
+  // a this-week rain risk still prefers the day market
+  assert.equal(rankCandidates(risk({ peril: "rain", title: "Rain on a crew day", trigger: "Rain in Austin on Thanksgiving", location: "Austin", window: "next 7 days" }), land, [day, month], 5, now)[0].id, day.id);
+});
+
+test("hz2: Spurs bar fallback plan (no LLM) carries a NO on a Spurs playoffs / West / WCF future", async () => {
+  const LONG: MarketContract[] = JSON.parse(readFileSync(new URL("./fixtures/long-horizon-markets.json", import.meta.url), "utf8"));
+  const meta: Record<string, { eventEnd: string; futureKind: "playoffs" | "round" | "conference" | "wins"; league: string; teams: string[] }> = {
+    "gemini:GEMI-NBAF-2627CONF-WEST-SAS": { eventEnd: "2027-05-31", futureKind: "conference", league: "NBA", teams: ["San Antonio"] },
+    "kalshi:KXNBAWEST-27-SAS": { eventEnd: "2027-05-31", futureKind: "conference", league: "NBA", teams: ["San Antonio"] },
+    "kalshi:KXNBAPLAYOFF-27-SAS": { eventEnd: "2027-04-17", futureKind: "playoffs", league: "NBA", teams: ["San Antonio"] },
+    "kalshi:KXNBAWCFQUAL-27-SAS": { eventEnd: "2027-05-17", futureKind: "round", league: "NBA", teams: ["San Antonio"] },
+  };
+  for (const [id, m] of Object.entries(meta)) setMeta(id, { eventDate: "2026-10-20", ...m });
+  const bar: BusinessProfile = { id: "spurs-bar", name: "Spurs Bar", description: "Sports bar by the Frost Bank Center. A deep Spurs playoff run means weeks of packed nights.", city: "San Antonio, TX", avgDailyRevenueUsd: 5000, busyDays: ["Fri", "Sat"], monthlyBudgetUsd: 400 };
+  const fail = (async () => { throw new Error("LLM down"); }) as never;
+  const q = await advise(bar, { deps: { llm: fail, now: () => now, listMarkets: async () => LONG, findCandidates: async (r, p, n) => rankCandidates(r, p, LONG, n, now),
+    sizeQuote: (a) => sizeQuote({ ...a, fetchBooks: false, crossCheck: false }) } });
+  const season = q.risks.find((r) => r.horizon === "season")!;
+  assert.match(season.title, /Spurs/);
+  const line = q.lines.find((l) => l.riskId === season.id)!;
+  assert.ok(line, "season risk is in the plan");
+  assert.equal(line.side, "no");
+  assert.ok(Object.keys(meta).includes(line.contractId), line.contractId);
+  assert.ok(line.premiumPerMonth! < line.premiumUsd, "season premium is spread over the months it covers");
+});

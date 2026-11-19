@@ -20,7 +20,7 @@ export function VenueBadge({ venue, role = true, className = "" }: { venue: Venu
 export function VenueLegend({ compact = false }: { compact?: boolean }) {
   return (
     <ul className={compact ? s.legendCompact : s.legendList}>
-      {(Object.keys(VENUES) as VenueId[]).map((id) => (
+      {(Object.keys(VENUES) as VenueId[]).filter((id) => id !== "hedgehog").map((id) => ( // real venues only (parametric is off by default)
         <li key={id}>
           <span className={s.legendBadge}><VenueBadge venue={id} /></span>
           {!compact && <span className={s.legendDesc}>{VENUES[id].desc}</span>}

@@ -153,14 +153,14 @@ export default function HowItWorks() {
             <div>
               <span className="eyebrow">Venues</span>
               <h2 className={s.h2}>One market layer, <em>three venues</em></h2>
-              <p className={s.intro}>You never pick a venue. <b>We use whichever venue is cheapest for the same contract.</b></p>
+              <p className={s.intro}>You never pick a venue. <b>Every hedge is a real market on Gemini, Kalshi or Polymarket. The best price wins.</b></p>
               <div className={`card ${s.legend}`}><VenueLegend /></div>
               <h3 className={s.h3}>What&apos;s on the menu</h3>
               <ul className={s.ledger}>
                 <li><b>Gemini:</b> daily highs in 60+ cities, games, crude, natural gas, metals, crypto, Fed decisions.</li>
-                <li><b>Kalshi via DFlow on Solana:</b> rain (daily and monthly totals in 30+ cities), daily highs and lows, December snowfall by city, ski-resort snowfall, season snow days, ERCOT power prices, Lake Mead, heating degree days, weekly diesel and gas, CPI, tornado counts.</li>
-                <li><b>Polymarket:</b> Mississippi River low water, Lake Powell, Great Salt Lake, LA earthquake, US tornado totals.</li>
-                <li><b>Not hedgeable anywhere yet:</b> wildfire, flood, hail, air quality. We say so rather than force a bad proxy.</li>
+                <li><b>Kalshi via DFlow on Solana:</b> rain (daily and monthly totals in 30+ cities), daily highs and lows, December snowfall by city, ski-resort snowfall, season snow days, ERCOT power prices, Lake Mead, heating degree days, weekly diesel and gas, CPI, tornado counts, hurricane landfall (Florida, North Carolina, Tampa, Hawaii), California earthquake.</li>
+                <li><b>Polymarket:</b> hurricane landfall by state, US tornado totals, LA and California earthquakes, river and sea levels (flood), Lake Mead, Lake Powell, Mississippi low water, city rain and monthly rainfall, first snow, a dry California winter.</li>
+                <li><b>No direct market:</b> hail, wildfire, air quality. We use the closest real one (tornado counts for hail, a dry spell for wildfire) and say how loosely it fits. Air quality has none yet, and we tell you so.</li>
               </ul>
             </div>
             <div>

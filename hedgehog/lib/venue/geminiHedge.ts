@@ -122,6 +122,7 @@ export async function backOnGemini(a: BackArgs, opts: { place?: typeof placeGemi
 }
 
 async function backOnce(id: string, a: BackArgs, opts: { place?: typeof placeGeminiOrder }): Promise<DeskHedge | null> {
+  if (a.contract.venue === "hedgehog") return null; // parametric cover: underwritten by the Hedgehog pool, no exchange backing
   const prev = store.get("hedges", id);
   if (prev) return prev;
   const base = {

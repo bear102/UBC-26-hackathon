@@ -4,6 +4,8 @@
 // at ask+2¢ (Gemini/Kalshi book). Also re-checks REJECTED "not-live-now" ideas in case they became live.
 import "../lib/env";
 import { listMarkets, getBook } from "../lib/markets";
+import { listParametric } from "../lib/markets/parametric";
+import { parametricEnabled } from "../lib/markets/proxies";
 import { depthAt } from "../lib/markets/book";
 import { PLAYBOOK, REJECTED, resolveQuery, MAX_ASK, type MarketQuery } from "../lib/ai/playbook";
 import type { MarketContract } from "../lib/types";
@@ -35,7 +37,8 @@ async function check(q: MarketQuery, markets: MarketContract[]) {
 
 async function main() {
   const t0 = Date.now();
-  const markets = await listMarkets();
+  // real markets only; + Hedgehog parametric cover for the city when HEDGEHOG_PARAMETRIC=1
+  const markets = [...await listMarkets(), ...(parametricEnabled() ? await listParametric(undefined, city) : [])];
   console.log(`live universe: ${markets.length} open contracts (Gemini + Kalshi) in ${Date.now() - t0}ms; city=${city}\n`);
   const rows: string[][] = [];
   let pass = 0;

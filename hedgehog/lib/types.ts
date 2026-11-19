@@ -4,10 +4,14 @@ export type Peril = "heat" | "cold" | "rain" | "game" | "oil" | "gas" | "fed" | 
   // winter / disaster / climate perils (Kalshi via DFlow; Polymarket reference). "gas" also covers diesel (fuel).
   | "snow" | "power" | "water" | "quake" | "storm"
   // commodity inputs that used to be "other": natural gas (Gemini NGAS), metals (Gemini XAU/XAG/COPPER)
-  | "natgas" | "metals";
+  | "natgas" | "metals"
+  // no direct market: matched to the closest real market (lib/markets/proxies.ts), or Hedgehog parametric cover when
+  // HEDGEHOG_PARAMETRIC=1 (lib/markets/parametric). smoke = air quality (AQI). flood also has real river / sea-level markets.
+  | "flood" | "smoke" | "hail" | "wildfire";
 /** Every peril, in display order (append-only: on-chain peril codes follow lib/solana/policyClient.ts PERIL_CODES). */
-export const ALL_PERILS = ["heat", "cold", "rain", "game", "oil", "gas", "fed", "cpi", "crypto", "other", "snow", "power", "water", "quake", "storm", "natgas", "metals"] as const satisfies readonly Peril[];
-export type VenueId = "gemini" | "kalshi" | "polymarket";
+export const ALL_PERILS = ["heat", "cold", "rain", "game", "oil", "gas", "fed", "cpi", "crypto", "other", "snow", "power", "water", "quake", "storm", "natgas", "metals", "flood", "smoke", "hail", "wildfire"] as const satisfies readonly Peril[];
+/** "hedgehog" = Hedgehog parametric cover: synthetic contracts priced from public history, settled from official data. */
+export type VenueId = "gemini" | "kalshi" | "polymarket" | "hedgehog";
 
 /** Business profile from the intake (chat sentence + form). */
 export interface BusinessProfile {
@@ -40,6 +44,8 @@ export interface Risk {
   causalStory?: string;       // "Diesel follows Brent within ~2 weeks; 4 vans burn ~1,300 gal/month"
   worthIt?: string;           // why the premium is (or isn't) worth paying
   evidence?: string;          // backtest: "Austin hit >= 85°F on 3 of the last 29 days (Gemini settled markets)"
+  /** Exposure horizon (lib/ai/horizon.ts): a day/game/week, a month, or a whole season. Absent = parsed from `window`. */
+  horizon?: "event" | "month" | "season";
 }
 
 /** Something the business benefits from: say so, don't sell a hedge for it. */
@@ -81,6 +87,9 @@ export interface MarketContract {
   tradable: boolean;          // can Hedgehog build a buy for it (devnet mock venue / dflow): gemini + kalshi true, polymarket false
   status: "open" | "closed" | "settled";
   resolution?: "yes" | "no" | null;
+  /** Set by findCandidates when this is the closest real market for a risk with no direct one (hail -> tornado count):
+   *  the honest basis-risk note (lib/markets/proxies.ts). */
+  proxyNote?: string;
 }
 
 /** AI's pick for a risk (must reference a candidate MarketContract.id). */
@@ -99,6 +108,8 @@ export interface QuoteLine extends HedgeLeg {
   contracts: number;
   pricePerContract: number;   // avg fill price walking the book
   premiumUsd: number;         // cost
+  /** Premium spread over the months the hedge covers (season / month-end contracts; max 6): what it costs against the monthly budget. */
+  premiumPerMonth?: number;
   payoutUsd: number;          // paid if event happens (= contracts * 1)
   impliedProb: number;
   maxCoverable?: number;      // when depth limits size

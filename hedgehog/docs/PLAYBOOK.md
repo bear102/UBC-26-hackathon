@@ -77,6 +77,24 @@ Also: `landscape-wet-month` / `roofer-wet-month` now resolve in 32 cities (Kalsh
 
 **Not hedgeable on any venue today:** wildfire, flood, hail, air quality. Hurricanes: out of season (Atlantic season ends Nov 30); re-list in June.
 
+## Season and month hedges: sizing and tiering (2026-11-19)
+
+**Sizing a season hedge (team futures).**
+- Loss = expected extra home nights in the good scenario × the revenue lift per night. For example, a Spurs bar loses about 5 packed home playoff nights if the run ends before the West finals: 5 × $3,200 lift = $16,000.
+- `lossUsd` is the extra loss over the whole window compared with a normal season, not per night. Loss caps: 7 days of revenue for event risks, 30 days for month or season risks.
+- The premium is bought once. It is charged against the monthly budget as premium ÷ months of cover (at most 6) and shown as `premiumPerMonth`.
+
+**Sizing a month hedge (rain, diesel, power).**
+- Loss = the extra days lost (or the extra cost) in a bad month. For example, a landscaper loses 3 crew days × $1,500 in a wet December; a 4-truck fleet with fixed-price contracts pays the diesel overrun until the contracts reprice.
+
+**Tiering (the ladder the owner sees).**
+- **Recommended:** the stage that matches the risk, priced near 35¢ and at most 60¢ (70¢ only if nothing else fits). Skip books under 50 contracts.
+  - "Miss the playoffs": playoff qualifiers, or a wins rung.
+  - "Run ends early": conference finals or conference title.
+- **Cheap tail:** a worse-season stage of the same team (playoffs NO for a contender at 4-10¢). It pays only in the bad tail.
+- **Broad:** a deeper stage (West champion NO at 60-70¢). It pays more often, but mostly prepays the payout.
+- Never cover a season or month risk with a single game or a single day. Own-team YES is used only to fund a promo the business pays when the team wins.
+
 ## Natural hedges (tell the owner, don't sell the hedge)
 | Industry | Peril | Note |
 |---|---|---|

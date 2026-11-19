@@ -8,6 +8,7 @@
 import { env } from "../env";
 import type { MarketContract, Peril } from "../types";
 import { addDays, centralDate, daysBetween, num, parseBounds, price, setMeta, tempPeril, type ContractMeta } from "./normalize";
+import { FUTURES_KALSHI, futureMeta, LONG_MACRO_KALSHI } from "./futures";
 
 export const KALSHI_PUBLIC = "https://api.elections.kalshi.com/trade-api/v2";
 
@@ -23,6 +24,7 @@ export const KALSHI_PUBLIC = "https://api.elections.kalshi.com/trade-api/v2";
 export interface SeriesSpec {
   series: string; peril: Peril; location?: string; league?: string; low?: boolean;
   period?: "day" | "weekend" | "month" | "game" | "other" | "range"; dmy?: boolean; fixedPeril?: boolean;
+  futures?: boolean; // season-long sports futures: fetched only on request (listKalshiMarkets opts.futures)
 }
 const highs = (codes: string[]): SeriesSpec[] => codes.map((series) => ({ series, peril: "heat" as Peril, location: "title", period: "day" as const }));
 const lows = (codes: string[]): SeriesSpec[] => codes.map((series) => ({ series, peril: "cold" as Peril, location: "title", low: true, period: "day" as const }));
@@ -71,6 +73,11 @@ export const SERIES: SeriesSpec[] = [
   { series: "KXHDDCVG", peril: "cold", location: "Cincinnati", period: "range", dmy: true, fixedPeril: true }, // Q4 heating degree days
   { series: "KXTORNADO", peril: "storm", location: "US", period: "month" },                       // monthly US tornado count
   { series: "KXEARTHQUAKECALIFORNIA", peril: "quake", location: "California", period: "range" },   // M8+ in California
+  // hurricane landfall by place (checked live 2026-11-19: open, priced 1-3¢ late in the season, real volume)
+  { series: "KXHURRLANDFL4", peril: "storm", location: "Florida", period: "range" },               // Cat 4+ Florida landfall by Dec 31
+  { series: "KXHURPATHNC", peril: "storm", location: "North Carolina", period: "range" },          // hurricane landfall in NC this year
+  { series: "KXHURPATHHAWAII", peril: "storm", location: "Hawaii", period: "range" },              // hurricane landfall in Hawaii this year
+  { series: "KXHURCITYTPA", peril: "storm", location: "Tampa", period: "range" },                  // Cat 3/4/5 landfall in Tampa
   // national economic perils
   { series: "KXAAAGASW", peril: "gas", period: "other" },   // AAA US avg gas price, weekly
   { series: "KXAAAGASM", peril: "gas", period: "other" },   // monthly
@@ -88,6 +95,8 @@ export const SERIES: SeriesSpec[] = [
   { series: "KXNFLGAME", peril: "game", league: "NFL", period: "game" },
   { series: "KXNCAAFGAME", peril: "game", league: "NCAAF", period: "game" },
   { series: "KXMLSGAME", peril: "game", league: "MLS", period: "game" },
+  // long-dated: season futures (playoffs / division / conference / title / win totals) + month-to-year macro (lib/markets/futures.ts)
+  ...FUTURES_KALSHI, ...LONG_MACRO_KALSHI,
 ];
 export const seriesSpec = (series: string): SeriesSpec | undefined => SERIES.find((s) => s.series === series);
 const specForTicker = (ticker: string): SeriesSpec => seriesSpec(ticker.split("-")[0]) ?? { series: ticker.split("-")[0], peril: "other", period: "other" };
@@ -242,7 +251,9 @@ function toContract(c: Common, spec: SeriesSpec): MarketContract {
   const yesAsk = price(c.yesAsk), yesBid = price(c.yesBid);
   const noAsk = price(c.noAsk) ?? (yesBid !== null ? price(1 - yesBid) : null);
   const noBid = price(c.noBid) ?? (yesAsk !== null ? price(1 - yesAsk) : null);
-  const status = kStatus(c.status, c.result);
+  // futures: team from the rules text, real season end (Kalshi closes are placeholders, e.g. 2029); a label/rules clash closes the line
+  const fm = spec.futures ? futureMeta({ ticker: c.eventTicker, title: c.eventTitle, label: c.label, rules: c.rules }) : null;
+  const status = spec.futures && !fm ? "closed" : kStatus(c.status, c.result);
   const meta: ContractMeta = {
     eventDate, eventEnd, bounds: bounds ?? undefined, series: spec.series, category: spec.peril, rules: c.rules,
     volume: c.volume, openInterest: c.openInterest, source: c.source, outcomeMints: c.outcomeMints,
@@ -253,6 +264,7 @@ function toContract(c: Common, spec: SeriesSpec): MarketContract {
     meta.teams = [c.label];
     meta.opponents = t.filter((x) => x.toLowerCase() !== c.label.toLowerCase());
   }
+  if (fm) Object.assign(meta, fm, { bounds: fm.bounds ?? meta.bounds, rules: c.rules });
   setMeta(id, meta);
   return {
     id, venue: "kalshi", eventTitle: c.eventTitle, label: c.label, symbol: c.ticker, eventTicker: c.eventTicker,
@@ -338,8 +350,8 @@ async function pool<T, R>(items: T[], n: number, f: (t: T) => Promise<R>): Promi
 }
 
 /** Open Kalshi markets for the indexed series (optionally only some perils). DFlow first, Kalshi public fallback. */
-export async function listKalshiMarkets(perils?: Peril[]): Promise<MarketContract[]> {
-  const specs = SERIES.filter((s) => !perils || perils.includes(s.peril) || (s.peril === "heat" && perils.includes("cold")) || (s.peril === "cold" && perils.includes("heat")));
+export async function listKalshiMarkets(perils?: Peril[], opts: { futures?: boolean } = {}): Promise<MarketContract[]> {
+  const specs = SERIES.filter((s) => (!s.futures || opts.futures) && (!perils || perils.includes(s.peril) || (s.peril === "heat" && perils.includes("cold")) || (s.peril === "cold" && perils.includes("heat"))));
   const useDflow = await dflowUsable();
   const results = await pool(specs, Number(process.env.HEDGEHOG_KALSHI_POOL || 6), async (spec) => {
     if (useDflow) {

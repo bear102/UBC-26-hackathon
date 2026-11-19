@@ -1,5 +1,5 @@
 {
-  "_note": "AI eval benchmark (scripts/eval-ai.ts). The 3 demo presets are loaded from lib/ai/presets.ts; these are 6 extra, deliberately diverse Austin-area businesses. Fictional names.",
+  "_note": "AI eval benchmark (scripts/eval-ai.ts). The 3 demo presets are loaded from lib/ai/presets.ts; these are extra, deliberately diverse Texas businesses (the last 5 test long-horizon hedges: season futures, month totals, year-end macro). Fictional names.",
   "businesses": [
     {
       "id": "eval-roofing",
@@ -8,7 +8,13 @@
       "city": "Austin, TX",
       "zip": "78748",
       "avgDailyRevenueUsd": 9000,
-      "busyDays": ["Mon", "Tue", "Wed", "Thu", "Fri"],
+      "busyDays": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri"
+      ],
       "monthlyBudgetUsd": 400
     },
     {
@@ -18,7 +24,13 @@
       "city": "Austin, TX",
       "zip": "78758",
       "avgDailyRevenueUsd": 5500,
-      "busyDays": ["Mon", "Tue", "Wed", "Thu", "Fri"],
+      "busyDays": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri"
+      ],
       "monthlyBudgetUsd": 250
     },
     {
@@ -28,7 +40,10 @@
       "city": "Austin, TX",
       "zip": "78723",
       "avgDailyRevenueUsd": 900,
-      "busyDays": ["Sat", "Sun"],
+      "busyDays": [
+        "Sat",
+        "Sun"
+      ],
       "monthlyBudgetUsd": 60
     },
     {
@@ -38,7 +53,13 @@
       "city": "Austin, TX",
       "zip": "78731",
       "avgDailyRevenueUsd": 7000,
-      "busyDays": ["Mon", "Tue", "Wed", "Thu", "Fri"],
+      "busyDays": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri"
+      ],
       "monthlyBudgetUsd": 500
     },
     {
@@ -48,7 +69,10 @@
       "city": "Austin, TX",
       "zip": "78702",
       "avgDailyRevenueUsd": 1800,
-      "busyDays": ["Fri", "Sat"],
+      "busyDays": [
+        "Fri",
+        "Sat"
+      ],
       "monthlyBudgetUsd": 150
     },
     {
@@ -58,8 +82,86 @@
       "city": "Austin, TX",
       "zip": "78704",
       "avgDailyRevenueUsd": 2500,
-      "busyDays": ["Fri", "Sat", "Sun"],
+      "busyDays": [
+        "Fri",
+        "Sat",
+        "Sun"
+      ],
       "monthlyBudgetUsd": 200
+    },
+    {
+      "id": "eval-spurs-bar",
+      "name": "Baseline & Bourbon (sports bar)",
+      "description": "Sports bar two blocks from the Frost Bank Center in San Antonio, 40 TVs, mostly indoor. Spurs home games are our whole year: a deep Spurs playoff run means weeks of packed game nights at double a normal night, and when the Spurs get knocked out the spring goes dead.",
+      "city": "San Antonio, TX",
+      "zip": "78203",
+      "avgDailyRevenueUsd": 5000,
+      "busyDays": [
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+      ],
+      "monthlyBudgetUsd": 400
+    },
+    {
+      "id": "eval-wing-shop",
+      "name": "Bayou Wings & Watch Party",
+      "description": "Wing shop and sports bar in Houston. Texans and Cowboys Sundays drive about half our weekly sales; if the Texans make the playoffs we host packed watch parties into January, and a losing season empties the place by December.",
+      "city": "Houston, TX",
+      "zip": "77002",
+      "avgDailyRevenueUsd": 3500,
+      "busyDays": [
+        "Thu",
+        "Sun",
+        "Mon"
+      ],
+      "monthlyBudgetUsd": 250
+    },
+    {
+      "id": "eval-drag-bar",
+      "name": "Forty Acres Taphouse",
+      "description": "Bar on the Drag next to the UT campus. Longhorns football Saturdays are our best days, and a College Football Playoff run (a home playoff game on campus, watch parties into January) is a huge December. When the Longhorns' season ends early, December is dead.",
+      "city": "Austin, TX",
+      "zip": "78705",
+      "avgDailyRevenueUsd": 3000,
+      "busyDays": [
+        "Fri",
+        "Sat"
+      ],
+      "monthlyBudgetUsd": 200
+    },
+    {
+      "id": "eval-landscaper",
+      "name": "Green Belt Landscaping",
+      "description": "Austin landscaping company with 5 crews doing mowing routes and installs. A soaked month wipes out billable crew days we can't make up, and we still pay the crews. Our trucks and mowers burn a lot of gas.",
+      "city": "Austin, TX",
+      "zip": "78745",
+      "avgDailyRevenueUsd": 4000,
+      "busyDays": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri"
+      ],
+      "monthlyBudgetUsd": 250
+    },
+    {
+      "id": "eval-box-truck",
+      "name": "Hill Country Freight",
+      "description": "Regional freight company with 6 diesel box trucks running fixed-rate monthly contracts between Austin, San Antonio and Houston. Diesel is our biggest cost after drivers and we can't reprice the contracts until next year.",
+      "city": "Austin, TX",
+      "zip": "78744",
+      "avgDailyRevenueUsd": 6000,
+      "busyDays": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri"
+      ],
+      "monthlyBudgetUsd": 300
     }
   ]
 }

@@ -1,0 +1,228 @@
+{
+ "id": "219594",
+ "title": "Houston Total Wins",
+ "type": "categorical",
+ "category": "Sports",
+ "ticker": "NFLHOUWINS26",
+ "status": "active",
+ "contracts": [
+  {
+   "id": "219594-526954",
+   "label": "8+ wins",
+   "ticker": "8PLUS",
+   "instrumentSymbol": "GEMI-NFLHOUWINS26-8PLUS",
+   "status": "active",
+   "marketState": "open",
+   "expiryDate": "2027-01-11T06:00:00.000Z",
+   "prices": {
+    "buy": {
+     "yes": "0.7",
+     "no": "0.36"
+    },
+    "sell": {
+     "yes": "0.64",
+     "no": "0.3"
+    },
+    "bestBid": "0.64",
+    "bestAsk": "0.7",
+    "lastTradePrice": "0.84"
+   },
+   "description": {
+    "data": {},
+    "content": [
+     {
+      "data": {},
+      "marks": [],
+      "value": "Resolves Yes if the Houston Pro Football team wins at least 8 games in the 2026-27 regular season. Outcome verified from the Governing League and ESPN. Gemini is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners. View the [full rules](https://cdn.builder.io/api/v1/file/assets%2F1b77ce3a269a43e985e77f3d65f715ba%2F1823e65d8d544d93b1ea47fa86a18b58).",
+      "nodeType": "text"
+     }
+    ],
+    "nodeType": "document"
+   },
+   "abbreviatedName": "8+ wins"
+  },
+  {
+   "id": "219594-526955",
+   "label": "9+ wins",
+   "ticker": "9PLUS",
+   "instrumentSymbol": "GEMI-NFLHOUWINS26-9PLUS",
+   "status": "active",
+   "marketState": "open",
+   "expiryDate": "2027-01-11T06:00:00.000Z",
+   "prices": {
+    "buy": {
+     "yes": "0.45",
+     "no": "0.6"
+    },
+    "sell": {
+     "yes": "0.4",
+     "no": "0.55"
+    },
+    "bestBid": "0.4",
+    "bestAsk": "0.45"
+   },
+   "description": {
+    "data": {},
+    "content": [
+     {
+      "data": {},
+      "marks": [],
+      "value": "Resolves Yes if the Houston Pro Football team wins at least 9 games in the 2026-27 regular season. Outcome verified from the Governing League and ESPN. Gemini is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners. View the [full rules](https://cdn.builder.io/api/v1/file/assets%2F1b77ce3a269a43e985e77f3d65f715ba%2F1823e65d8d544d93b1ea47fa86a18b58).",
+      "nodeType": "text"
+     }
+    ],
+    "nodeType": "document"
+   },
+   "abbreviatedName": "9+ wins"
+  },
+  {
+   "id": "219594-526956",
+   "label": "10+ wins",
+   "ticker": "10PLUS",
+   "instrumentSymbol": "GEMI-NFLHOUWINS26-10PLUS",
+   "status": "active",
+   "marketState": "open",
+   "expiryDate": "2027-01-11T06:00:00.000Z",
+   "prices": {
+    "buy": {
+     "yes": "0.22",
+     "no": "0.83"
+    },
+    "sell": {
+     "yes": "0.17",
+     "no": "0.78"
+    },
+    "bestBid": "0.17",
+    "bestAsk": "0.22",
+    "lastTradePrice": "0.64"
+   },
+   "description": {
+    "data": {},
+    "content": [
+     {
+      "data": {},
+      "marks": [],
+      "value": "Resolves Yes if the Houston Pro Football team wins at least 10 games in the 2026-27 regular season. Outcome verified from the Governing League and ESPN. Gemini is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners. View the [full rules](https://cdn.builder.io/api/v1/file/assets%2F1b77ce3a269a43e985e77f3d65f715ba%2F1823e65d8d544d93b1ea47fa86a18b58).",
+      "nodeType": "text"
+     }
+    ],
+    "nodeType": "document"
+   },
+   "abbreviatedName": "10+ wins"
+  },
+  {
+   "id": "219594-526961",
+   "label": "14+ wins",
+   "ticker": "14PLUS",
+   "instrumentSymbol": "GEMI-NFLHOUWINS26-14PLUS",
+   "status": "active",
+   "marketState": "open",
+   "expiryDate": "2027-01-11T06:00:00.000Z",
+   "prices": {
+    "buy": {
+     "yes": "0.12",
+     "no": "0.88"
+    },
+    "sell": {
+     "yes": "0.12",
+     "no": "0.88"
+    },
+    "lastTradePrice": "0.12"
+   },
+   "description": {
+    "data": {},
+    "content": [
+     {
+      "data": {},
+      "marks": [],
+      "value": "Resolves Yes if the Houston Pro Football team wins at least 14 games in the 2026-27 regular season. Outcome verified from the Governing League and ESPN. Gemini is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners. View the [full rules](https://cdn.builder.io/api/v1/file/assets%2F1b77ce3a269a43e985e77f3d65f715ba%2F1823e65d8d544d93b1ea47fa86a18b58).",
+      "nodeType": "text"
+     }
+    ],
+    "nodeType": "document"
+   },
+   "abbreviatedName": "14+ wins"
+  },
+  {
+   "id": "219594-526960",
+   "label": "12+ wins",
+   "ticker": "12PLUS",
+   "instrumentSymbol": "GEMI-NFLHOUWINS26-12PLUS",
+   "status": "active",
+   "marketState": "open",
+   "expiryDate": "2027-01-11T06:00:00.000Z",
+   "prices": {
+    "buy": {
+     "yes": "0.05",
+     "no": "0.95"
+    },
+    "sell": {
+     "yes": "0.05",
+     "no": "0.95"
+    },
+    "lastTradePrice": "0.05"
+   },
+   "description": {
+    "data": {},
+    "content": [
+     {
+      "data": {},
+      "marks": [],
+      "value": "Resolves Yes if the Houston Pro Football team wins at least 12 games in the 2026-27 regular season. Outcome verified from the Governing League and ESPN. Gemini is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners. View the [full rules](https://cdn.builder.io/api/v1/file/assets%2F1b77ce3a269a43e985e77f3d65f715ba%2F1823e65d8d544d93b1ea47fa86a18b58).",
+      "nodeType": "text"
+     }
+    ],
+    "nodeType": "document"
+   },
+   "abbreviatedName": "12+ wins"
+  },
+  {
+   "id": "219594-526963",
+   "label": "17 wins",
+   "ticker": "17WINS",
+   "instrumentSymbol": "GEMI-NFLHOUWINS26-17WINS",
+   "status": "active",
+   "marketState": "open",
+   "expiryDate": "2027-01-11T06:00:00.000Z",
+   "prices": {
+    "buy": {
+     "yes": "0.02",
+     "no": "0.99"
+    },
+    "sell": {
+     "yes": "0.01",
+     "no": "0.98"
+    },
+    "bestBid": "0.01",
+    "bestAsk": "0.02",
+    "lastTradePrice": "0.02"
+   },
+   "description": {
+    "data": {},
+    "content": [
+     {
+      "data": {},
+      "marks": [],
+      "value": "Resolves Yes if the Houston Pro Football team wins exactly 17 games in the 2026-27 regular season. Outcome verified from the Governing League and ESPN. Gemini is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners. View the [full rules](https://cdn.builder.io/api/v1/file/assets%2F1b77ce3a269a43e985e77f3d65f715ba%2F1823e65d8d544d93b1ea47fa86a18b58).",
+      "nodeType": "text"
+     }
+    ],
+    "nodeType": "document"
+   },
+   "abbreviatedName": "17 wins"
+  }
+ ],
+ "effectiveDate": "2026-08-28T13:25:09.061Z",
+ "volume": "1140.65",
+ "tags": [
+  "Pro Football"
+ ],
+ "expiryDate": "2027-01-11T06:00:00.000Z",
+ "eventTags": [
+  {
+   "id": 1,
+   "name": "Futures",
+   "slug": "futures"
+  }
+ ]
+}

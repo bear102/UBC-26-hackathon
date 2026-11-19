@@ -340,6 +340,30 @@ Not worth it for Hedgehog: elections (except as regulatory proxies), Mentions, a
 - The Gemini unfiltered events listing caps at about 1,000 events, so the script pages each category. Settled history per category is capped at the newest 1,000.
 - Polymarket offset paging caps at about 2,000 events, so the script uses `/events/keyset` with `after_cursor`.
 
+## 8. Sports futures by Texas team (2026-27 season, snapshot 2026-11-19)
+
+Season futures are the long-dated hedge for crowd businesses (bars, wing shops, game-day retail): a deep playoff run means weeks of packed nights, and the own-team **NO** pays if the run stops. Hedgehog indexes 19 Gemini futures tickers (`GEMINI_FUTURES_TICKERS`) and 17 Kalshi futures series (`FUTURES_KALSHI`) in `lib/markets/futures.ts`. Kalshi futures load only when a risk or profile names a team. The prices below are YES asks (implied odds) from `.data/eval/markets-v3.json`. The primary venue is the cheaper one to own NO on; the other venue is in brackets.
+
+| Team | Make playoffs | Wins ladder (YES) | Deeper stages | Title | Observation ends |
+|---|---|---|---|---|---|
+| Spurs (NBA) | 0.97 K | 55+ 0.83, 60+ 0.60, 65+ 0.28 (K) | reach West finals 0.60 K; win West 0.35 K [G 0.37] | 0.22 K [G 0.24] | Apr-Jun 2027 |
+| Rockets (NBA) | 0.96 G [K 0.96] | 50+ 0.84, 55+ 0.56, 60+ 0.27 | reach West finals 0.42 K; win West 0.12 K [G 0.12] | 0.09 G [K 0.06] | Apr-Jun 2027 |
+| Mavericks (NBA) | 0.36 K [G 0.38] | 35+ 0.79, 40+ 0.53, 45+ 0.29 | reach West finals 0.13 K; win West 0.03 G | 0.04 G | Apr-Jun 2027 |
+| Texans (NFL) | 0.32 K [G 0.34] | 7+ 0.88, 8+ 0.70, 9+ 0.45 (G) | division 0.04; a playoff round 0.08 K; AFC 0.05 | 0.02 | Jan-Feb 2027 |
+| Cowboys (NFL) | 0.28 K [G 0.30] | 7+ 0.80, 8+ 0.56, 9+ 0.31 (G) | NFC East 0.28; a playoff round 0.31 K; NFC 0.05 | 0.04 | Jan-Feb 2027 |
+| Stars (NHL) | 0.88 K [G 0.90] | none | win West 0.12 | 0.06 | Apr-Jun 2027 |
+| Longhorns (CFB) | CFP 0.96 K [G 0.98] | none | a CFP round 0.30 K; SEC 0.17 K [G 0.18] | 0.13 G [K 0.11] | Dec 2026-Jan 2027 |
+
+How to read it for a hedge: a contender's "miss the playoffs" NO is a cheap tail (Spurs 0.04), and its deep-run NO is broad cover (West champion NO 0.66). The right stage usually sits in between (reach the West finals NO 0.41), but that book can be only a few contracts deep. A bubble team's playoffs NO is the core hedge (Mavericks NO 0.64, Cowboys NO 0.72). NFL wins rungs at 0.30-0.60 are the most insurance-shaped NFL contracts.
+
+**Gotchas (data quality):**
+- **Gemini futures are search-only.** The unfiltered events listing does not return them, so `futuresFetch.ts` fetches each ticker directly (10-minute cache). If most tickers fail, it falls back to a search over futures-tagged Sports events (`GEMINI_FUTURES_SEARCH`).
+- **Gemini label swaps.** `NBAPLAYOFFS26-27` labels the San Antonio contract "Sacramento" (symbol `…-SA`, rules "If San Antonio qualifies…"), and the reverse. The team is always taken from the rules text. A contract whose label and rules disagree is dropped, so Gemini has no Spurs playoffs contract today; Kalshi `KXNBAPLAYOFF-27-SAS` covers it.
+- **Stale wins rungs.** Some Gemini NFL wins ladders price a higher rung above a lower one (Texans 14+ YES 0.12 above 12+ at 0.05). The monotonic check drops the stale rung.
+- **Placeholder expiries.** Kalshi futures expire in 2029 as a placeholder. Show and size from `meta.eventEnd` (the real end of observation, e.g. 2027-05-31 for the West title), never from `expiry`.
+
+Long-dated macro series indexed for the same reason (`LONG_MACRO_KALSHI`): `KXDIESELMON` (month-end diesel), `KXDIESELYE` (year-end diesel), `KXAAAGASMAX` / `KXAAAGASMAXTX` (the year's max gas price), `KXNATGASMON`, `KXMORTGAGERATE` (the year's max 30-year rate, 2026 and 2027), `KXGOVTSHUTDOWN` and `KXRECSSNBER`. The `indexed` flags in `lib/markets/catalog.json` were updated by hand for these, the futures families, monthly rain, snow days, ERCOT, HDD, Lake Mead and tornado counts.
+
 ## Appendix A. Representative live types per theme (top 2 by volume per venue)
 
 | Theme | Venue · series | Example event (what settles) | Freq | Live ev | Vol | Median YES | Indexed |

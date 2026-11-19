@@ -1,0 +1,151 @@
+{
+ "id": "402251",
+ "title": "Pro Basketball Playoff Qualifiers",
+ "type": "categorical",
+ "category": "Sports",
+ "ticker": "NBAPLAYOFFS26-27",
+ "status": "active",
+ "contracts": [
+  {
+   "id": "402251-937989",
+   "label": "Houston",
+   "ticker": "HOU",
+   "instrumentSymbol": "GEMI-NBAPLAYOFFS26-27-HOU",
+   "status": "active",
+   "marketState": "open",
+   "expiryDate": "2027-04-20T16:00:00.000Z",
+   "prices": {
+    "buy": {
+     "yes": "0.96",
+     "no": "0.05"
+    },
+    "sell": {
+     "yes": "0.95",
+     "no": "0.04"
+    },
+    "bestBid": "0.95",
+    "bestAsk": "0.96"
+   },
+   "description": {
+    "data": {},
+    "content": [
+     {
+      "data": {},
+      "marks": [],
+      "value": "If Houston qualifies for the Pro Basketball Playoffs in the 2026-27 season, the contract resolves to Yes. Outcome verified from the Governing League (NBA). Qualifying for the Pro Basketball play-in tournament does not count as playoff qualification; a team must advance to the NBA Playoffs. Gemini is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners. View the full [rules](https://cdn.builder.io/api/v1/file/assets%2F1b77ce3a269a43e985e77f3d65f715ba%2F55a2af7e4c8442dc9c64f91152a2cc8d).",
+      "nodeType": "text"
+     }
+    ],
+    "nodeType": "document"
+   },
+   "abbreviatedName": "HOU"
+  },
+  {
+   "id": "402251-937986",
+   "label": "Dallas",
+   "ticker": "DAL",
+   "instrumentSymbol": "GEMI-NBAPLAYOFFS26-27-DAL",
+   "status": "active",
+   "marketState": "open",
+   "expiryDate": "2027-04-20T16:00:00.000Z",
+   "prices": {
+    "buy": {
+     "yes": "0.38",
+     "no": "0.67"
+    },
+    "sell": {
+     "yes": "0.33",
+     "no": "0.62"
+    },
+    "bestBid": "0.33",
+    "bestAsk": "0.38"
+   },
+   "description": {
+    "data": {},
+    "content": [
+     {
+      "data": {},
+      "marks": [],
+      "value": "If Dallas qualifies for the Pro Basketball Playoffs in the 2026-27 season, the contract resolves to Yes. Outcome verified from the Governing League (NBA). Qualifying for the Pro Basketball play-in tournament does not count as playoff qualification; a team must advance to the NBA Playoffs. Gemini is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners. View the full [rules](https://cdn.builder.io/api/v1/file/assets%2F1b77ce3a269a43e985e77f3d65f715ba%2F55a2af7e4c8442dc9c64f91152a2cc8d).",
+      "nodeType": "text"
+     }
+    ],
+    "nodeType": "document"
+   },
+   "abbreviatedName": "DAL"
+  },
+  {
+   "id": "402251-938003",
+   "label": "Sacramento",
+   "ticker": "SA",
+   "instrumentSymbol": "GEMI-NBAPLAYOFFS26-27-SA",
+   "status": "active",
+   "marketState": "open",
+   "expiryDate": "2027-04-20T16:00:00.000Z",
+   "prices": {
+    "buy": {
+     "yes": "0.02",
+     "no": "0.9"
+    },
+    "sell": {
+     "yes": "0.1",
+     "no": "0.98"
+    },
+    "bestBid": "0.1",
+    "lastTradePrice": "0.02"
+   },
+   "description": {
+    "data": {},
+    "content": [
+     {
+      "data": {},
+      "marks": [],
+      "value": "If San Antonio qualifies for the Pro Basketball Playoffs in the 2026-27 season, the contract resolves to Yes. Outcome verified from the Governing League (NBA). Qualifying for the Pro Basketball play-in tournament does not count as playoff qualification; a team must advance to the NBA Playoffs. Gemini is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners. View the full [rules](https://cdn.builder.io/api/v1/file/assets%2F1b77ce3a269a43e985e77f3d65f715ba%2F55a2af7e4c8442dc9c64f91152a2cc8d).",
+      "nodeType": "text"
+     }
+    ],
+    "nodeType": "document"
+   },
+   "abbreviatedName": "SAC"
+  },
+  {
+   "id": "402251-938005",
+   "label": "San Antonio",
+   "ticker": "SAC",
+   "instrumentSymbol": "GEMI-NBAPLAYOFFS26-27-SAC",
+   "status": "active",
+   "marketState": "open",
+   "expiryDate": "2027-04-20T16:00:00.000Z",
+   "prices": {
+    "buy": {},
+    "sell": {}
+   },
+   "description": {
+    "data": {},
+    "content": [
+     {
+      "data": {},
+      "marks": [],
+      "value": "If Sacramento qualifies for the Pro Basketball Playoffs in the 2026-27 season, the contract resolves to Yes. Outcome verified from the Governing League (NBA). Qualifying for the Pro Basketball play-in tournament does not count as playoff qualification; a team must advance to the NBA Playoffs. Gemini is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners. View the full [rules](https://cdn.builder.io/api/v1/file/assets%2F1b77ce3a269a43e985e77f3d65f715ba%2F55a2af7e4c8442dc9c64f91152a2cc8d).",
+      "nodeType": "text"
+     }
+    ],
+    "nodeType": "document"
+   },
+   "abbreviatedName": "SAS"
+  }
+ ],
+ "effectiveDate": "2026-10-30T14:43:11.298Z",
+ "volume": "970.65",
+ "tags": [
+  "Pro Basketball"
+ ],
+ "expiryDate": "2027-04-20T16:00:00.000Z",
+ "eventTags": [
+  {
+   "id": 1,
+   "name": "Futures",
+   "slug": "futures"
+  }
+ ]
+}

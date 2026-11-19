@@ -6,7 +6,11 @@ import { activeEventsByCategory, eventByTicker, settledEvents } from "./geminiPm
 import { getKalshiContract, kalshiSource, listKalshiMarkets, settledKalshi } from "./dflow";
 import { addDays, centralDate, contractMeta, daysBetween, normalizeGeminiEvents, parseBounds, type Bounds, type ContractMeta } from "./normalize";
 import { getBook } from "./book";
+import { geminiFutures } from "./futuresFetch";
 import { crossCheckLine, getPolymarket, listPolymarkets, type CrossCheck } from "./polymarket";
+import { getParametric, isParametricPeril, parametricCandidates } from "./parametric";
+import { isNationalPlace, parametricEnabled, PROXIES, proxyFits, proxyNote, proxyPerils, sameState, stormKindScore } from "./proxies";
+import { horizonFit, leagueIn, ownTeamsIn, parseHorizon, stageWanted, type HorizonKind } from "../ai/horizon";
 
 export { contractMeta, parseBounds, getBook, kalshiSource };
 export type { Bounds, ContractMeta, CrossCheck };
@@ -48,14 +52,16 @@ async function geminiMarkets(perils: Peril[]): Promise<MarketContract[]> {
   return res.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
 }
 
-export async function listMarkets(opts: { perils?: Peril[]; venues?: VenueId[]; includeClosed?: boolean } = {}): Promise<MarketContract[]> {
+/** `futures`: also fetch Kalshi's season futures series (17 extra requests). Gemini futures ride along whenever games are asked for. */
+export async function listMarkets(opts: { perils?: Peril[]; venues?: VenueId[]; includeClosed?: boolean; futures?: boolean } = {}): Promise<MarketContract[]> {
   const perils = opts.perils?.length ? opts.perils : ALL_PERILS;
   // Polymarket is read-only context: opt-in via `venues` (findCandidates asks for it on national perils/games).
   const venues = opts.venues?.length ? opts.venues : (["gemini", "kalshi"] as VenueId[]);
   const parts = await Promise.allSettled([
     venues.includes("gemini") ? geminiMarkets(perils) : Promise.resolve([]),
-    venues.includes("kalshi") ? cached(`kalshi:${[...perils].sort().join(",")}`, () => listKalshiMarkets(perils)) : Promise.resolve([]),
+    venues.includes("kalshi") ? cached(`kalshi:${[...perils].sort().join(",")}${opts.futures ? "|fut" : ""}`, () => listKalshiMarkets(perils, { futures: opts.futures })) : Promise.resolve([]),
     venues.includes("polymarket") ? listPolymarkets(perils) : Promise.resolve([]),
+    venues.includes("gemini") && perils.includes("game") ? cached("gemini:futures", geminiFutures) : Promise.resolve([]),
   ]);
   const seen = new Set<string>();
   const out: MarketContract[] = [];
@@ -72,8 +78,10 @@ export async function listMarkets(opts: { perils?: Peril[]; venues?: VenueId[]; 
 
 // ---------- time windows ----------
 
-/** Parse a Risk.window ("next 7 days", "this weekend", "2026-11-21", "Saturday", "November") into US-Central dates. */
-export function parseWindow(w: string | undefined, now = new Date()): { start: string; end: string } {
+/** Parse a Risk.window ("next 7 days", "this weekend", "2026-11-21", "Saturday", "November", "through the NBA playoffs") into US-Central dates. */
+export function parseWindow(w: string | undefined, now = new Date()): { start: string; end: string; kind?: HorizonKind } {
+  const h = parseHorizon(w, now); // months, quarters, seasons (lib/ai/horizon.ts); null for short windows
+  if (h) return h;
   const today = centralDate(now);
   const s = (w ?? "").toLowerCase().trim();
   const iso = [...s.matchAll(/(\d{4}-\d{2}-\d{2})/g)].map((m) => m[1]);
@@ -181,7 +189,9 @@ function boundsDistance(b: Bounds | undefined, target: number | null): number | 
  * liquidity, then nearest expiry. Top Gemini candidates get live book depth attached.
  */
 export async function findCandidates(risk: Risk, profile: BusinessProfile, limit = 15): Promise<MarketContract[]> {
-  const all = await listMarkets({ perils: perilFamily(risk.peril), venues: candidateVenues(risk.peril) });
+  // season futures only when the risk/owner names a team (keeps Kalshi under its rate limit)
+  const futures = risk.peril === "game" && teamsIn(`${risk.title} ${risk.trigger} ${profile.description}`).length > 0;
+  const all = await listMarkets({ perils: perilFamily(risk.peril), venues: candidateVenues(risk.peril), futures });
   const top = rankCandidates(risk, profile, all, limit);
   await Promise.all(top.map(async (c) => {
     if (c.venue !== "gemini" || c.depthYes !== undefined) return;
@@ -190,6 +200,11 @@ export async function findCandidates(risk: Risk, profile: BusinessProfile, limit
     if (c.yesAsk !== null) c.depthYes = b.yes.filter((l) => l.price <= c.yesAsk! + 0.02).reduce((s, l) => s + l.size, 0);
     if (c.noAsk !== null) c.depthNo = b.no.filter((l) => l.price <= c.noAsk! + 0.02).reduce((s, l) => s + l.size, 0);
   }));
+  // Hedgehog parametric cover (lib/markets/parametric): only for perils no venue lists, never instead of a real market.
+  // OFF by default (user decision: real markets only); HEDGEHOG_PARAMETRIC=1 re-enables. lib/markets/proxies.ts
+  if (parametricEnabled() && isParametricPeril(risk.peril) && !top.some((c) => c.peril === risk.peril && c.venue !== "hedgehog")) {
+    top.push(...await parametricCandidates(risk, profile, parseWindow(risk.window)).catch(() => []));
+  }
   return top;
 }
 
@@ -207,8 +222,9 @@ export function underlyings(text: string): { key: string; group: string }[] {
 }
 
 // "other" still reaches natural gas and metals (they were "other" before they got their own perils).
-const perilFamily = (p: Peril): Peril[] => (p === "heat" || p === "cold" ? ["heat", "cold"] : p === "other" ? ["other", "natgas", "metals"] : [p]);
-const candidateVenues = (p: Peril): VenueId[] => (POLY_PERILS.includes(p) ? ["gemini", "kalshi", "polymarket"] : ["gemini", "kalshi"]);
+// hail / flood / wildfire also search their closest real market family (lib/markets/proxies.ts): tornado counts, rain totals.
+const perilFamily = (p: Peril): Peril[] => (p === "heat" || p === "cold" ? ["heat", "cold"] : p === "other" ? ["other", "natgas", "metals"] : [p, ...proxyPerils(p)]);
+const candidateVenues = (p: Peril): VenueId[] => (POLY_PERILS.includes(p) || PROXIES[p] ? ["gemini", "kalshi", "polymarket"] : ["gemini", "kalshi"]);
 
 /** Pure ranking step of findCandidates over a given market universe (no network; used by the eval harness). */
 export function rankCandidates(risk: Risk, profile: BusinessProfile, universe: MarketContract[], limit = 15, nowDate = new Date()): MarketContract[] {
@@ -216,12 +232,22 @@ export function rankCandidates(risk: Risk, profile: BusinessProfile, universe: M
   const all = universe.filter((c) => family.includes(c.peril) && venues.includes(c.venue));
   const now = nowDate.getTime();
   const win = parseWindow(risk.window, nowDate);
+  const winDays = daysBetween(win.start, win.end);
+  // month / season exposure (a soaked month, a playoff run, the fuel bill until year end): horizon-matched contracts first
+  const longWin = risk.horizon === "month" || risk.horizon === "season" || win.kind === "month" || win.kind === "season";
+  const stages = longWin && risk.peril === "game" ? stageWanted(`${risk.title} ${risk.trigger}`) : [];
+  const owns = longWin && risk.peril === "game" ? ownTeamsIn(`${risk.title} ${risk.trigger} ${profile.description}`) : [];
+  const lgWanted = longWin && risk.peril === "game" ? leagueIn(`${risk.title} ${risk.trigger} ${risk.window ?? ""}`) : undefined;
   const local = !NATIONAL_PERILS.includes(risk.peril);
   const loc = normLoc(risk.location || profile.city);
   const text = `${risk.title} ${risk.trigger} ${risk.lossReasoning ?? ""} ${profile.description}`;
   const wantTeams = risk.peril === "game" ? teamsIn(`${risk.title} ${risk.trigger}`).length ? teamsIn(`${risk.title} ${risk.trigger}`) : teamsIn(text) : [];
   const target = triggerNumber(risk.trigger);
   const wantU = !["heat", "cold", "rain", "game"].includes(risk.peril) ? underlyings(`${risk.title} ${risk.trigger}`) : [];
+  // "other" spans shutdowns, recessions, stock indexes...: the risk's own distinctive words pick the event ("Government shutdown on Dec 12")
+  const otherWords = risk.peril === "other" ? [...new Set((`${risk.title} ${risk.trigger}`.toLowerCase().match(/[a-z]{5,}/g) ?? [])
+    .filter((w) => !["price", "prices", "above", "below", "business", "occurs", "during", "spike", "drops", "rises", "before", "after", "through", "until"].includes(w)))] : [];
+  const named = new Set<string>(); // "other" contracts whose title names the risk's own words
 
   const scored: { c: MarketContract; s: number; exp: number }[] = [];
   for (const c of all) {
@@ -229,7 +255,10 @@ export function rankCandidates(risk: Risk, profile: BusinessProfile, universe: M
     const exp = Date.parse(c.expiry);
     if (Number.isFinite(exp) && exp <= now) continue;
     if (c.yesAsk === null && c.noAsk === null) continue;
-    if (local && !locMatches(c.location, loc)) continue;
+    // place: city / region match; a statewide market ("Texas" hurricane landfall) covers the state's cities; a nationwide
+    // market (US tornado count) only counts for national perils (incl. the storm proxy for hail)
+    if (isNationalPlace(c.location) ? local && !NATIONAL_PERILS.includes(c.peril) : !locMatches(c.location, loc) && !sameState(c.location, risk.location || profile.city) && !sameState(c.location, profile.city)) continue;
+    if (!proxyFits(risk.peril, c)) continue; // proxy markets only on the side that tracks the loss (wet month for flood, dry for wildfire)
     const meta = contractMeta(c.id);
 
     // time window
@@ -237,11 +266,24 @@ export function rankCandidates(risk: Risk, profile: BusinessProfile, universe: M
     const evEnd = meta?.eventEnd ?? evStart;
     if (evEnd < win.start) continue;
     const gap = evStart > win.end ? daysBetween(win.end, evStart) : 0;
-    if (gap > (local ? 3 : 45)) continue;
+    if (gap > (longWin && winDays >= 30 ? (local ? 7 : 14) : local ? 3 : 45)) continue;
     let s = 3 / (1 + gap / 2);
+    if (longWin && risk.peril === "game" && !meta?.futureKind && (risk.horizon === "season" || win.kind === "season")) continue; // a playoff run is not next week's game
+    if (longWin) {
+      // a price / level printed at the end of the exposure (diesel on Dec 31 for "through December") is the horizon's own measurement
+      const endPrint = !local && risk.peril !== "game" && Math.abs(daysBetween(win.end, evEnd)) <= 10;
+      s += 2 * (endPrint ? Math.max(0.8, horizonFit({ start: evStart, end: evEnd }, win)) : horizonFit({ start: evStart, end: evEnd }, win));
+      if (daysBetween(evStart, evEnd) <= 1 && !endPrint) s -= 1.5; // one day / one game for a month or season exposure
+      // no strike named ("diesel stays high"): strikes that are an insurance price on some side before the far tails / sure things
+      if (target === null && risk.peril !== "game" && [c.yesAsk, c.noAsk].some((a) => a !== null && a >= 0.1 && a <= 0.6)) s += 1;
+      if (meta?.futureKind && stages.length) s += stages.includes(meta.futureKind) ? 2 - stages.indexOf(meta.futureKind) * 0.5 : -1;
+      if (meta?.futureKind && meta.league && (lgWanted ? meta.league !== lgWanted : owns.length && !owns.some((o) => o.league.includes(meta.league!)))) continue; // a Longhorns football risk never gets the NCAAM title
+    } else if (winDays <= 14 && daysBetween(win.end, evEnd) > 30 && !meta?.futureKind) s -= 1.5; // year-end / season contract for a this-week risk
 
     // relevance
     if (c.peril === risk.peril) s += 2;
+    s += stormKindScore(`${risk.title} ${risk.trigger} ${risk.peril}`, c); // hurricane risk -> landfall markets, hail -> tornado counts
+    if (otherWords.length) { const hit = otherWords.filter((w) => c.eventTitle.toLowerCase().includes(w)).length; s += hit ? Math.min(4, 2 * hit) : -2; if (hit) named.add(c.id); }
     if (wantU.length) {
       const have = underlyings(c.eventTitle);
       if (have.length && !have.some((h) => wantU.some((w) => w.group === h.group))) continue; // gold is not copper, SOL is not BTC
@@ -263,6 +305,9 @@ export function rankCandidates(risk: Risk, profile: BusinessProfile, universe: M
       if (lower && b.hi !== undefined && b.hi <= target + 1e-9 && b.lo === undefined) s += 1.5;
     }
     if (meta?.eventEnd && meta.eventEnd !== meta.eventDate && daysBetween(meta.eventDate ?? win.start, meta.eventEnd) > 7 && daysBetween(win.start, win.end) < 7) s -= 0.5; // monthly market for a short window
+    // season future for a short game risk: this week's games first. Keyed on !longWin, not the window length: an unparsed
+    // short window ("Nov 23", "Nov 21-22", the LLM's usual format) defaults to 30 days and would otherwise rank futures first
+    if (meta?.futureKind && !longWin) s -= 2;
 
     // liquidity & price sanity
     const depth = Math.max(c.depthYes ?? 0, c.depthNo ?? 0, meta?.volume ?? 0, meta?.openInterest ?? 0);
@@ -278,11 +323,12 @@ export function rankCandidates(risk: Risk, profile: BusinessProfile, universe: M
   }
   preferGemini(scored);
   scored.sort((a, b) => b.s - a.s || a.exp - b.exp);
-  return scored.slice(0, limit).map((x) => ({ ...x.c }));
+  if (named.size) return scored.filter((x) => named.has(x.c.id)).slice(0, limit).map((x) => ({ ...x.c })); // a shutdown risk never gets the NASDAQ
+  return scored.slice(0, limit).map((x) => { const note = proxyNote(risk.peril, x.c); return note ? { ...x.c, proxyNote: note } : { ...x.c }; });
 }
 
 /** Perils where Polymarket adds candidates (read-only context lines). */
-export const POLY_PERILS: Peril[] = ["game", "fed", "cpi", "gas", "oil", "heat", "cold", "snow", "water", "quake", "storm"];
+export const POLY_PERILS: Peril[] = ["game", "fed", "cpi", "gas", "oil", "heat", "cold", "snow", "water", "quake", "storm", "rain", "flood"];
 export const GEMINI_BONUS = 0.6;
 /** Kalshi lines in a peril/date slot Gemini also covers drop this much (unless Gemini's side is unusable there). */
 export const KALSHI_DUP_PENALTY = 1.5;
@@ -301,7 +347,7 @@ export function slotKey(c: MarketContract): string {
   const peril = c.peril === "cold" ? "heat" : c.peril;
   const day2 = peril === "fed" || peril === "cpi" ? day.slice(0, 7) : day; // decision/print month: venues close a day apart
   let where = normLoc(c.location);
-  if (c.peril === "game") where = [m?.teams?.[0] ?? c.label, m?.opponents?.[0] ?? ""].map((x) => x.toLowerCase()).sort().join("/");
+  if (c.peril === "game") where = [m?.teams?.[0] ?? c.label, m?.opponents?.[0] ?? ""].map((x) => x.toLowerCase()).sort().join("/") + (m?.futureKind ? `|${m.futureKind}` : "");
   return `${peril}|${day2}|${where}`;
 }
 
@@ -341,6 +387,7 @@ export async function getContract(id: string): Promise<MarketContract | null> {
   const venue = id.slice(0, i), sym = id.slice(i + 1);
   if (venue === "kalshi") return getKalshiContract(sym);
   if (venue === "polymarket") return getPolymarket(id);
+  if (venue === "hedgehog") return getParametric(id);
   if (venue !== "gemini") return null;
   const guesses: string[] = [];
   const cached = [...srcCache.values()].flatMap((x) => x.v).find((c) => c.id === id);

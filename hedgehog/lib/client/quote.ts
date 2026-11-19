@@ -14,25 +14,31 @@ export function rescaleQuote(q: Quote, pct: Coverage): Quote {
     // `maxCoverable` (set by the quote engine after walking the book) is the hard cap; we keep it on the line.
     const cap = l.maxCoverable != null && l.maxCoverable > 0 ? Math.floor(l.maxCoverable) : undefined;
     const contracts = cap != null ? Math.min(want, cap) : want;
+    // season / month-total lines are charged per month of cover (the quote engine set premiumPerMonth); keep that ratio
+    const months = l.premiumPerMonth && l.premiumUsd > 0 ? l.premiumUsd / l.premiumPerMonth : 1;
     return {
       ...l,
       coveragePct: pct,
       contracts,
       premiumUsd: round2(contracts * price),
       payoutUsd: contracts,
+      ...(months > 1 ? { premiumPerMonth: round2((contracts * price) / months) } : {}),
     };
   });
   // budget allocation: cheapest probability (best payout per premium $) first
   let left = q.budgetUsd > 0 ? q.budgetUsd : Infinity;
   const order = [...sized].sort((a, b) => a.pricePerContract - b.pricePerContract);
   const out = new Map<QuoteLine, QuoteLine>();
+  const monthsOf = (l: QuoteLine) => (l.premiumPerMonth && l.premiumUsd > 0 ? l.premiumUsd / l.premiumPerMonth : 1);
   for (const l of order) {
     if (l.action === "read-only") { out.set(l, l); continue; }
-    if (l.premiumUsd <= left) { left -= l.premiumUsd; out.set(l, l); continue; }
-    const fit = Math.floor(left / Math.max(l.pricePerContract, 0.01));
-    if (fit < 1) { out.set(l, { ...l, contracts: 0, premiumUsd: 0, payoutUsd: 0 }); continue; }
-    const nl = { ...l, contracts: fit, premiumUsd: round2(fit * l.pricePerContract), payoutUsd: fit };
-    left -= nl.premiumUsd;
+    const months = monthsOf(l);
+    if (l.premiumUsd / months <= left + 1e-9) { left -= l.premiumUsd / months; out.set(l, l); continue; }
+    const fit = Math.floor((left * months) / Math.max(l.pricePerContract, 0.01));
+    if (fit < 1) { out.set(l, { ...l, contracts: 0, premiumUsd: 0, payoutUsd: 0, ...(months > 1 ? { premiumPerMonth: 0 } : {}) }); continue; }
+    const prem = round2(fit * l.pricePerContract);
+    const nl = { ...l, contracts: fit, premiumUsd: prem, payoutUsd: fit, ...(months > 1 ? { premiumPerMonth: round2(prem / months) } : {}) };
+    left -= prem / months;
     out.set(l, nl);
   }
   const lines = sized.map((l) => out.get(l)!);

@@ -3,7 +3,7 @@
 // (ii) a cross-venue price check on quote lines ("Polymarket says 34%").
 // Every function here is failure-tolerant: errors return [] / null and never break listMarkets.
 import type { MarketContract, Peril, QuoteLine } from "../types";
-import { addDays, centralDate, contractMeta, daysBetween, num, parseBounds, price, setMeta, tempPeril, type Bounds, type ContractMeta } from "./normalize";
+import { addDays, centralDate, contractMeta, daysBetween, num, parseBounds, perilFromText, price, setMeta, tempPeril, type Bounds, type ContractMeta } from "./normalize";
 
 export const GAMMA = process.env.POLYMARKET_GAMMA_BASE || "https://gamma-api.polymarket.com";
 const TTL = 60_000;
@@ -125,6 +125,7 @@ export const WEATHER_DAYS = 4;
 const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
 
 interface PEvent { slug: string; title: string; endDate?: string; closed?: boolean; markets?: PMarket[] }
+interface PEventFull extends PEvent { startDate?: string }
 
 /** Slugs for every city × {highest,lowest} × day from today (Central) through today + days. */
 export function weatherSlugs(now = new Date(), days = WEATHER_DAYS): { slug: string; city: string; date: string; low: boolean }[] {
@@ -189,12 +190,24 @@ async function fetchWeather(now = new Date()): Promise<MarketContract[]> {
   return normalizePolyWeather(events, info, centralDate(now));
 }
 
-// ---------- disaster / climate events (READ-ONLY reference: Polymarket isn't available to US desks) ----------
-// Multi-outcome "bucket" events with no Kalshi/Gemini equivalent (Mississippi low water, Lake Powell, Great Salt Lake,
-// LA earthquake, US tornado totals) plus a couple that complement Kalshi (Lake Mead season low, winter snow vs average).
-// Fetched by slug. Hurricane landfall events are deliberately left out: the Atlantic season ends Nov 30.
+// ---------- disaster / climate events (natural-disaster + weather markets for US businesses) ----------
+// Discovery (all public Gamma API, checked live 2026-11-19):
+//   1. tags: every open event tagged climate / natural-disasters / hurricanes / earthquakes (the "weather" tag is ~20 MB
+//      of worldwide daily temperatures, so it is NOT pulled; temperature comes from weatherSlugs above);
+//   2. predictable slugs: daily "where-will-it-rain-on-<month>-<d>-<y>", monthly "precipitation-in-<city>-in-<month>";
+//   3. a fixed slug list (POLY_EVENTS) for events whose tags change.
+// Each event goes through classifyPolyEvent: US-relevant events only (tornado counts, hurricane landfalls by state,
+// US quakes, river / lake / sea levels, US city rain and snow, billion-dollar disasters). Worldwide-only events
+// (global quake counts, volcanoes, meteors, global temperature, Chinese typhoons) are skipped: no US small business
+// loses money on them. Non-US outcomes inside a US event ("Indonesia" in a quake ladder) are skipped too.
 
-export interface PolyEventSpec { slug: string; peril: Peril; location: string; cityFromGroup?: boolean; label?: string }
+/** How an event becomes contracts. location: fixed place; "group" = each market's groupItemTitle is the place
+ *  (city "Chicago, IL by November 30" -> "Chicago", US state "Texas"); non-US groups are dropped. */
+export interface PolyEventSpec {
+  slug: string; peril: Peril; location: string; cityFromGroup?: boolean; label?: string;
+  /** a two-outcome market whose outcomes are not Yes/No ("Drier" / "Wetter"): YES = outcomes[0], this label */
+  yesLabel?: string;
+}
 export const POLY_EVENTS: PolyEventSpec[] = [
   { slug: "lowest-mississippi-level-at-st-louis-by-november-30", peril: "water", location: "St. Louis" },
   { slug: "lowest-mississippi-level-at-baton-rouge-by-november-30", peril: "water", location: "Baton Rouge" },
@@ -206,36 +219,147 @@ export const POLY_EVENTS: PolyEventSpec[] = [
   { slug: "magnitude-6pt5-earthquake-in-la-before-2027", peril: "quake", location: "Los Angeles", label: "M6.5+ in LA" },
   { slug: "will-california-experience-a-7pt0-or-above-magnitude-earthquake-in-2026-20260723232901145", peril: "quake", location: "California", label: "M7.0+ in California" },
   { slug: "which-cities-will-get-more-snow-than-average-this-winter-2026-2027", peril: "snow", location: "", cityFromGroup: true, label: "More snow than average" },
+  // added 2026-11-19 (live, priced): flood gauges, hurricane landfalls, US disaster count, California dry winter, first snow
+  { slug: "highest-st-johns-river-level-at-cocoa-by-november-30", peril: "flood", location: "Cocoa, FL" },
+  { slug: "highest-sea-level-in-san-diego-this-winter", peril: "flood", location: "San Diego" },
+  { slug: "will-any-category-4-hurricane-make-landfall-in-the-us-in-before-2027", peril: "storm", location: "US", label: "Cat 4+ hurricane landfall in the US" },
+  { slug: "will-any-category-5-hurricane-make-landfall-in-the-us-in-before-2027", peril: "storm", location: "US", label: "Cat 5 hurricane landfall in the US" },
+  { slug: "will-2-or-more-hurricanes-make-landfall-in-the-us-in-2026-20260721164140039", peril: "storm", location: "US", label: "2+ US hurricane landfalls" },
+  { slug: "will-a-hurricane-make-landfall-in-hawaii-before-2027-20260721182828397", peril: "storm", location: "Hawaii", label: "Hurricane landfall in Hawaii" },
+  { slug: "where-will-a-hurricane-make-landfall-in-the-us-during-the-2026-hurricane-season", peril: "storm", location: "", cityFromGroup: true, label: "Hurricane landfall" },
+  { slug: "will-the-us-break-its-record-for-billion-dollar-weather-and-climate-disasters-in-2026-1787153419673", peril: "storm", location: "US", label: "Record year: 29+ US billion-dollar disasters" },
+  { slug: "california-winter-2026-27-wetter-or-drier", peril: "rain", location: "California", yesLabel: "Drier than normal (Dec–Feb < 11.99 in)" },
+  { slug: "first-snow-2026", peril: "snow", location: "", cityFromGroup: true, label: "Any snow" },
 ];
-export const DISASTER_SOURCE: PolySource = { key: "disaster", tagId: 0, perils: ["water", "storm", "quake", "snow"], days: 180 };
+export const POLY_DISASTER_TAGS = ["climate", "natural-disasters", "hurricanes", "earthquakes"];
+export const DISASTER_SOURCE: PolySource = { key: "disaster", tagId: 0, perils: ["water", "storm", "quake", "snow", "rain", "flood"], days: 180 };
 
-interface PEventFull extends PEvent { startDate?: string }
+/** US cities Polymarket lists monthly precipitation for (slug city -> place). */
+export const POLY_PRECIP_CITIES: Record<string, string> = { nyc: "NYC", seattle: "Seattle", "los-angeles": "Los Angeles", chicago: "Chicago", miami: "Miami", austin: "Austin", houston: "Houston", dallas: "Dallas", denver: "Denver" };
 
-/** Disaster/climate events -> read-only contracts. Bucket labels ("1,033–1,038 ft", "Below 3.00 ft", "1250+") become bounds. */
+/** Slugs that change every day / month: daily rain-by-city (today .. +3) and monthly precipitation (this month + next). */
+export function dynamicDisasterSlugs(now = new Date()): string[] {
+  const today = centralDate(now);
+  const out: string[] = [];
+  for (let i = 0; i <= 3; i++) {
+    const [y, m, d] = addDays(today, i).split("-").map(Number);
+    out.push(`where-will-it-rain-on-${MONTHS[m - 1]}-${d}-${y}`);
+  }
+  const mo = Number(today.slice(5, 7)) - 1;
+  for (const k of [mo, (mo + 1) % 12]) for (const c of Object.keys(POLY_PRECIP_CITIES)) out.push(`precipitation-in-${c}-in-${MONTHS[k]}`);
+  return out;
+}
+
+const US_STATES = ["Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut", "Delaware", "Florida", "Georgia", "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky", "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota", "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada", "New Hampshire", "New Jersey", "New Mexico", "New York", "North Carolina", "North Dakota", "Ohio", "Oklahoma", "Oregon", "Pennsylvania", "Rhode Island", "South Carolina", "South Dakota", "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington", "West Virginia", "Wisconsin", "Wyoming"];
+const US_RE = /\b(US|U\.S\.|United States|America)\b/;
+
+/**
+ * Title rules for events found by tag / dynamic slug (fixed POLY_EVENTS win). Returns null for anything that is not a
+ * US natural-disaster / weather market a small business can lose money on.
+ */
+export function classifyPolyEvent(e: { slug: string; title: string }): PolyEventSpec | null {
+  const t = e.title, slug = e.slug;
+  let m: RegExpMatchArray | null;
+  if (/tornado/i.test(t)) return US_RE.test(t) ? { slug, peril: "storm", location: "US" } : null;
+  if (/hurricane|tropical storm|named storm/i.test(t)) {
+    if (/landfall/i.test(t) && /\bwhere\b/i.test(t) && US_RE.test(t)) return { slug, peril: "storm", location: "", cityFromGroup: true, label: "Hurricane landfall" };
+    const st = US_STATES.find((s) => new RegExp(`\\b${s}\\b`).test(t));
+    if (/landfall/i.test(t) && st) return { slug, peril: "storm", location: st };
+    if (/landfall/i.test(t) && US_RE.test(t)) return { slug, peril: "storm", location: "US" };
+    return null; // basin counts, Pacific records, "when will the next one form": no place, not a loss
+  }
+  if (/billion-dollar .*disasters?/i.test(t) && US_RE.test(t)) return { slug, peril: "storm", location: "US" };
+  if (/earthquake|magnitude/i.test(t)) {
+    if (/\bLA\b|Los Angeles/.test(t)) return { slug, peril: "quake", location: "Los Angeles" };
+    if (/California/.test(t)) return { slug, peril: "quake", location: "California" };
+    if (/^where will/i.test(t)) return { slug, peril: "quake", location: "", cityFromGroup: true, label: "M6.0+ earthquake" }; // country ladder: keeps "United States"
+    return null; // worldwide counts / max magnitude
+  }
+  if (/where will it rain on/i.test(t)) return { slug, peril: "rain", location: "", cityFromGroup: true, label: "Rain" };
+  if ((m = t.match(/^precipitation in (.+?) in [A-Za-z]+\??$/i))) {
+    const city = Object.values(POLY_PRECIP_CITIES).find((c) => c.toLowerCase() === m![1].trim().toLowerCase());
+    return city ? { slug, peril: "rain", location: city } : null;
+  }
+  if (/first snow|will it snow in/i.test(t)) return { slug, peril: "snow", location: "", cityFromGroup: true, label: "Any snow" };
+  if (/more snow than average/i.test(t)) return { slug, peril: "snow", location: "", cityFromGroup: true, label: "More snow than average" };
+  if (/(highest|peak).*(river|sea level|water level|flood)/i.test(t) && (m = t.match(/\bat ([A-Z][A-Za-z. ]+?)\b(?: by| this|\?|$)/) ?? t.match(/\bin ([A-Z][A-Za-z. ]+?)\b(?: by| this|\?|$)/))) return { slug, peril: "flood", location: m[1].trim() };
+  if (/lake mead|lake powell|great salt lake|mississippi/i.test(t)) {
+    const loc = /mead/i.test(t) ? "Lake Mead" : /powell/i.test(t) ? "Lake Powell" : /salt lake/i.test(t) ? "Great Salt Lake" : /baton rouge/i.test(t) ? "Baton Rouge" : /st\.? louis/i.test(t) ? "St. Louis" : "";
+    return loc ? { slug, peril: "water", location: loc } : null;
+  }
+  return null;
+}
+
+const US_CITY_GROUP = /^(.+?),\s*([A-Z]{2})\b/; // "Chicago, IL by November 30" / "New York, NY"
+/** Place for a "group" market: US city ("Chicago, IL ..." -> "Chicago"), US state, "United States" -> "US"; else null (non-US). */
+export function placeFromGroup(group: string): string | null {
+  const g = group.trim();
+  if (!g) return null;
+  const m = g.match(US_CITY_GROUP);
+  if (m) return m[1].trim();
+  if (US_STATES.includes(g)) return g;
+  if (/^(US|USA|United States)$/i.test(g)) return "US";
+  if (/^[A-Z][a-z]+(?: [A-Z][a-z]+)*$/.test(g) && !/[,]/.test(g) && POLY_WEATHER_CITIES_SET.has(g.toLowerCase())) return g; // bare US city ("Chicago")
+  return null;
+}
+const POLY_WEATHER_CITIES_SET = new Set([...Object.values(POLY_WEATHER_CITIES), "New York City", "Boston", "Detroit", "Minneapolis", "Philadelphia", "Pittsburgh", "Salt Lake City"].map((x) => x.toLowerCase()));
+
+/** Bucket labels as Polymarket writes them -> bounds: '<3"', '3-4.5"', '>7.75"', "Under 10", "10 - 24", "60 or more", "1250+". */
+export function disasterBounds(label: string): Bounds | null {
+  const s = label.replace(/(\d)\s*"/g, "$1 inches").replace(/[–—]/g, "–").trim();
+  if (!/\d/.test(s)) return null;
+  return parseBounds(s);
+}
+
+/** Observation window from the title: "on November 20" (one day), "in November 2026" (the month), "by November 30" (end). */
+export function titleWindow(title: string, startIso: string | undefined, today: string): { start?: string; end?: string } {
+  const year = Number((startIso ?? today).slice(0, 4));
+  const mi = (w: string) => MONTHS.indexOf(w.toLowerCase());
+  let m: RegExpMatchArray | null;
+  const ymd = (y: number, mo: number, d: number) => `${y}-${String(mo + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const yFor = (mo: number) => (startIso && mo < Number(startIso.slice(5, 7)) - 1 ? year + 1 : year);
+  if ((m = title.match(/\bon ([A-Za-z]+) (\d{1,2})\b/)) && mi(m[1]) >= 0) { const d = ymd(yFor(mi(m[1])), mi(m[1]), Number(m[2])); return { start: d, end: d }; }
+  if ((m = title.match(/\bby ([A-Za-z]+) (\d{1,2})\b/)) && mi(m[1]) >= 0) return { end: ymd(yFor(mi(m[1])), mi(m[1]), Number(m[2])) };
+  if ((m = title.match(/\bin ([A-Za-z]+)(?: (\d{4}))?\??$/)) && mi(m[1]) >= 0) {
+    const mo = mi(m[1]), y = m[2] ? Number(m[2]) : yFor(mo);
+    return { start: ymd(y, mo, 1), end: new Date(Date.UTC(y, mo + 1, 0)).toISOString().slice(0, 10) };
+  }
+  return {};
+}
+
+/** Disaster/climate events -> contracts (venue polymarket). Fixed specs by slug first, then classifyPolyEvent. */
 export function normalizePolyEvents(events: PEventFull[], specs: PolyEventSpec[] = POLY_EVENTS, now = new Date()): MarketContract[] {
   const out: MarketContract[] = [];
   const bySlug = new Map(specs.map((x) => [x.slug, x]));
   const today = centralDate(now);
+  const seen = new Set<string>();
   for (const e of events) {
-    const spec = bySlug.get(e.slug);
+    if (!e?.slug || seen.has(e.slug)) continue;
+    seen.add(e.slug);
+    const spec = bySlug.get(e.slug) ?? classifyPolyEvent(e);
     if (!spec || e.closed) continue;
+    const win = titleWindow(e.title, e.startDate, today);
     for (const m of e.markets ?? []) {
       if (!m?.slug || m.closed) continue;
       const outs = arr(m.outcomes), pxs = arr(m.outcomePrices).map(Number);
-      if (outs.length !== 2 || outs[0].toLowerCase() !== "yes") continue;
+      if (outs.length !== 2) continue;
+      if (outs[0].toLowerCase() !== "yes" && !spec.yesLabel) continue;
       const group = (m.groupItemTitle || "").trim();
-      const location = spec.cityFromGroup ? group : spec.location;
-      if (!location) continue;
-      const label = spec.cityFromGroup ? `${group}: ${spec.label ?? "Yes"}` : group || spec.label || m.question;
-      const bounds = spec.cityFromGroup ? null : parseBounds(group);
+      const location = spec.cityFromGroup ? placeFromGroup(group) : spec.location;
+      if (!location) continue; // non-US outcome ("Indonesia") or unknown place
+      const label = spec.yesLabel ?? (spec.cityFromGroup ? `${location}: ${spec.label ?? "Yes"}` : group || spec.label || m.question);
+      const bounds = spec.cityFromGroup || spec.yesLabel ? null : disasterBounds(group);
       const mid = Number.isFinite(pxs[0]) ? pxs[0] : null;
       const yesAsk = price(m.bestAsk) ?? price(mid);
       const yesBid = price(m.bestBid) ?? price(mid);
+      if (yesAsk === null && yesBid === null) continue; // dead / unpriced
+      if ((yesAsk ?? 1) >= 0.98 && (yesBid ?? 0) <= 0.02) continue; // empty book (1¢ bid / 99¢ ask): no real price
       const id = `polymarket:${m.slug}`;
       const end = m.endDate || e.endDate || "";
-      const start = e.startDate ? centralDate(e.startDate) : today;
+      const startDay = win.start ?? (e.startDate ? centralDate(e.startDate) : today);
+      const endDay = win.end ?? (end ? centralDate(end) : undefined);
       setMeta(id, {
-        eventDate: start < today ? today : start, eventEnd: end ? centralDate(end) : undefined, bounds: bounds ?? undefined,
+        eventDate: startDay < today ? today : startDay, eventEnd: endDay && endDay >= today ? endDay : undefined, bounds: bounds ?? undefined,
         volume: num(m.volumeNum) ?? undefined, openInterest: num(m.liquidityNum) ?? undefined, category: spec.peril, rules: m.question,
       });
       out.push({
@@ -250,12 +374,23 @@ export function normalizePolyEvents(events: PEventFull[], specs: PolyEventSpec[]
   return out;
 }
 
-async function fetchDisasters(): Promise<MarketContract[]> {
-  const qs = POLY_EVENTS.map((x) => `slug=${encodeURIComponent(x.slug)}`).join("&");
-  const r = await fetch(`${GAMMA}/events?${qs}`, { headers: { accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(10_000) });
-  if (!r.ok) throw new Error(`polymarket disasters -> ${r.status}`);
+async function gammaEvents(qs: string): Promise<PEventFull[]> {
+  const r = await fetch(`${GAMMA}/events?${qs}`, { headers: { accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(12_000) });
+  if (!r.ok) throw new Error(`polymarket events -> ${r.status}`);
   const rows = (await r.json()) as unknown;
-  return normalizePolyEvents(Array.isArray(rows) ? (rows as PEventFull[]) : []);
+  return Array.isArray(rows) ? (rows as PEventFull[]) : [];
+}
+
+async function fetchDisasters(now = new Date()): Promise<MarketContract[]> {
+  const slugs = [...new Set([...POLY_EVENTS.map((x) => x.slug), ...dynamicDisasterSlugs(now)])];
+  const batches: string[] = [];
+  for (let i = 0; i < slugs.length; i += 25) batches.push(slugs.slice(i, i + 25).map((s) => `slug=${encodeURIComponent(s)}`).join("&"));
+  const res = await Promise.allSettled([
+    ...batches.map((qs) => gammaEvents(`${qs}&limit=100`)), // Gamma caps an unbounded slug query at 20 events
+    ...POLY_DISASTER_TAGS.map((t) => gammaEvents(`tag_slug=${t}&closed=false&limit=100`)),
+  ]);
+  if (res.every((r) => r.status === "rejected")) throw new Error("polymarket disasters unreachable");
+  return normalizePolyEvents(res.flatMap((r) => (r.status === "fulfilled" ? r.value : [])), POLY_EVENTS, now);
 }
 
 // ---------- fetch + cache ----------
@@ -279,10 +414,12 @@ async function fetchSource(src: PolySource, now = new Date()): Promise<MarketCon
 /** Pseudo-source for daily temperature (fetched by slug, not by tag). */
 export const WEATHER_SOURCE: PolySource = { key: "weather", tagId: 103040, perils: ["heat", "cold"], days: WEATHER_DAYS };
 
-/** Cached (60s) per source, stale-on-error, [] when never reachable. */
+/** Disaster events move slowly and the pull is ~10 requests: refresh every 5 min. */
+const DISASTER_TTL = 5 * 60_000;
+/** Cached (60s; disasters 5 min) per source, stale-on-error, [] when never reachable. */
 async function cachedSource(src: PolySource): Promise<MarketContract[]> {
   const c = cache.get(src.key);
-  if (c && Date.now() - c.t < TTL) return c.v;
+  if (c && Date.now() - c.t < (src.key === "disaster" ? DISASTER_TTL : TTL)) return c.v;
   const stale = c && c.v.length ? c.v : null; // serve the last good list while a refresh runs
   if (c?.p) return stale ?? c.p;
   const p = (src.key === "weather" ? fetchWeather() : src.key === "disaster" ? fetchDisasters() : fetchSource(src))
@@ -309,7 +446,9 @@ export async function getPolymarket(id: string): Promise<MarketContract | null> 
     const slug = id.replace(/^polymarket:/, "");
     const r = await fetch(`${GAMMA}/markets?slug=${encodeURIComponent(slug)}`, { signal: AbortSignal.timeout(8_000) });
     const rows = r.ok ? ((await r.json()) as PMarket[]) : [];
-    return normalizePolymarkets(Array.isArray(rows) ? rows : [])[0] ?? null;
+    const list = Array.isArray(rows) ? rows : [];
+    // not in any live source (e.g. a disaster market that closed): peril from the question so it can still settle
+    return normalizePolymarkets(list)[0] ?? normalizePolymarkets(list, { key: "lookup", tagId: 0, perils: [perilFromText(list[0]?.question ?? "")], days: 0 })[0] ?? null;
   } catch { return null; }
 }
 

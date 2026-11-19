@@ -2,6 +2,7 @@
 // (event date, numeric bounds, teams, outcome mints) that types.ts doesn't carry.
 import type { MarketContract, Peril } from "../types";
 import type { GContract, GEvent } from "./geminiPm";
+import { futureMeta, isFutureTicker, winsBounds } from "./futures";
 
 // ---------- side map ----------
 
@@ -30,6 +31,7 @@ export interface ContractMeta {
   openInterest?: number;
   source?: "gemini" | "dflow" | "kalshi-public";
   outcomeMints?: { yesMint: string; noMint: string; settlementMint?: string; marketLedger?: string };
+  futureKind?: "playoffs" | "division" | "conference" | "round" | "title" | "wins"; // season-long sports futures (lib/markets/futures.ts)
 }
 
 const metaMap = new Map<string, ContractMeta>();
@@ -216,7 +218,8 @@ export function normalizeGeminiEvents(events: GEvent[], opts: { includeProps?: b
     else if (cat === "commodities") kind = "commodity";
     else if (cat === "crypto") kind = "crypto";
     else kind = "other"; // Economics (Fed, CPI, GDP, unemployment, recession, monthly US gas), Politics (shutdown)
-    if (kind === "sports" && !opts.includeProps && !/-M$/.test(e.ticker)) continue;
+    const isFuture = kind === "sports" && isFutureTicker(e.ticker); // season futures (playoffs, titles, win totals)
+    if (kind === "sports" && !opts.includeProps && !/-M$/.test(e.ticker) && !isFuture) continue;
     // Politics: only what moves a small business's cash flow (government shutdown / funding); elections are noise here.
     if (cat === "politics" && !/shutdown|funded|funding|debt ceiling/i.test(e.title)) continue;
 
@@ -238,7 +241,11 @@ export function normalizeGeminiEvents(events: GEvent[], opts: { includeProps?: b
       eventDate = d ?? (e.expiryDate ? centralDate(e.expiryDate) : undefined);
     }
 
+    const winsRungs = isFuture ? (e.contracts ?? []).map((c) => ({ n: winsBounds(c.label)?.lo ?? -1, yesAsk: price(c.prices?.buy?.yes) ?? price(c.prices?.bestAsk) })).filter((r) => r.n >= 0) : undefined;
     for (const c of e.contracts ?? []) {
+      // futures: team from the rules text (label/rules disagreement or a broken wins rung -> drop), real season end date
+      const fm = isFuture ? futureMeta({ ticker: e.ticker, title: e.title, label: c.label, rules: richTextOf(c.description), venueExpiry: c.expiryDate ?? e.expiryDate, extraNames: [c.target?.name], winsRungs }) : null;
+      if (isFuture && !fm) continue;
       const bounds = parseBounds(c.label);
       let peril: Peril;
       if (kind === "weather") peril = wm ? tempPeril(bounds, lowSeries) : perilFromText(e.title);
@@ -274,9 +281,23 @@ export function normalizeGeminiEvents(events: GEvent[], opts: { includeProps?: b
         meta.teams = [c.label, c.target?.name].filter((x): x is string => !!x);
         meta.opponents = e.contracts.filter((o) => o !== c).flatMap((o) => [o.label, o.target?.name]).filter((x): x is string => !!x);
       }
+      if (fm) Object.assign(meta, fm, { bounds: fm.bounds ?? meta.bounds });
       setMeta(id, meta);
       out.push(mc);
     }
   }
   return out;
+}
+
+/** Plain text of a Gemini rich-text description (same walk as geminiPm.richText; kept here to avoid a runtime import). */
+function richTextOf(node: unknown): string {
+  if (typeof node === "string") return node;
+  let out = "";
+  const walk = (n: any) => {
+    if (!n || typeof n !== "object") return;
+    if (n.nodeType === "text" && typeof n.value === "string") out += n.value;
+    if (Array.isArray(n.content)) n.content.forEach(walk);
+  };
+  walk(node);
+  return out.trim();
 }

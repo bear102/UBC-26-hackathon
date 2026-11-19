@@ -10,6 +10,11 @@ export function Provenance({ venue, backing }: {
 }) {
   const v = venue && venue in VENUES ? (venue as VenueId) : null;
   if (!v) return null;
+  if (v === "hedgehog") return (
+    <div className="row xs" style={{ gap: 6, margin: "10px 0 0", alignItems: "center", fontFamily: "var(--mono)", letterSpacing: ".04em" }}>
+      <VenueBadge venue={v} role={false} /><span className="muted">Underwritten by the Hedgehog pool · no exchange backing</span>
+    </div>
+  );
   // Backing is placed on the venue that priced the cover (best price). Only Gemini can ever go live; others are recorded plans.
   const backed = backing
     ? <span className={`badge ${VENUES[v].cls}`}>{VENUES[v].name} · {backing.mode === "live" ? backing.status : backing.status === "error" ? "not placed" : "order recorded (demo)"}</span>

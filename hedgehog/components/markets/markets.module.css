@@ -28,9 +28,9 @@
 .stat span { font-family: var(--sans); font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
 .stat b { font-size: 34px; color: var(--ink); }
 .statMain b { font-size: 44px; }
-.st_gemini span, .st_kalshi span, .st_polymarket span { display: inline-flex; align-items: center; gap: 7px; }
-.st_gemini span::before, .st_kalshi span::before, .st_polymarket span::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-.st_gemini span { color: var(--gemini); } .st_kalshi span { color: var(--kalshi); } .st_polymarket span { color: var(--poly); }
+.st_gemini span, .st_kalshi span, .st_polymarket span, .st_hedgehog span { display: inline-flex; align-items: center; gap: 7px; }
+.st_gemini span::before, .st_kalshi span::before, .st_polymarket span::before, .st_hedgehog span::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.st_gemini span { color: var(--gemini); } .st_kalshi span { color: var(--kalshi); } .st_polymarket span { color: var(--poly); } .st_hedgehog span { color: var(--hedgehog); }
 .statAsOf time { font-family: var(--sans); font-size: 13px; color: var(--ink-2); line-height: 1.4; }
 @media (max-width: 1080px) {
   .stat { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -56,9 +56,9 @@
 .filterRow > label { font-family: var(--sans); font-size: 11px; color: var(--ink-2); font-weight: 500; text-transform: uppercase; letter-spacing: .05em; padding-top: 10px; }
 .count { opacity: .6; font-weight: 500; font-family: var(--sans); font-size: 12px; }
 .venueChip .vdot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
-.vc_gemini .vdot { color: var(--gemini); } .vc_kalshi .vdot { color: var(--kalshi); } .vc_polymarket .vdot { color: var(--poly); }
+.vc_gemini .vdot { color: var(--gemini); } .vc_kalshi .vdot { color: var(--kalshi); } .vc_polymarket .vdot { color: var(--poly); } .vc_hedgehog .vdot { color: var(--hedgehog); }
 .venueChip[aria-pressed="true"] .vdot { color: var(--surface); box-shadow: 0 0 0 1.5px currentColor; background: transparent; }
-.vc_gemini[aria-pressed="true"] .vdot { background: var(--gemini); } .vc_kalshi[aria-pressed="true"] .vdot { background: var(--kalshi); } .vc_polymarket[aria-pressed="true"] .vdot { background: var(--poly); }
+.vc_gemini[aria-pressed="true"] .vdot { background: var(--gemini); } .vc_kalshi[aria-pressed="true"] .vdot { background: var(--kalshi); } .vc_polymarket[aria-pressed="true"] .vdot { background: var(--poly); } .vc_hedgehog[aria-pressed="true"] .vdot { background: var(--hedgehog); }
 .whereRow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .whereRow .input { width: auto; font-size: 14px; padding: 8px 12px; min-height: 40px; }
 .whereRow select.input { flex: 0 0 220px; }
@@ -95,7 +95,7 @@
 .odd { display: block; height: 3px; width: 64px; margin: 5px 0 0 auto; background: var(--line); }
 .odd > i { display: block; height: 100%; background: var(--ink); }
 .v_gemini, .v_kalshi, .v_polymarket { font-weight: 600; }
-.grid th.v_gemini { color: var(--gemini); } .grid th.v_kalshi { color: var(--kalshi); } .grid th.v_polymarket { color: var(--poly); }
+.grid th.v_gemini { color: var(--gemini); } .grid th.v_kalshi { color: var(--kalshi); } .grid th.v_polymarket { color: var(--poly); } .grid th.v_hedgehog { color: var(--hedgehog); }
 .evMore { margin: 0; border-top: 1px dashed var(--line-2); width: 100%; justify-content: flex-start; border-radius: 0; padding-left: 18px; font-family: var(--sans); font-size: 12px; letter-spacing: .05em; text-transform: uppercase; }
 .moreBtn { justify-self: center; margin-top: 8px; }
 .footnote { margin: 26px 0 0; padding-top: 14px; border-top: 3px double var(--ink); font-size: 12.5px; color: var(--muted); max-width: 900px; }
@@ -124,7 +124,7 @@
 .val { white-space: nowrap; }
 .val :global(.num) { font-family: var(--sans); }
 .dot { color: var(--muted); margin: 0 4px 0 2px; }
-.v_gemini { color: var(--gemini); } .v_kalshi { color: var(--kalshi); } .v_polymarket { color: var(--poly); }
+.v_gemini { color: var(--gemini); } .v_kalshi { color: var(--kalshi); } .v_polymarket { color: var(--poly); } .v_hedgehog { color: var(--hedgehog); }
 .verdict { margin-left: 4px; font-weight: 600; }
 .agree { color: var(--pay); }
 .close { color: var(--ink-2); }

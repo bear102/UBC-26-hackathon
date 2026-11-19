@@ -7,7 +7,13 @@ import { ideasFromPlaybook } from "../lib/ai/ideas";
 import { getPreset } from "../lib/ai/presets";
 import type { BusinessProfile, MarketContract } from "../lib/types";
 
-const MARKETS: MarketContract[] = JSON.parse(readFileSync(new URL("./fixtures/playbook-markets.json", import.meta.url), "utf8"));
+const MARKETS: MarketContract[] = [
+  ...JSON.parse(readFileSync(new URL("./fixtures/playbook-markets.json", import.meta.url), "utf8")),
+  // Hedgehog parametric contracts generated for Austin on 2026-11-19 + Kalshi US tornado count (proxy ideas)
+  ...JSON.parse(readFileSync(new URL("./fixtures/parametric-playbook-markets.json", import.meta.url), "utf8")),
+  // long-horizon ideas (season futures, year-end diesel, the year's mortgage-rate high, shutdown), from .data/eval/markets-v3.json
+  ...JSON.parse(readFileSync(new URL("./fixtures/long-horizon-markets.json", import.meta.url), "utf8")),
+];
 const NOW = new Date("2026-11-19T09:00:00Z");
 const biz = (description: string, over: Partial<BusinessProfile> = {}): BusinessProfile => ({
   id: "t", name: "Test Co", description, city: "Austin, TX", avgDailyRevenueUsd: 2000, busyDays: ["Sat"], monthlyBudgetUsd: 200, ...over,

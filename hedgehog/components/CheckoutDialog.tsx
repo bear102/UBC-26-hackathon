@@ -138,6 +138,7 @@ export function CheckoutDialog({ kind, line, risk, businessId, onClose, onDone }
               ? "Hedgehog settles it from the market's official result. If it never settles, you can reclaim the premium after expiry."
               : "The outcome tokens go straight to your wallet."}
               {gemini && " Backed by the same contract on Gemini."}
+              {line.contract.venue === "hedgehog" && " Settles from public data (USGS, NOAA, NIFC, US AQI). Underwritten by the Hedgehog pool · no exchange backing."}
               {" "}Devnet prototype, not an insurance product. Pays on the market's result, not your actual loss.</p>
             {mock && <div className="alert alert-info small" style={{ marginBottom: 12 }}>Demo mode: simulated, nothing goes onchain.</div>}
             <div className={s.actions}>

@@ -1,9 +1,10 @@
 // Deterministic sizing + budget allocation (DESIGN §4 step 4). No LLM here.
-import type { HedgeLeg, MarketContract, QuoteLine, Risk } from "../types";
+import type { HedgeLeg, MarketContract, QuoteLine, Risk, VenueId } from "../types";
 import { getBook, type BookLevels } from "./book";
 import { contractMeta, type Bounds } from "./normalize";
 import { slotKey } from "./index";
 import { findEquivalent } from "./compare";
+import { monthsOfCover } from "../ai/horizon";
 
 /** Integer-°F/whole-unit aware: "Above 77" (lo 77 exclusive) == "78°F or above" (lo 78 inclusive) for temperatures. */
 function boundsKey(b: Bounds | undefined): string | null {
@@ -92,6 +93,21 @@ export interface SizeArgs {
   crossCheck?: boolean;
   /** Best-execution routing: move a Kalshi leg to the identical Gemini contract when it is no dearer (default true). */
   route?: boolean;
+  /** Clock for months-of-cover (season / month-total contracts are charged premium / months against the monthly budget). */
+  now?: Date;
+}
+
+/**
+ * Months a contract's cover runs from `now` (1..6): only contracts that OBSERVE a long window (season futures, month /
+ * season totals). A single event far away (a Fed meeting in March) is one event, not months of cover.
+ */
+export function coverMonths(c: MarketContract, now = new Date()): number {
+  const m = contractMeta(c.id);
+  if (!m?.eventEnd) return 1;
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago" }).format(now);
+  const from = m.eventDate && m.eventDate > today ? m.eventDate : today;
+  const span = (Date.parse(`${m.eventEnd}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 86_400_000;
+  return m.futureKind || span >= 20 ? monthsOfCover(m.eventEnd, now) : 1;
 }
 
 /** Gemini may cost at most this much more than Kalshi for the same contract and still win the route. */
@@ -110,7 +126,8 @@ export const ROUTE_TOLERANCE = 0.01;
  */
 export function routeToBest(legs: HedgeLeg[], contracts: Map<string, MarketContract>): HedgeLeg[] {
   const pool = [...contracts.values()].filter(isCoverable);
-  const pref = { gemini: 0, kalshi: 0.002, polymarket: 0.004 } as const;
+  // hedgehog (parametric) is never a route target: it only exists where no venue lists the peril
+  const pref: Record<VenueId, number> = { gemini: 0, kalshi: 0.002, polymarket: 0.004, hedgehog: 0.01 };
   const taken = new Set(legs.map((l) => l.contractId));
   return legs.map((leg) => {
     const c = contracts.get(leg.contractId);
@@ -171,7 +188,7 @@ export async function sizeQuote(args: SizeArgs): Promise<SizeResult> {
     }));
   }
 
-  type Cand = { line: QuoteLine; ladder: Level[]; want: number };
+  type Cand = { line: QuoteLine; ladder: Level[]; want: number; months: number };
   const cands: Cand[] = [];
   for (const leg of legs) {
     const risk = riskById.get(leg.riskId);
@@ -199,7 +216,8 @@ export async function sizeQuote(args: SizeArgs): Promise<SizeResult> {
       impliedProb: topAsk, action: actionFor(c),
     };
     if (filled < want) line.maxCoverable = Math.floor(w.available);
-    cands.push({ line, ladder, want: filled });
+    const months = coverMonths(c, args.now);
+    cands.push({ line, ladder, want: filled, months });
   }
 
   // Read-only (context) lines are shown but never bought, so they don't spend the budget or count in totals.
@@ -207,21 +225,24 @@ export async function sizeQuote(args: SizeArgs): Promise<SizeResult> {
   const buyable = cands.filter((c) => c.line.action !== "read-only");
   cands.length = 0; cands.push(...buyable);
 
-  // Budget: keep the best payout-per-premium lines first; scale the marginal one; drop the rest.
-  let total = cands.reduce((s, c) => s + c.line.premiumUsd, 0);
+  // Budget (monthly): a line is charged premium / months-of-cover (season futures, month totals; max 6), so a season hedge
+  // bought once doesn't eat one month's budget. Keep the best payout-per-premium lines first; scale the marginal one; drop the rest.
+  const charge = (c: Cand) => c.line.premiumUsd / c.months;
+  let total = cands.reduce((s, c) => s + charge(c), 0);
   let lines: QuoteLine[];
   if (total <= budgetUsd + 1e-9) {
     lines = cands.map((c) => c.line);
   } else {
+    // cheapest protection first (payout per premium dollar): this week's cheap tails stay in; a season line takes what is left
     const order = [...cands].sort((a, b) => b.line.payoutUsd / b.line.premiumUsd - a.line.payoutUsd / a.line.premiumUsd);
     let left = budgetUsd;
     const kept = new Set<Cand>();
     for (const c of order) {
-      if (c.line.premiumUsd <= left + 1e-9) { kept.add(c); left -= c.line.premiumUsd; continue; }
-      const { n, cost } = maxAffordable(c.ladder, c.want, left);
+      if (charge(c) <= left + 1e-9) { kept.add(c); left -= charge(c); continue; }
+      const { n, cost } = maxAffordable(c.ladder, c.want, left * c.months);
       if (n >= 1) {
         c.line = { ...c.line, contracts: n, payoutUsd: n, premiumUsd: r2(cost), pricePerContract: r4(cost / n) };
-        kept.add(c); left -= cost;
+        kept.add(c); left -= cost / c.months;
         uncovered.push({ riskId: c.line.riskId, reason: `budget: scaled ${c.line.contract.label} to ${n} of ${c.want} contracts` });
       } else {
         uncovered.push({ riskId: c.line.riskId, reason: `over budget: ${c.line.contract.label} needs $${c.line.premiumUsd.toFixed(2)}, $${Math.max(0, left).toFixed(2)} left of $${budgetUsd}` });
@@ -229,6 +250,7 @@ export async function sizeQuote(args: SizeArgs): Promise<SizeResult> {
     }
     lines = cands.filter((c) => kept.has(c)).map((c) => c.line);
   }
+  for (const c of cands) if (c.months > 1) c.line.premiumPerMonth = r2(c.line.premiumUsd / c.months);
   total = r2(lines.reduce((s, l) => s + l.premiumUsd, 0));
   const totalPayoutUsd = lines.reduce((s, l) => s + l.payoutUsd, 0);
   lines = [...lines, ...context];

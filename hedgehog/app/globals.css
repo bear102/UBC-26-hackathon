@@ -76,6 +76,7 @@
   --gemini: #0F7C8C;
   --kalshi: #1D7A47;
   --poly: #2F4FB8;
+  --hedgehog: #8A6A22; /* Hedgehog parametric cover (pool-underwritten) */
 
   /* engraving */
   --guil: #2B5C78;
@@ -336,8 +337,8 @@ a.form:hover { transform: translateY(-3px); box-shadow: var(--shadow-hard); colo
 /* ---------- badges ---------- */
 .badge { display: inline-flex; align-items: center; gap: 6px; font-family: var(--sans); font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
   padding: 3px 7px; border: 1.25px solid currentColor; border-radius: var(--radius-sm); white-space: nowrap; line-height: 1.4; background: var(--surface); color: var(--ink-2); }
-.badge-gemini { color: var(--gemini); } .badge-kalshi { color: var(--kalshi); } .badge-polymarket { color: var(--poly); }
-.badge-gemini::before, .badge-kalshi::before, .badge-polymarket::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.badge-gemini { color: var(--gemini); } .badge-kalshi { color: var(--kalshi); } .badge-polymarket { color: var(--poly); } .badge-hedgehog { color: var(--hedgehog); }
+.badge-gemini::before, .badge-kalshi::before, .badge-polymarket::before, .badge-hedgehog::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
 .badge-neutral { color: var(--ink-2); border-color: var(--line-2); }
 .badge-good { color: var(--pay); } .badge-bad { color: var(--red); } .badge-gold { color: var(--gold); } .badge-brand { color: var(--ink); }
 .badge-demo { color: var(--info); }

@@ -3,20 +3,24 @@
 // Server-only; cached 60s with stale-while-revalidate, kept warm by instrumentation.ts (listMarkets caches each venue 45-60s).
 import type { MarketContract, Peril, VenueId } from "../types";
 import { listMarkets } from "./index";
+import { listParametric, PARAMETRIC_PERILS } from "./parametric";
+import { parametricEnabled } from "./proxies";
 import { boundsKey, boundsOf, eventDay, family, gameInfo, sideProb, underlying } from "./compare";
 
-export type RiskGroup = "heat" | "rain" | "snow" | "power" | "disaster" | "games" | "energy" | "commodities" | "rates" | "crypto" | "other";
+export type RiskGroup = "heat" | "rain" | "snow" | "power" | "disaster" | "games" | "energy" | "commodities" | "rates" | "crypto" | "parametric" | "other";
 export const RISK_GROUPS: { id: RiskGroup; label: string; perils: Peril[] }[] = [
   { id: "heat", label: "Heat & cold", perils: ["heat", "cold"] },
   { id: "rain", label: "Rain", perils: ["rain"] },
   { id: "snow", label: "Snow & winter", perils: ["snow"] },
   { id: "power", label: "Power & grid", perils: ["power"] },
-  { id: "disaster", label: "Water, quakes & storms", perils: ["water", "quake", "storm"] },
+  { id: "disaster", label: "Water, quakes & storms", perils: ["water", "quake", "storm", "flood"] }, // flood: real river / sea-level markets
   { id: "games", label: "Games", perils: ["game"] },
   { id: "energy", label: "Fuel & oil", perils: ["oil", "gas"] },
   { id: "commodities", label: "Natural gas & metals", perils: ["natgas", "metals"] },
   { id: "rates", label: "Rates & inflation", perils: ["fed", "cpi"] },
   { id: "crypto", label: "Crypto", perils: ["crypto"] },
+  // Hedgehog parametric contracts (venue "hedgehog"), only when HEDGEHOG_PARAMETRIC=1 (buildExplorer routes them here by venue)
+  { id: "parametric", label: "Parametric (Hedgehog)", perils: ["smoke", "hail", "wildfire"] },
   { id: "other", label: "Other", perils: ["other"] },
 ];
 export const groupOf = (p: Peril): RiskGroup => RISK_GROUPS.find((g) => g.perils.includes(p))?.id ?? "other";
@@ -44,10 +48,10 @@ export interface ExplorerData {
   places: string[];
 }
 
-const ORDER: VenueId[] = ["gemini", "kalshi", "polymarket"];
+const ORDER: VenueId[] = ["gemini", "kalshi", "polymarket", "hedgehog"];
 const NATIONAL: Peril[] = ["oil", "gas", "fed", "cpi", "natgas", "metals"];
 /** Groups whose events are tied to a place (city filter applies). */
-export const LOCAL_GROUPS: RiskGroup[] = ["heat", "rain", "snow", "power", "disaster"];
+export const LOCAL_GROUPS: RiskGroup[] = ["heat", "rain", "snow", "power", "disaster", "parametric"];
 
 function placeOf(c: MarketContract): string {
   if (c.peril === "game") return gameInfo(c).league ?? "";
@@ -76,7 +80,7 @@ function outcomeKey(c: MarketContract): string {
 const r3 = (x: number) => Math.round(x * 1000) / 1000;
 
 export function buildExplorer(markets: MarketContract[], now = Date.now()): ExplorerData {
-  const counts: Record<VenueId, number> = { gemini: 0, kalshi: 0, polymarket: 0 };
+  const counts: Record<VenueId, number> = { gemini: 0, kalshi: 0, polymarket: 0, hedgehog: 0 };
   const byKey = new Map<string, { ev: ExplorerEvent; outs: Map<string, ExplorerOutcome> }>();
   for (const c of markets) {
     if (c.status !== "open") continue;
@@ -87,7 +91,7 @@ export function buildExplorer(markets: MarketContract[], now = Date.now()): Expl
     const key = eventKey(c);
     let e = byKey.get(key);
     if (!e) {
-      e = { ev: { key, group: groupOf(c.peril), peril: family(c.peril), title: c.eventTitle, place: placeOf(c), date: eventDay(c), expiry: c.expiry, venues: [], outcomes: [] }, outs: new Map() };
+      e = { ev: { key, group: c.venue === "hedgehog" ? "parametric" : groupOf(c.peril), peril: family(c.peril), title: c.eventTitle, place: placeOf(c), date: eventDay(c), expiry: c.expiry, venues: [], outcomes: [] }, outs: new Map() };
       byKey.set(key, e);
     }
     const ev = e.ev;
@@ -133,7 +137,7 @@ export function buildExplorer(markets: MarketContract[], now = Date.now()): Expl
   events.sort((a, b) => (b.venues.length - a.venues.length) || a.date.localeCompare(b.date) || a.title.localeCompare(b.title));
   const places = [...new Set(events.filter((e) => LOCAL_GROUPS.includes(e.group)).map((e) => e.place).filter((p) => p && p !== "US"))]
     .sort((a, b) => (a === "Austin" ? -1 : b === "Austin" ? 1 : a.localeCompare(b)));
-  return { asOf: new Date(now).toISOString(), total: counts.gemini + counts.kalshi + counts.polymarket, counts, events, places };
+  return { asOf: new Date(now).toISOString(), total: counts.gemini + counts.kalshi + counts.polymarket + counts.hedgehog, counts, events, places };
 }
 
 type ExplorerCache = { t: number; v: ExplorerData; p?: Promise<ExplorerData> } | null;
@@ -154,16 +158,25 @@ export async function getExplorerData(): Promise<ExplorerData> {
 }
 
 function refresh(prev: ExplorerCache): Promise<ExplorerData> {
-  const p = listMarkets({ venues: ["gemini", "kalshi", "polymarket"] })
-    .then((ms) => {
+  const p = Promise.all([listMarkets({ venues: ["gemini", "kalshi", "polymarket"] }), parametricEnabled() ? explorerParametric() : Promise.resolve([])])
+    .then(([live, par]) => {
+      const ms = [...live, ...par];
       const v = buildExplorer(ms);
       // keep the previous snapshot if every venue came back empty (outage), but retry soon
       G.__hhExplorer = v.total > 0 || !prev ? { t: Date.now(), v } : { t: prev.t, v: prev.v };
       return G.__hhExplorer.v;
     })
     .catch((e) => { if (prev) { G.__hhExplorer = { t: prev.t, v: prev.v }; return prev.v; } G.__hhExplorer = null; throw e; });
-  G.__hhExplorer = { t: prev?.t ?? 0, v: prev?.v ?? { asOf: "", total: 0, counts: { gemini: 0, kalshi: 0, polymarket: 0 }, events: [], places: [] }, p };
+  G.__hhExplorer = { t: prev?.t ?? 0, v: prev?.v ?? { asOf: "", total: 0, counts: { gemini: 0, kalshi: 0, polymarket: 0, hedgehog: 0 }, events: [], places: [] }, p };
   return p;
+}
+
+/** Hedgehog parametric contracts shown in the explorer (next 7 / 30 days) for a few demo cities. A cold history pull
+ *  (~20 s) never blocks the page: whatever is ready within 12 s is shown, the rest fills the cache for the next pass. */
+export const EXPLORER_PARAMETRIC_CITIES = ["Austin, TX", "Houston, TX", "Denver, CO", "Los Angeles, CA"];
+async function explorerParametric(): Promise<MarketContract[]> {
+  const all = Promise.all(EXPLORER_PARAMETRIC_CITIES.map((c) => listParametric(PARAMETRIC_PERILS, c).catch(() => []))).then((x) => x.flat());
+  return Promise.race([all, new Promise<MarketContract[]>((r) => setTimeout(() => r([]), 12_000))]);
 }
 
 /** Background warmer: refresh if older than the TTL so a visitor never waits for a cold venue pass. */

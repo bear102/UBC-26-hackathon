@@ -3,8 +3,11 @@
 import { z } from "zod/v4";
 import type { BusinessProfile, HedgeLeg, MarketContract, NaturalHedge, Peril, Quote, QuoteLine, QuotePackage, Risk } from "../types";
 import { rescaleQuote, type Coverage } from "../client/quote";
+import { riskHorizon } from "./horizon";
+import { isLongContract, lineScore, settleDay, teamFutures } from "./longContext";
+import { contractMeta } from "../markets/normalize";
 
-const PERILS = ["heat", "cold", "rain", "game", "oil", "gas", "fed", "cpi", "crypto", "other", "snow", "power", "water", "quake", "storm", "natgas", "metals"] as const satisfies readonly Peril[];
+const PERILS = ["heat", "cold", "rain", "game", "oil", "gas", "fed", "cpi", "crypto", "other", "snow", "power", "water", "quake", "storm", "natgas", "metals", "flood", "smoke", "hail", "wildfire"] as const satisfies readonly Peril[];
 const TZ = "America/Chicago";
 const WEATHER: Peril[] = ["heat", "cold", "rain", "snow"];
 const TX_CITIES = ["austin", "dallas", "houston", "san antonio"];
@@ -28,6 +31,7 @@ export interface CatalogEntry {
   location?: string;      // weather: city list is inside `series`
   ids: string[];          // contract ids in this group
   line: string;           // rendered catalog line
+  long?: boolean;         // season future / period / long-dated series: never cut by the line cap
 }
 
 function shortDay(iso: string) {
@@ -47,9 +51,10 @@ export function buildCatalog(markets: MarketContract[], profile: BusinessProfile
   const groups = new Map<string, { peril: Peril; series: string; cs: MarketContract[] }>();
   const city = profile.city.split(",")[0].trim().toLowerCase();
   const tw = teamWords.map((w) => w.toLowerCase());
-  let otherGames = 0;
+  let otherGames = 0, otherFutures = 0;
   for (const m of live) {
     if (/today at \d/i.test(m.eventTitle)) continue; // intraday crypto ticks: not insurance
+    if (m.peril === "game" && contractMeta(m.id)?.futureKind) { otherFutures++; continue; } // own teams' futures: one line per team below
     let series = seriesName(m.eventTitle);
     if (WEATHER.includes(m.peril) && m.location) series = series.replace(m.location, "<city>");
     if (m.peril === "game") {
@@ -65,14 +70,17 @@ export function buildCatalog(markets: MarketContract[], profile: BusinessProfile
   const sorted = [...groups.values()].sort((a, b) => PERILS.indexOf(a.peril as any) - PERILS.indexOf(b.peril as any) || a.series.localeCompare(b.series));
   for (const g of sorted) {
     const venues = [...new Set(g.cs.map((c) => c.venue))].join("+");
-    const dates = [...new Set(g.cs.map((c) => shortDay(c.expiry)))].slice(0, 5);
+    const long = g.cs.some((c) => isLongContract(c, now));
+    // long-dated series: the month observation ends (meta.eventEnd), never a placeholder venue expiry
+    const dates = long ? [...new Set(g.cs.map((c) => settleDay(c, now)).sort().map((d) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", month: "short", year: "numeric" })))].slice(0, 4)
+      : [...new Set(g.cs.map((c) => shortDay(c.expiry)))].slice(0, 5);
     let detail: string;
     if (WEATHER.includes(g.peril)) {
       const cities = [...new Set(g.cs.map((c) => c.location).filter((x): x is string => !!x))];
       const rank = (c: string) => (c.toLowerCase() === city ? 0 : TX_CITIES.includes(c.toLowerCase()) ? 1 : 2);
       cities.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
       const here = g.cs.filter((c) => (c.location ?? "").toLowerCase() === city).slice(0, 4).map((c) => `"${c.label}"`).join(", ");
-      detail = `cities: ${cities.slice(0, 14).join(", ")}${cities.length > 14 ? ` +${cities.length - 14} more` : ""}${here ? ` | ${profile.city.split(",")[0]} labels e.g. ${here}` : ""}`;
+      detail = `cities: ${cities.slice(0, 10).join(", ")}${cities.length > 10 ? ` +${cities.length - 10} more` : ""}${here ? ` | ${profile.city.split(",")[0]} labels e.g. ${here}` : ""}`;
     } else {
       const nums = g.cs.map((c) => numIn(c.label)).filter((n): n is number => n !== null);
       const priced = g.cs.filter((c) => c.yesAsk !== null && c.yesAsk >= 0.05 && c.yesAsk <= 0.9).sort((a, b) => Math.abs((a.yesAsk ?? 0) - 0.4) - Math.abs((b.yesAsk ?? 0) - 0.4));
@@ -80,12 +88,56 @@ export function buildCatalog(markets: MarketContract[], profile: BusinessProfile
       detail = `${nums.length >= 3 && g.peril !== "game" ? `strikes ${Math.min(...nums)}..${Math.max(...nums)} | ` : ""}e.g. ${ex}`;
     }
     const key = `M${out.length + 1}`;
-    out.push({ key, peril: g.peril, series: g.series, hint: g.peril === "game" ? g.series : hintOf(g.series), ids: g.cs.map((c) => c.id),
-      line: `${key} | ${g.peril} | ${g.series} | ${venues} | closes ${dates.join(", ")} | ${detail}` });
+    out.push({ key, peril: g.peril, series: g.series, hint: g.peril === "game" ? g.series : hintOf(g.series), ids: g.cs.map((c) => c.id), ...(long ? { long } : {}),
+      line: `${key} | ${g.peril} | ${g.series} | ${venues} | ${long ? "settles" : "closes"} ${dates.join(", ")} | ${detail}` });
   }
-  if (otherGames) out.push({ key: `M${out.length + 1}`, peril: "game", series: "other games", hint: "", ids: [], line: `M${out.length + 1} | game | ${otherGames} other games (NBA/NFL/NHL/college) not shown | ask about a specific team if it matters` });
-  return out.slice(0, 45);
+  // own teams' season futures: one line per team (every stage, both venues, implied odds, settle months)
+  for (const t of teamFutures(live, profile, now)) {
+    otherFutures -= t.ids.length;
+    const key = `M${out.length + 1}`;
+    out.push({ key, peril: "game", series: `${t.team.nick} season futures`, hint: "", ids: t.ids, long: true, line: `${key} | game | ${t.line}` });
+  }
+  if (otherGames || otherFutures > 0) out.push({ key: `M${out.length + 1}`, peril: "game", series: "other games", hint: "", ids: [], line: `M${out.length + 1} | game | ${otherGames} other games${otherFutures > 0 ? ` + ${otherFutures} season futures (playoffs, conference, title, win totals) for other teams` : ""} not shown | ask about a specific team if it matters` });
+  return capCatalog(out, profile, tw, now);
 }
+
+/**
+ * 45 lines at most, fairly across perils (before: the first 45 lines in peril order, so ~100 Texas game lines pushed
+ * gas, Fed, CPI and every long-dated series out). Order of admission:
+ *  1. own teams' season-futures lines (always), 2. games naming the owner's teams (up to 6),
+ *  3. long lines (month totals, year-end / next-year macro) by relevance, up to 3 per peril (1 for far-away hazards), 18 total,
+ *  4. the remaining short lines round-robin across perils (3 per peril, 8 for games).
+ * Relevance = the owner's own words in the line, own city / Texas, an insurance-priced contract; minus context-only
+ * venues and settle dates more than a year out. The kept lines keep their original order.
+ */
+function capCatalog(out: CatalogEntry[], profile: BusinessProfile, tw: string[], nowMs: number, max = 45): CatalogEntry[] {
+  const score = (e: CatalogEntry) => lineScore({ title: e.series, text: e.line }, profile, tw, nowMs);
+  const ranked = (xs: CatalogEntry[]) => xs.map((e, i) => ({ e, i, s: score(e) })).sort((a, b) => b.s - a.s || a.i - b.i);
+  const keep = new Set<CatalogEntry>();
+  const market = out.filter((e) => e.ids.length);
+  for (const e of market) if (e.series.endsWith("season futures")) keep.add(e);
+  ranked(market.filter((e) => e.peril === "game" && !e.long && tw.some((w) => e.line.toLowerCase().includes(w)))).slice(0, 6).forEach((x) => keep.add(x.e));
+  const perils = [...new Set(market.map((e) => e.peril))];
+  const longs: { e: CatalogEntry; s: number }[] = [];
+  for (const p of perils) {
+    const far = ["quake", "water", "storm", "snow"].includes(p);
+    const xs = ranked(market.filter((e) => e.peril === p && e.long && !keep.has(e))).filter((x) => x.s >= (far ? 1 : 0));
+    longs.push(...xs.slice(0, far ? 1 : 3));
+  }
+  longs.sort((a, b) => b.s - a.s).slice(0, 18).forEach((x) => keep.add(x.e));
+  const short = perils.map((p) => ranked(market.filter((e) => e.peril === p && !e.long)).map((x) => x.e));
+  for (let round = 0; keep.size < max && round < 8; round++) {
+    for (const xs of short) {
+      if (keep.size >= max || !xs.length) continue;
+      const cap = xs[0].peril === "game" ? 8 : 3;
+      if (xs.filter((e) => keep.has(e)).length >= cap) continue;
+      const next = xs.find((e) => !keep.has(e));
+      if (next) keep.add(next);
+    }
+  }
+  return [...out.filter((e) => keep.has(e)), ...out.filter((e) => !e.ids.length)];
+}
+
 
 // ---------- brainstorm (LLM) ----------
 
@@ -122,7 +174,8 @@ Rules:
 - Return 2 to 4 ideas, strongest correlation first. Each MUST use one catalogKey from the catalog (copy it exactly), at most one idea per catalogKey, and describe a trigger that a contract in that line can settle (use the strikes/dates shown; prefer contracts priced 5-60 cents).
 - Start from what the owner actually told you: every cost, input, loan or customer group they mention is a lead (fuel -> Brent/WTI/gas, kitchen or heating -> natural gas, metal -> silver/gold/copper, a credit line -> Fed, menu prices -> CPI). Cost-side proxies with a clear mechanism beat demand stories.
 - Sports only when the business's own crowd or orders swing with that game (bars, venues, game-day retail), never as a generic "distraction". Never a game nobody in Austin cares about.
-- Quantify lossUsd with arithmetic from the owner's numbers (keep it modest; a proxy rarely costs more than one day of revenue). Be honest: correlation "weak" if the link is loose.
+- Think past this week too: a season-futures stage for the crowd's team (playoffs -> conference finals -> title, or a wins rung), monthly totals (rain, month-end diesel, ERCOT power), a rate path to the meeting before a loan reprices, a shutdown for government-paid customers, recession for discretionary spending. Write the window as the catalog's "settles" period ("December", "through the 2026-27 NBA playoffs").
+- Quantify lossUsd with arithmetic from the owner's numbers (keep it modest; a one-off proxy rarely costs more than one day of revenue; a month / season proxy = the extra loss over that period). Be honest: correlation "weak" if the link is loose.
 - causalStory: the chain from market to P&L ("Brent leads diesel by ~2 weeks; 4 vans x 3,000 mi/week ...").
 - worthIt: is it worth the premium? (e.g. "Cheap tail cover; only worth it if fuel is >5% of costs").
 - naturalHedges (0-3): things that HELP this business, which the owner should NOT hedge (or should hedge the opposite tail), e.g. a hot-soup truck benefits from cold, a delivery caterer gets more orders when it rains. advice: dont-hedge | hedge-opposite | watch.
@@ -139,7 +192,7 @@ export function brainstormPrompt(profileBlock: string, today: string, catalog: C
 }
 
 /** Proxy risk + where its markets live (catalog hint / ids, or a fixed candidate list from the playbook). */
-export interface Idea { risk: Risk; hint?: string; ids?: string[]; labelRe?: RegExp; fixed?: MarketContract[] }
+export interface Idea { risk: Risk; hint?: string; ids?: string[]; labelRe?: RegExp; fixed?: MarketContract[]; /** playbook: protective side per fixed contract (best first) */ sides?: Record<string, "yes" | "no"> }
 
 /** Loose shape of lib/ai/playbook playbookIdeas() output (owned by the playbook module). */
 export interface PlaybookSeed {
@@ -147,6 +200,7 @@ export interface PlaybookSeed {
     industry?: string; problem?: string; title?: string; trigger?: string; causalStory?: string; peril: Peril;
     correlation?: "strong" | "medium" | "weak"; basisRisk?: string; naturalHedgeNote?: string; evidence?: string;
     marketQuery?: string; side?: "yes" | "no"; lossUsd?: number; lossReasoning?: string; worthIt?: string; location?: string; window?: string;
+    horizon?: "event" | "month" | "season";
   };
   candidates: MarketContract[];
 }
@@ -154,21 +208,23 @@ export interface PlaybookSeed {
 /** Playbook seeds -> proxy ideas whose candidates are exactly the seed's real contracts. */
 export function ideasFromPlaybook(seeds: PlaybookSeed[], profile: BusinessProfile): { ideas: Idea[]; naturalHedges: NaturalHedge[] } {
   const ideas: Idea[] = []; const naturalHedges: NaturalHedge[] = [];
-  for (const { idea: x, candidates } of seeds ?? []) {
+  for (const seed of seeds ?? []) {
+    const { idea: x, candidates } = seed;
+    const sides = (seed as { sides?: Record<string, "yes" | "no"> }).sides;
     if (!x || !PERILS.includes(x.peril)) continue;
     if (x.naturalHedgeNote) naturalHedges.push({ peril: x.peril, title: x.title ?? x.problem ?? "Natural hedge", explanation: x.naturalHedgeNote, advice: "watch" });
     const cands = (candidates ?? []).filter((c) => c && c.status === "open");
     if (!cands.length) continue;
     const loss = x.lossUsd && x.lossUsd > 0 ? x.lossUsd : profile.avgDailyRevenueUsd * 0.1;
     ideas.push({
-      fixed: cands, ids: cands.map((c) => c.id),
+      fixed: cands, ids: cands.map((c) => c.id), ...(sides ? { sides } : {}),
       risk: {
         id: "", kind: "proxy", peril: x.peril, title: (x.title ?? x.problem ?? x.marketQuery ?? "Industry hedge").slice(0, 90),
         trigger: x.trigger ?? x.marketQuery ?? cands[0].eventTitle, location: x.location ?? "US", window: x.window ?? "next 30 days",
         lossUsd: Math.max(10, Math.round(Math.min(loss, profile.avgDailyRevenueUsd * 3) / 10) * 10),
         lossReasoning: x.lossReasoning ?? `Industry playbook estimate (~10% of a ${usd(profile.avgDailyRevenueUsd)} day).`,
         confidence: 0.5, correlation: x.correlation ?? "medium", causalStory: x.causalStory ?? x.problem,
-        worthIt: x.worthIt ?? x.basisRisk, evidence: x.evidence,
+        worthIt: x.worthIt ?? x.basisRisk, evidence: x.evidence, ...(x.horizon ? { horizon: x.horizon } : {}),
       },
     });
   }
@@ -177,9 +233,10 @@ export function ideasFromPlaybook(seeds: PlaybookSeed[], profile: BusinessProfil
 
 export function ideasFromBrainstorm(out: BrainstormOut, catalog: CatalogEntry[], profile: BusinessProfile): Idea[] {
   const byKey = new Map(catalog.map((c) => [c.key.toUpperCase(), c]));
-  const cap = Math.max(50, profile.avgDailyRevenueUsd * 3);
   const ideas: Idea[] = [];
   for (const r of out.ideas) {
+    // a proxy rarely costs more than a few days of revenue per event; over a month / season it can be ~2 weeks
+    const cap = Math.max(50, profile.avgDailyRevenueUsd * (riskHorizon({ window: r.window }) === "event" ? 3 : 14));
     const entry = byKey.get(r.catalogKey.trim().toUpperCase());
     if (catalog.length && (!entry || !entry.ids.length)) { console.warn(`[advise] brainstorm idea "${r.title}" dropped: unknown catalog key ${r.catalogKey}`); continue; } // anti-hallucination
     ideas.push({
@@ -322,7 +379,8 @@ export function filterIdeaCandidates(idea: Idea, cands: MarketContract[], univer
     const extra = universe.filter((c) => ok(c) && (ids.size ? ids.has(c.id) : true) && match(c) && !out.some((o) => o.id === c.id));
     // useful insurance prices first, nearest expiry next
     // within ~60 days first (a Fed idea for "the next meeting" must not land on a meeting 5 months out), then insurance price
-    const far = (c: MarketContract) => (Date.parse(c.expiry) - now > 60 * 86_400_000 ? 1 : 0);
+    const long = riskHorizon(idea.risk, new Date(now)) !== "event"; // a month / season idea wants the long-dated contract
+    const far = (c: MarketContract) => (!long && Date.parse(c.expiry) - now > 60 * 86_400_000 ? 1 : 0);
     extra.sort((a, b) => far(a) - far(b) || insurancePrice(a) - insurancePrice(b) || Date.parse(a.expiry) - Date.parse(b.expiry));
     out = [...out, ...extra].slice(0, 12);
   }
@@ -360,12 +418,16 @@ export function directionalPick(risk: Risk, cands: MarketContract[]): HedgeLeg |
     const a = askOf(c, side);
     if (okAsk(a)) scored.push({ c, side, a });
   }
-  scored.sort((x, y) => Math.abs(x.a - 0.25) - Math.abs(y.a - 0.25));
+  // a book known to be a handful of contracts deep is not insurance: next-nearest strike instead
+  const thin = (x: { c: MarketContract; side: "yes" | "no" }) => { const d = x.side === "yes" ? x.c.depthYes : x.c.depthNo; return d !== undefined && d < 50 ? 0.2 : 0; };
+  scored.sort((x, y) => Math.abs(x.a - 0.25) + thin(x) - Math.abs(y.a - 0.25) - thin(y));
   const s = scored[0];
   return s ? { riskId: risk.id, contractId: s.c.id, side: s.side, rationale: `Pays if "${s.c.eventTitle}" resolves ${s.side === "yes" ? "" : "NOT "}${s.c.label}.`, basisRisk: `Proxy hedge: the market moves with your cost/demand driver, not your exact loss. ${note}` } : null;
 }
 
 export type TieredLeg = HedgeLeg & { tier: string };
+/** A single game ("Arkansas vs Texas", "Spurs at Lakers"); season futures ("Pro Basketball Playoff Qualifiers") are not. */
+const isMatchup = (c: MarketContract) => /\s(vs\.?|v\.?|at|@)\s/i.test(c.eventTitle);
 export const TIER_LABEL: Record<string, string> = {
   recommended: "Recommended", balanced: "Balanced", "cheap-tail": "Cheap tail", broad: "Broad", "other-date": "Other date", "other-side": "Other side", "other-venue": "Other venue",
 };
@@ -389,6 +451,21 @@ export function ladderChoices(rec: TieredLeg, cands: MarketContract[], existing:
     out.push({ riskId: rec.riskId, contractId: c.id, side, tier, rationale: why, basisRisk: rec.basisRisk });
   };
 
+  if (c0.peril === "game" && !isMatchup(c0)) {
+    // season future: the same team's other stages (or the same wins ladder) as a cheaper tail / broader cover
+    // same team AND league ("Houston" is the Rockets in the NBA and the Texans in the NFL; "60+ wins" is on every team's ladder)
+    const m0 = contractMeta(c0.id);
+    const sameTeam = (c: MarketContract) => { const m = contractMeta(c.id); return !m0?.teams?.length || !m?.teams?.length
+      || (m.league === m0.league && m.teams.some((t) => m0.teams!.some((u) => t.toLowerCase() === u.toLowerCase()))); };
+    const sib = (c: MarketContract) => c.id !== c0.id && !isMatchup(c) && okAsk(askOf(c, rec.side)) && sameTeam(c)
+      && (c.eventTicker === c0.eventTicker ? /\bwins?\b/i.test(c.label) && /\bwins?\b/i.test(c0.label) : c.label.trim().toLowerCase() === c0.label.trim().toLowerCase());
+    const sibs = cands.filter(sib);
+    const cheaper = sibs.filter((c) => askOf(c, rec.side)! <= a0 * 0.75).sort((x, y) => askOf(y, rec.side)! - askOf(x, rec.side)!)[0];
+    const broader = sibs.filter((c) => askOf(c, rec.side)! >= a0 * 1.3).sort((x, y) => askOf(x, rec.side)! - askOf(y, rec.side)!)[0];
+    if (cheaper) push(cheaper, rec.side, "cheap-tail", `Cheaper tail: ${rec.side.toUpperCase()} on "${cheaper.label}" [${cheaper.eventTitle}] pays only in the worse season, at ${Math.round(askOf(cheaper, rec.side)! * 100)}¢ per $1.`);
+    if (broader) push(broader, rec.side, "broad", `Broader cover: ${rec.side.toUpperCase()} on "${broader.label}" [${broader.eventTitle}] pays more often, at ${Math.round(askOf(broader, rec.side)! * 100)}¢ per $1.`);
+    return out;
+  }
   if (c0.peril === "game") {
     const other = cands.find((c) => c.eventTicker === c0.eventTicker && c.id !== c0.id && okAsk(askOf(c, rec.side === "no" ? "yes" : "no")) && Math.abs(askOf(c, rec.side === "no" ? "yes" : "no")! - a0) <= 0.1);
     if (other) push(other, rec.side === "no" ? "yes" : "no", "other-side", `Same game, other side: ${rec.side === "no" ? `YES on ${other.label}` : `NO on ${other.label}`} pays in the same outcome (draws/overtime rules can differ).`);

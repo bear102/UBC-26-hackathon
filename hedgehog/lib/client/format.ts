@@ -29,12 +29,13 @@ export function timeAgo(iso: string) {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
-export const VENUE_LABEL: Record<string, string> = { gemini: "Gemini", kalshi: "Kalshi · DFlow", polymarket: "Polymarket" };
+export const VENUE_LABEL: Record<string, string> = { gemini: "Gemini", kalshi: "Kalshi · DFlow", polymarket: "Polymarket", hedgehog: "Hedgehog parametric" };
 /** One-line venue role shown under quote lines. */
 export const VENUE_ROLE: Record<string, string> = {
   gemini: "Priced & hedged on Gemini · settled on Solana",
   kalshi: "Kalshi contract · settled on Solana",
   polymarket: "Polymarket · read-only context",
+  hedgehog: "Hedgehog parametric · priced from public history · underwritten by the Hedgehog pool",
 };
 /** "BUY 5 YES GEMI-… @ $0.15" */
 export const orderText = (h: { quantity: number; outcome: string; symbol: string; limitPrice: number }) =>
@@ -43,8 +44,10 @@ export const PERIL_LABEL: Record<string, string> = {
   heat: "Heat", cold: "Cold snap", rain: "Rain", game: "Game result", oil: "Oil price", gas: "Gas price",
   fed: "Fed rate", cpi: "Inflation", crypto: "Crypto", other: "Other",
   snow: "Snow", power: "Power price", water: "Water level", quake: "Earthquake", storm: "Storms", natgas: "Natural gas", metals: "Metals",
+  flood: "Flood", smoke: "Air quality", hail: "Hail", wildfire: "Wildfire",
 };
 export const PERIL_ICON: Record<string, string> = {
   heat: "☀", cold: "❄", rain: "☂", game: "🏀", oil: "🛢", gas: "⛽", fed: "🏦", cpi: "📈", crypto: "◎", other: "•",
   snow: "🌨", power: "⚡", water: "🌊", quake: "⚠", storm: "🌪", natgas: "🔥", metals: "⛏",
+  flood: "🌊", smoke: "😷", hail: "🧊", wildfire: "🔥",
 };

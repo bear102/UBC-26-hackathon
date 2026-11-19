@@ -17,8 +17,12 @@ export const VENUES: Record<VenueId, { name: string; role: VenueRole; roleLabel:
     name: "Polymarket", role: "buyable", roleLabel: "Best price", cls: "badge-polymarket",
     desc: "Prices your cover when it's the cheapest. In this demo the matching order is recorded, not placed.",
   },
+  hedgehog: {
+    name: "Hedgehog parametric", role: "buyable", roleLabel: "No market needed", cls: "badge-hedgehog",
+    desc: "For risks no market lists (flood, hail, wildfire, air quality). Priced from public history, settled from official data. Underwritten by the Hedgehog pool · no exchange backing.",
+  },
 };
-export const VENUE_ORDER: VenueId[] = ["gemini", "kalshi", "polymarket"];
+export const VENUE_ORDER: VenueId[] = ["gemini", "kalshi", "polymarket", "hedgehog"];
 export const venueName = (v: string) => VENUES[v as VenueId]?.name ?? v;
 
 /** Chance of the event (0..1) → "11%", "<1%", ">99%". */
@@ -82,7 +86,7 @@ export function localComparison(line: QuoteLine): Comparison {
     contractId: c.id, side: line.side, peril: c.peril, rows, usedVenue: c.venue, bestVenue: c.venue, verdict, spreadPts: cc ? Math.abs(diff) : null,
     headline: rows.map((r) => `${venueName(r.venue)} ${fmtChance(r.prob)}`).join(" · "),
     flags: cc && cc.exact && Math.abs(diff) >= 4 ? [`Polymarket is ${Math.abs(diff)} pts ${diff > 0 ? "higher" : "lower"} than ${venueName(c.venue)}`] : [],
-    why: c.venue === "gemini" ? VENUES.gemini.desc : c.venue === "kalshi" ? "Gemini doesn't list this market, so we use Kalshi. Your policy still settles on Solana." : VENUES.polymarket.desc,
+    why: c.venue === "gemini" ? VENUES.gemini.desc : c.venue === "kalshi" ? "Gemini doesn't list this market, so we use Kalshi. Your policy still settles on Solana." : VENUES[c.venue]?.desc ?? VENUES.polymarket.desc,
     asOf: new Date().toISOString(),
   };
 }
@@ -110,9 +114,11 @@ export function getComparison(line: QuoteLine): Promise<Comparison> {
 /** /markets deep link for a risk: group + city. */
 export function marketsHref(peril: string, location?: string): string {
   const group = peril === "heat" || peril === "cold" ? "heat" : peril === "game" ? "games" : peril === "oil" || peril === "gas" ? "energy" : peril === "fed" || peril === "cpi" ? "rates"
-    : peril === "water" || peril === "quake" || peril === "storm" ? "disaster" : peril === "natgas" || peril === "metals" ? "commodities" : peril;
+    : peril === "water" || peril === "quake" || peril === "storm" ? "disaster" : peril === "natgas" || peril === "metals" ? "commodities"
+    // no direct market: the explorer group holding the real proxy (river / tornado counts; dry-month rain for wildfire)
+    : peril === "flood" || peril === "smoke" || peril === "hail" ? "disaster" : peril === "wildfire" ? "rain" : peril;
   const sp = new URLSearchParams({ risk: group });
   const city = (location ?? "").split(",")[0].trim();
-  if (city && city !== "US" && ["heat", "rain", "snow", "power", "disaster"].includes(group)) sp.set("city", city);
+  if (city && city !== "US" && ["heat", "rain", "snow", "power", "disaster", "parametric"].includes(group)) sp.set("city", city);
   return `/markets?${sp.toString()}`;
 }

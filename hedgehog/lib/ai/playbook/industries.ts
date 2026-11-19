@@ -15,7 +15,8 @@ export type HurtWhen =
   | "above"       // the measured value is HIGH (fuel, metals, rates, CPI, warm days)
   | "below"       // the measured value is LOW (cold highs, crypto drawdown)
   | "event"       // a named outcome happens (rain in the city, "Hike 25bps")
-  | "team-loses"; // the owner's team loses (YES on the opponent)
+  | "team-loses"   // the owner's team loses (YES on the opponent)
+  | "team-misses"; // the owner's team falls short of a season stage (NO on its playoffs / round / conference / "N+ wins" future)
 
 export interface MarketQuery {
   venues: VenueId[];
@@ -119,6 +120,7 @@ export const INDUSTRIES: Industry[] = [
   { id: "golf-recreation", name: "Golf, driving ranges & outdoor recreation", keywords: ["golf", "driving range", "mini golf", "putt", "disc golf", "zip ?line", "climbing park", "water park", "amusement", "trail rides?", "horseback"] },
   { id: "ski-town", name: "Ski shops, rentals & ski-town businesses", keywords: ["\\bski", "snowboard", "lift tickets?", "ski rental", "ski shop", "resort town", "big sky", "park city", "mammoth", "tahoe", "aspen", "vail"] },
   { id: "propane-heating", name: "Propane, heating oil & firewood dealers", keywords: ["propane", "heating oil", "fuel oil", "firewood", "heating fuel", "pellet", "chimney"] },
+  { id: "gov-contractor", name: "Federal contractors & DC-area businesses", keywords: ["federal contract", "government contract", "federal (agency|agencies|employees|workers)", "\\bgsa\\b", "defense contractor", "government shutdown", "federal customers?"] },
   { id: "borrower", name: "Any business with a variable-rate loan", keywords: ["line of credit", "credit line", "\\bloc\\b", "sba", "variable.?rate", "\\bloan\\b", "debt", "financ", "\\blease", "prime rate", "floor ?plan"] },
 ];
 
@@ -207,6 +209,26 @@ const NAPA_DRY: MarketQuery = {
   venues: ["kalshi"], perils: ["rain"], series: ["KXRAINNAPAM"], titleRe: "through march", location: "national", cities: ["napa", "sonoma", "yountville", "st. helena"], hurtWhen: "below",
   strike: { targetAsk: 0.5 }, maxDays: 140,
   describe: "Kalshi Napa Nov-Mar season rainfall, NO on 'Above N inches' (pays on a dry winter)",
+};
+
+// Long-dated queries (2026-11-19 long-horizon loop): season futures, month / year-end fuel, the year's mortgage-rate high.
+const SEASON_FUTURES = ["NBAF", "NBAPLAYOFFS", "NFLPLAYOFF", "NFLAFCSOUTH", "NFLNFCEAST", "NFLHOUWINS", "NFLDALWINS", "NHLPLAYOFFS", "NHLWCF", "CFBPLAYOFF",
+  "KXNBAPLAYOFF", "KXNBAWEST", "KXNBAWCFQUAL", "KXNFLPLAYOFF", "KXNFLPLAYOFFHOST", "KXNFLNFCEAST", "KXNFLAFCSOUTH", "KXNHLPLAYOFF", "KXNHLWEST", "KXNCAAFPLAYOFF"];
+const TEAM_SEASON: MarketQuery = {
+  venues: ["gemini", "kalshi"], perils: ["game"], series: SEASON_FUTURES, location: "team", hurtWhen: "team-misses", strike: { targetAsk: 0.35 }, maxDays: 240,
+  describe: "Season futures for the team(s) named in the description (playoffs / conference finals / conference / wins ladder / College Football Playoff), NO on the team",
+};
+const DIESEL_LONG: MarketQuery = {
+  venues: ["kalshi"], perils: ["gas"], series: ["KXDIESELYE", "KXDIESELMON"], location: "national", hurtWhen: "above", strike: { targetAsk: 0.25 }, maxDays: 60,
+  describe: "Kalshi US diesel at month end / year end (EIA), YES on 'Above $X'",
+};
+const MORTGAGE_HIGH: MarketQuery = {
+  venues: ["kalshi"], perils: ["fed"], series: ["KXMORTGAGERATE"], location: "national", hurtWhen: "above", strike: { targetAsk: 0.2 }, maxDays: 120,
+  describe: "Kalshi 'How high will the 30-year mortgage rate get' this year, YES on 'Above X%'",
+};
+const SHUTDOWN: MarketQuery = {
+  venues: ["kalshi"], perils: ["other"], series: ["KXGOVTSHUTDOWN"], location: "national", hurtWhen: "event", strike: { targetAsk: 0.3 }, maxDays: 60,
+  describe: "Kalshi 'Government shutdown on <funding deadline>?', YES",
 };
 
 // ---------- validated playbook ----------
@@ -589,6 +611,38 @@ export const PLAYBOOK: HedgeIdea[] = [
     basisRisk: "One gauge in Napa for the whole season; groundwater and reservoir allocations matter too.",
     evidence: [{ claim: "California's 2012-16 drought cost agriculture ~$2.7B in 2015 alone (UC Davis).", source: "https://watershed.ucdavis.edu/files/biblio/Final_Drought%20Report_08182015_Full_Report_WithAppendices.pdf" }],
     validated: V("kalshi:KXRAINNAPAM-01NOV26-31MAR27-T10", 0.23) },
+
+  // ---- long horizon (season futures, year-end fuel, the year's rate high, funding deadlines); validated on .data/eval/markets-v3.json ----
+  { id: "sports-playoff-run-miss", industry: "sports-bar-merch", keywords: ["playoff", "deep run", "postseason", "season", "watch part", "spurs", "texans", "cowboys", "rockets", "mavericks", "stars"],
+    title: "Our team's season ends early (no playoff nights)", problem: "A playoff run is weeks of packed game nights; missing the playoffs or an early exit means a dead spring (or January).",
+    causalStory: "Playoff home games and watch parties only happen while the team is alive; NO on the team's playoffs / conference-finals / wins future pays exactly when the run doesn't happen.",
+    peril: "game", marketQuery: TEAM_SEASON, side: "no", correlation: "strong", lossShareOfDay: 3,
+    basisRisk: "Pays on the team's result, not your nights: a run that ends on a road game, or a hot regular season, still moves revenue the market doesn't see.",
+    naturalHedgeNote: "A deep run already pays you: never buy your own team's YES side for revenue cover.",
+    evidence: [{ claim: "Womply data on ~42k bars: playoff excitement added almost 12% to bar revenue, depending on the game.", source: "https://sbj.net/stories/sports-bars-glory-in-blues-stanley-cup-run,64132" },
+               { claim: "Indianapolis bar ran 4-5x normal sales during the Pacers' playoff run.", source: "https://frontofficesports.com/article/how-the-pacers-and-caitlin-clark-boosted-one-bars-bottom-line/" }],
+    validated: V("kalshi:KXNBAWEST-27-SAS", 0.66, "2026-11-19T20:26:53Z") },
+  { id: "fleet-diesel-month", industry: "delivery", keywords: ["diesel", "box truck", "fleet", "freight", "fixed-rate", "contracts", "reprice", "next year"],
+    title: "Diesel stays high into year end", problem: "Fixed-rate contracts can't be repriced until next year; every month of high diesel comes out of margin.",
+    causalStory: "Diesel at month end / year end (EIA) sets what the fleet pays through the contract term; YES above the strike pays when it stays high.",
+    peril: "gas", marketQuery: DIESEL_LONG, side: "yes", correlation: "strong", lossShareOfDay: 0.25,
+    basisRisk: "One print (the month-end / Dec 31 EIA average), not the fuel bought all month; your local spread to the US average can move.",
+    evidence: [{ claim: "Fuel is ~20-25% of trucking operating cost per mile (ATRI 2024 operational costs).", source: "https://truckingresearch.org/2024/07/an-analysis-of-the-operational-costs-of-trucking-2024-update/" }],
+    validated: V("kalshi:KXDIESELYE-26DEC31-T6.20", 0.17, "2026-11-19T20:26:53Z") },
+  { id: "broker-rate-path", industry: "real-estate", keywords: ["mortgage", "rates", "refi", "refinanc", "broker", "loan officer"],
+    title: "Mortgage rates spike before year end", problem: "Broker volume dies when the 30-year rate jumps; one Fed meeting is a narrow proxy for the whole rate path.",
+    causalStory: "The year's highest 30-year rate (Freddie Mac PMMS) is the rate path itself; YES above the strike pays if rates spike before Dec 31.",
+    peril: "fed", marketQuery: MORTGAGE_HIGH, side: "yes", correlation: "strong", lossShareOfDay: 2,
+    basisRisk: "A weekly survey high, not your pipeline: a brief spike pays even if volume recovers within weeks.",
+    evidence: [{ claim: "MBA: rising rates pushed borrowers out of refinance; total applications fell 5.3% in one October 2026 week.", source: "https://www.mortgagenewsdaily.com/news/10232026-mortgage-applications-mba" }],
+    validated: V("kalshi:KXMORTGAGERATE-26DEC-T7.6", 0.16, "2026-11-19T20:26:53Z") },
+  { id: "dc-shutdown", industry: "gov-contractor", keywords: ["federal", "government", "agency", "contract", "dc"],
+    title: "Government shutdown stops federal work", problem: "A shutdown pauses federal contracts and invoices; staff still get paid.",
+    causalStory: "A lapse in appropriations on the funding deadline stops work orders; YES on 'shutdown on <date>' pays when it happens.",
+    peril: "other", marketQuery: SHUTDOWN, side: "yes", correlation: "strong", lossShareOfDay: 3,
+    basisRisk: "Pays on the shutdown starting, not on how long it lasts; back pay may later cover part of the loss.",
+    evidence: [{ claim: "CBO: the 2018-19 shutdown cost the economy ~$11B, $3B of it permanently lost.", source: "https://www.cbo.gov/publication/54937" }],
+    validated: V("kalshi:KXGOVTSHUTDOWN-26DEC12", 0.3, "2026-11-19T20:26:53Z") },
 ];
 
 // ---------- rejected (with reasons) ----------
@@ -651,3 +705,9 @@ export const REJECTED: RejectedIdea[] = [
   { id: "restaurant-fastfood-traffic", industry: "bar-restaurant", title: "Restaurant traffic index (McDonald's foot traffic / fast-food spend)", status: "future-source",
     reason: "Kalshi KXMCDFT / KXFASTARRAY are live but thin; industry-wide demand proxies.", retryWhen: "Index if depth improves" },
 ];
+
+// Hedgehog parametric cover ideas (flood, air quality, hail, wildfire) + honest market proxies: ./parametric.ts
+import { PARAMETRIC_INDUSTRIES, PARAMETRIC_PLAYBOOK, PARAMETRIC_REJECTED } from "./parametric";
+INDUSTRIES.push(...PARAMETRIC_INDUSTRIES);
+PLAYBOOK.push(...PARAMETRIC_PLAYBOOK);
+REJECTED.push(...PARAMETRIC_REJECTED);

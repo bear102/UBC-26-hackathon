@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { VenueId } from "@/lib/types";
 import type { ExplorerData, ExplorerEvent, RiskGroup } from "@/lib/markets/explorer";
-import { fmtChance, fmtDay, fmtDepth, fmtPer1, VENUE_ORDER, VENUES, venueName } from "@/lib/client/venues";
+import { fmtChance, fmtDay, fmtDepth, fmtPer1, VENUE_ORDER as VENUE_ORDER_ALL, VENUES, venueName } from "@/lib/client/venues";
 import { VenueBadge } from "./VenueBadge";
 import { When } from "./When";
 import { IconArrowRight, IconChevronDown, IconChevronUp, PerilIcon } from "@/components/Icons";
@@ -13,14 +13,18 @@ const GROUPS: { id: RiskGroup | "all"; label: string }[] = [
   { id: "all", label: "All" }, { id: "heat", label: "Heat & cold" }, { id: "rain", label: "Rain" },
   { id: "snow", label: "Snow & winter" }, { id: "power", label: "Power & grid" }, { id: "disaster", label: "Water, quakes & storms" },
   { id: "games", label: "Games" }, { id: "energy", label: "Fuel & oil" }, { id: "commodities", label: "Natural gas & metals" },
-  { id: "rates", label: "Rates & inflation" }, { id: "crypto", label: "Crypto" }, { id: "other", label: "Other" },
+  { id: "rates", label: "Rates & inflation" }, { id: "crypto", label: "Crypto" }, { id: "parametric", label: "Parametric (Hedgehog)" }, { id: "other", label: "Other" },
 ];
 const PAGE = 30;
 
 export interface ExplorerInitial { risk?: string; city?: string; venue?: string; q?: string; cross?: string }
 
 export function MarketExplorer({ data, initial }: { data: ExplorerData; initial: ExplorerInitial }) {
-  const [group, setGroup] = useState<RiskGroup | "all">((GROUPS.find((g) => g.id === initial.risk)?.id ?? "all") as RiskGroup | "all");
+  // Hedgehog parametric contracts only show up when the server runs with HEDGEHOG_PARAMETRIC=1 (default: real markets only)
+  const withParam = (data.counts.hedgehog ?? 0) > 0;
+  const VENUE_ORDER = VENUE_ORDER_ALL.filter((v) => v !== "hedgehog" || withParam);
+  const groups = GROUPS.filter((g) => g.id !== "parametric" || withParam);
+  const [group, setGroup] = useState<RiskGroup | "all">((groups.find((g) => g.id === initial.risk)?.id ?? "all") as RiskGroup | "all");
   const [city, setCity] = useState(initial.city ?? "");
   const [venues, setVenues] = useState<VenueId[]>(() => {
     const v = (initial.venue ?? "").split(",").filter((x): x is VenueId => x in VENUES);
@@ -35,7 +39,7 @@ export function MarketExplorer({ data, initial }: { data: ExplorerData; initial:
     const sp = new URLSearchParams();
     if (group !== "all") sp.set("risk", group);
     if (city) sp.set("city", city);
-    if (venues.length !== 3) sp.set("venue", venues.join(","));
+    if (venues.length !== VENUE_ORDER.length) sp.set("venue", venues.join(","));
     if (q) sp.set("q", q);
     if (cross) sp.set("cross", "1");
     const qs = sp.toString();
@@ -43,7 +47,7 @@ export function MarketExplorer({ data, initial }: { data: ExplorerData; initial:
     setShown(PAGE);
   }, [group, city, venues, q, cross]);
 
-  const cityApplies = group === "all" || group === "heat" || group === "rain" || group === "snow" || group === "power" || group === "disaster";
+  const cityApplies = group === "all" || group === "heat" || group === "rain" || group === "snow" || group === "power" || group === "disaster" || group === "parametric";
   const cityLc = city.toLowerCase();
   const needle = q.trim().toLowerCase();
   const filtered = useMemo(() => data.events.filter((e) =>
@@ -62,7 +66,7 @@ export function MarketExplorer({ data, initial }: { data: ExplorerData; initial:
     <>
       <p className={s.note}>
         <b>The cheapest venue prices your cover.</b> Kalshi trades on Solana via DFlow.{" "}
-        No venue lists wildfire, flood, hail or air quality yet.
+        Every hedge is a real market on Gemini, Kalshi or Polymarket.
       </p>
       <div className={s.stat}>
         <div className={s.statMain}><span>Live contracts</span><b className="fig">{data.total.toLocaleString()}</b></div>
@@ -79,7 +83,7 @@ export function MarketExplorer({ data, initial }: { data: ExplorerData; initial:
         <div className={s.filterRow} role="group" aria-label="Risk type">
           <label>Risk</label>
           <div className="chips">
-            {GROUPS.map((g) => (
+            {groups.map((g) => (
               <button key={g.id} type="button" className="chip" aria-pressed={group === g.id} onClick={() => setGroup(g.id)}>
                 {g.id !== "all" && <PerilIcon peril={g.id} size={15} />}{g.label} <span className={s.count}>{groupCount(g.id)}</span>
               </button>

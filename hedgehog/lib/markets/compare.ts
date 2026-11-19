@@ -10,7 +10,7 @@ import { contractMeta, getBook, getContract, listMarkets, normLoc } from "./inde
 import { centralDate, daysBetween, parseBounds, setMeta, type Bounds } from "./normalize";
 
 export type VenueRole = "primary" | "buyable" | "reference";
-export const VENUE_ROLE_OF: Record<VenueId, VenueRole> = { gemini: "primary", kalshi: "buyable", polymarket: "reference" };
+export const VENUE_ROLE_OF: Record<VenueId, VenueRole> = { gemini: "primary", kalshi: "buyable", polymarket: "reference", hedgehog: "buyable" };
 const ORDER: VenueId[] = ["gemini", "kalshi", "polymarket"];
 
 export interface VenueQuoteRow {
@@ -217,7 +217,7 @@ function row(c: MarketContract, side: "yes" | "no", match: VenueQuoteRow["match"
   };
 }
 
-const NAME: Record<VenueId, string> = { gemini: "Gemini", kalshi: "Kalshi", polymarket: "Polymarket" };
+const NAME: Record<VenueId, string> = { gemini: "Gemini", kalshi: "Kalshi", polymarket: "Polymarket", hedgehog: "Hedgehog parametric" };
 const pctS = (p: number | null) => (p === null ? "—" : p < 0.01 ? "<1%" : p > 0.99 ? ">99%" : `${Math.round(p * 100)}%`);
 
 /** Fill unknown depth from live books (Gemini/Kalshi), within 2¢ of the ask. Bounded by `ms`. */
