@@ -33,7 +33,10 @@ async function resolveDeps(d: Partial<AdvisorDeps> = {}): Promise<AdvisorDeps> {
   if (d.findCandidates && d.sizeQuote) return { ...d, llm: d.llm ?? defaultLlm } as AdvisorDeps;
   const markets = await import("../markets/index");
   const quote = await import("../markets/quote");
+  let playbookIdeas: AdvisorDeps["playbookIdeas"];
+  try { playbookIdeas = (await import("./playbook/index")).playbookIdeas; } catch { /* optional: a broken playbook never breaks advise() */ }
   return {
+    playbookIdeas,
     llm: defaultLlm,
     findCandidates: markets.findCandidates,
     sizeQuote: quote.sizeQuote,
@@ -283,7 +286,7 @@ export async function advise(profile: BusinessProfile, opts: AdviseOpts = {}): P
     try { all = await timeout(deps.listMarkets(), 8000); } catch { /* optional context */ }
   }
   const universe = all.length ? marketUniverse(all, profile) : "";
-  const catalog = all.length ? buildCatalog(all, profile, teamWords(profile.description)) : [];
+  const catalog = all.length ? buildCatalog(all, profile, teamWords(profile.description), now.getTime()) : [];
   const today = todayLabel(now);
   // optional industry playbook seeds (deterministic, validated against live markets); never breaks advise()
   let playbook: { ideas: Idea[]; naturalHedges: NaturalHedge[] } = { ideas: [], naturalHedges: [] };
@@ -368,7 +371,7 @@ export async function advise(profile: BusinessProfile, opts: AdviseOpts = {}): P
     let base: MarketContract[] = [];
     if (idea.fixed) return idea.fixed.filter((c) => c.status === "open" && (c.yesAsk !== null || c.noAsk !== null)).slice(0, 10);
     try { base = await deps.findCandidates(idea.risk, profile, 12); } catch { /* fall back to the catalog */ }
-    return filterIdeaCandidates(idea, base, all).slice(0, 10);
+    return filterIdeaCandidates(idea, base, all, now.getTime()).slice(0, 10);
   }));
   const anyIdeaMarket = ideaCands.some((c) => c.length);
   const ideaRisks: Risk[] = [];

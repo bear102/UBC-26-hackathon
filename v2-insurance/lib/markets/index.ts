@@ -148,10 +148,27 @@ function boundsDistance(b: Bounds | undefined, target: number | null): number | 
  * liquidity, then nearest expiry. Top Gemini candidates get live book depth attached.
  */
 export async function findCandidates(risk: Risk, profile: BusinessProfile, limit = 15): Promise<MarketContract[]> {
-  const family: Peril[] = risk.peril === "heat" || risk.peril === "cold" ? ["heat", "cold"] : [risk.peril];
-  const all = await listMarkets({ perils: family, venues: POLY_PERILS.includes(risk.peril) ? ["gemini", "kalshi", "polymarket"] : ["gemini", "kalshi"] });
-  const now = Date.now();
-  const win = parseWindow(risk.window);
+  const all = await listMarkets({ perils: perilFamily(risk.peril), venues: candidateVenues(risk.peril) });
+  const top = rankCandidates(risk, profile, all, limit);
+  await Promise.all(top.map(async (c) => {
+    if (c.venue !== "gemini" || c.depthYes !== undefined) return;
+    const b = await getBook(c);
+    if (!b) return;
+    if (c.yesAsk !== null) c.depthYes = b.yes.filter((l) => l.price <= c.yesAsk! + 0.02).reduce((s, l) => s + l.size, 0);
+    if (c.noAsk !== null) c.depthNo = b.no.filter((l) => l.price <= c.noAsk! + 0.02).reduce((s, l) => s + l.size, 0);
+  }));
+  return top;
+}
+
+const perilFamily = (p: Peril): Peril[] => (p === "heat" || p === "cold" ? ["heat", "cold"] : [p]);
+const candidateVenues = (p: Peril): VenueId[] => (POLY_PERILS.includes(p) ? ["gemini", "kalshi", "polymarket"] : ["gemini", "kalshi"]);
+
+/** Pure ranking step of findCandidates over a given market universe (no network; used by the eval harness). */
+export function rankCandidates(risk: Risk, profile: BusinessProfile, universe: MarketContract[], limit = 15, nowDate = new Date()): MarketContract[] {
+  const family = perilFamily(risk.peril), venues = candidateVenues(risk.peril);
+  const all = universe.filter((c) => family.includes(c.peril) && venues.includes(c.venue));
+  const now = nowDate.getTime();
+  const win = parseWindow(risk.window, nowDate);
   const local = !NATIONAL_PERILS.includes(risk.peril);
   const loc = normLoc(risk.location || profile.city);
   const text = `${risk.title} ${risk.trigger} ${risk.lossReasoning ?? ""} ${profile.description}`;
@@ -208,19 +225,11 @@ export async function findCandidates(risk: Risk, profile: BusinessProfile, limit
   }
   preferGemini(scored);
   scored.sort((a, b) => b.s - a.s || a.exp - b.exp);
-  const top = scored.slice(0, limit).map((x) => ({ ...x.c }));
-  await Promise.all(top.map(async (c) => {
-    if (c.venue !== "gemini" || c.depthYes !== undefined) return;
-    const b = await getBook(c);
-    if (!b) return;
-    if (c.yesAsk !== null) c.depthYes = b.yes.filter((l) => l.price <= c.yesAsk! + 0.02).reduce((s, l) => s + l.size, 0);
-    if (c.noAsk !== null) c.depthNo = b.no.filter((l) => l.price <= c.noAsk! + 0.02).reduce((s, l) => s + l.size, 0);
-  }));
-  return top;
+  return scored.slice(0, limit).map((x) => ({ ...x.c }));
 }
 
 /** Perils where Polymarket adds candidates (read-only context lines). */
-export const POLY_PERILS: Peril[] = ["game", "fed", "cpi", "gas", "oil"];
+export const POLY_PERILS: Peril[] = ["game", "fed", "cpi", "gas", "oil", "heat", "cold"];
 export const GEMINI_BONUS = 0.6;
 /** Kalshi lines in a peril/date slot Gemini also covers drop this much (unless Gemini's side is unusable there). */
 export const KALSHI_DUP_PENALTY = 1.5;

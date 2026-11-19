@@ -3,7 +3,7 @@
 // (ii) a cross-venue price check on quote lines ("Polymarket says 34%").
 // Every function here is failure-tolerant: errors return [] / null and never break listMarkets.
 import type { MarketContract, Peril, QuoteLine } from "../types";
-import { centralDate, contractMeta, daysBetween, num, price, setMeta, type Bounds, type ContractMeta } from "./normalize";
+import { addDays, centralDate, contractMeta, daysBetween, num, parseBounds, price, setMeta, tempPeril, type Bounds, type ContractMeta } from "./normalize";
 
 export const GAMMA = process.env.POLYMARKET_GAMMA_BASE || "https://gamma-api.polymarket.com";
 const TTL = 60_000;
@@ -110,6 +110,85 @@ export function normalizePolymarkets(rows: PMarket[], src?: PolySource): MarketC
   return out;
 }
 
+// ---------- daily temperature (highest/lowest per city, listed several days AHEAD of Gemini/Kalshi) ----------
+// Polymarket lists "Highest/Lowest temperature in <city> on <date>?" events days in advance, while Gemini and
+// Kalshi only list the current day. Events are fetched by their predictable slug for today .. +WEATHER_DAYS
+// (Central time). Past days are never requested.
+
+/** Polymarket slug city -> the location string Gemini/Kalshi use. US cities only (our customers are US businesses). */
+export const POLY_WEATHER_CITIES: Record<string, string> = {
+  austin: "Austin", dallas: "Dallas", houston: "Houston", atlanta: "Atlanta", chicago: "Chicago", miami: "Miami",
+  nyc: "NYC", seattle: "Seattle", "san-francisco": "San Francisco", "los-angeles": "Los Angeles", denver: "Denver",
+  boston: "Boston", "washington-dc": "Washington DC",
+};
+export const WEATHER_DAYS = 4;
+const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+
+interface PEvent { slug: string; title: string; endDate?: string; closed?: boolean; markets?: PMarket[] }
+
+/** Slugs for every city × {highest,lowest} × day from today (Central) through today + days. */
+export function weatherSlugs(now = new Date(), days = WEATHER_DAYS): { slug: string; city: string; date: string; low: boolean }[] {
+  const today = centralDate(now);
+  const out: { slug: string; city: string; date: string; low: boolean }[] = [];
+  for (let i = 0; i <= days; i++) {
+    const ymd = addDays(today, i);
+    const [y, m, d] = ymd.split("-").map(Number);
+    for (const [slugCity, city] of Object.entries(POLY_WEATHER_CITIES)) {
+      for (const low of [false, true]) {
+        out.push({ slug: `${low ? "lowest" : "highest"}-temperature-in-${slugCity}-on-${MONTHS[m - 1]}-${d}-${y}`, city, date: ymd, low });
+      }
+    }
+  }
+  return out;
+}
+
+/** Temperature events -> MarketContract (peril heat/cold via the same bin logic as Gemini/Kalshi). */
+export function normalizePolyWeather(events: PEvent[], slugInfo: Map<string, { city: string; date: string; low: boolean }>, today: string): MarketContract[] {
+  const out: MarketContract[] = [];
+  for (const e of events) {
+    const info = slugInfo.get(e.slug);
+    if (!info || info.date < today || e.closed) continue; // never past days
+    for (const m of e.markets ?? []) {
+      if (!m?.slug || m.closed) continue;
+      const outs = arr(m.outcomes), pxs = arr(m.outcomePrices).map(Number);
+      if (outs.length !== 2 || outs[0].toLowerCase() !== "yes") continue;
+      const label = (m.groupItemTitle || "").trim();
+      const bounds = parseBounds(label);
+      if (!bounds) continue;
+      const mid = Number.isFinite(pxs[0]) ? pxs[0] : null;
+      const yesAsk = price(m.bestAsk) ?? price(mid);
+      const yesBid = price(m.bestBid) ?? price(mid);
+      const id = `polymarket:${m.slug}`;
+      setMeta(id, { eventDate: info.date, bounds, volume: num(m.volumeNum) ?? undefined, openInterest: num(m.liquidityNum) ?? undefined, category: "weather", rules: m.question, station: undefined });
+      out.push({
+        id, venue: "polymarket", eventTitle: e.title, label, symbol: m.conditionId || m.slug, eventTicker: e.slug,
+        peril: tempPeril(bounds, info.low), location: info.city, expiry: m.endDate || e.endDate || "",
+        yesAsk, yesBid, noAsk: yesBid !== null ? price(1 - yesBid) : null, noBid: yesAsk !== null ? price(1 - yesAsk) : null,
+        url: `https://polymarket.com/event/${encodeURIComponent(e.slug)}`, tradable: false,
+        status: m.acceptingOrders === false ? "closed" : "open", resolution: null,
+      });
+    }
+  }
+  return out;
+}
+
+async function fetchWeather(now = new Date()): Promise<MarketContract[]> {
+  const slugs = weatherSlugs(now);
+  const info = new Map(slugs.map((s) => [s.slug, s]));
+  const batches: string[][] = [];
+  for (let i = 0; i < slugs.length; i += 25) batches.push(slugs.slice(i, i + 25).map((s) => s.slug));
+  const res = await Promise.allSettled(batches.map(async (b) => {
+    const qs = b.map((s) => `slug=${encodeURIComponent(s)}`).join("&");
+    const r = await fetch(`${GAMMA}/events?${qs}`, { headers: { accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(10_000) });
+    if (!r.ok) throw new Error(`polymarket weather -> ${r.status}`);
+    const rows = (await r.json()) as unknown;
+    return Array.isArray(rows) ? (rows as PEvent[]) : [];
+  }));
+  const events = res.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+  if (!events.length && res.every((r) => r.status === "rejected")) throw new Error("polymarket weather unreachable");
+  return normalizePolyWeather(events, info, centralDate(now));
+}
+
 // ---------- fetch + cache ----------
 
 const cache = new Map<string, { t: number; v: MarketContract[]; p?: Promise<MarketContract[]> }>();
@@ -125,12 +204,15 @@ async function fetchSource(src: PolySource, now = new Date()): Promise<MarketCon
   return normalizePolymarkets(Array.isArray(rows) ? (rows as PMarket[]) : [], src);
 }
 
+/** Pseudo-source for daily temperature (fetched by slug, not by tag). */
+export const WEATHER_SOURCE: PolySource = { key: "weather", tagId: 103040, perils: ["heat", "cold"], days: WEATHER_DAYS };
+
 /** Cached (60s) per source, stale-on-error, [] when never reachable. */
 async function cachedSource(src: PolySource): Promise<MarketContract[]> {
   const c = cache.get(src.key);
   if (c && Date.now() - c.t < TTL) return c.v;
   if (c?.p) return c.p;
-  const p = fetchSource(src)
+  const p = (src.key === "weather" ? fetchWeather() : fetchSource(src))
     .then((v) => { cache.set(src.key, { t: Date.now(), v }); return v; })
     .catch(() => { cache.set(src.key, { t: Date.now() - TTL + 15_000, v: c?.v ?? [] }); return c?.v ?? []; }); // retry in 15s
   cache.set(src.key, { t: c?.t ?? 0, v: c?.v ?? [], p });
@@ -139,14 +221,14 @@ async function cachedSource(src: PolySource): Promise<MarketContract[]> {
 
 /** Polymarket contracts for the given perils. Never throws. */
 export async function listPolymarkets(perils: Peril[]): Promise<MarketContract[]> {
-  const srcs = POLY_SOURCES.filter((s) => s.perils.some((p) => perils.includes(p)));
+  const srcs = [...POLY_SOURCES, WEATHER_SOURCE].filter((s) => s.perils.some((p) => perils.includes(p)));
   const res = await Promise.allSettled(srcs.map(cachedSource));
   return res.flatMap((r) => (r.status === "fulfilled" ? r.value : [])).filter((c) => perils.includes(c.peril));
 }
 
 /** Fresh-ish (cached) contract by id, or null. */
 export async function getPolymarket(id: string): Promise<MarketContract | null> {
-  for (const s of POLY_SOURCES) {
+  for (const s of [...POLY_SOURCES, WEATHER_SOURCE]) {
     const hit = (await cachedSource(s)).find((c) => c.id === id);
     if (hit) return hit;
   }
@@ -221,6 +303,13 @@ export function crossCheckLine(line: Pick<QuoteLine, "contract" | "side" | "impl
     }
     const b = meta?.bounds, pb = pm.bounds;
     if (!b || !pb) continue;
+    if (c.peril === "heat" || c.peril === "cold") {
+      // Weather: same city, same day, same bin -> exact match.
+      if (!c.location || !p.location || c.location.toLowerCase() !== p.location.toLowerCase()) continue;
+      if (!meta?.eventDate || meta.eventDate !== pm.eventDate) continue;
+      if (b.lo !== pb.lo || b.hi !== pb.hi) continue;
+      return mk(p, m, true);
+    }
     const sameDir = (b.lo !== undefined && b.hi === undefined && pb.lo !== undefined) || (b.hi !== undefined && b.lo === undefined && pb.hi !== undefined);
     const v = b.lo ?? b.hi, pv = pb.lo ?? pb.hi;
     if (!sameDir || v === undefined || pv === undefined || Math.abs(v - pv) > Math.max(0.005, Math.abs(v) * 0.002)) continue;
