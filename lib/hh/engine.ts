@@ -19,11 +19,11 @@ const nowS = () => Math.floor(Date.now() / 1000);
 
 // ------------------------------------------------------------------ create
 
-export type CreateInput = { card: Card; cap: number; refundUsd: number; topupThreshold: number; tranche?: number; merchantName?: string; salesCloseTs?: number; testLabel?: string };
+export type CreateInput = { card: Card; cap: number; refundUsd: number; topupThreshold: number; tranche?: number; merchantName?: string; salesCloseTs?: number; testLabel?: string; adopt?: Record<string, number> };
 
 export async function createPromise(inp: CreateInput): Promise<PromiseRec> {
   const q = await quoteCard(inp.card, inp.refundUsd);
-  if (!q.quote.hedgeable) throw new Error(q.quote.reason || "not hedgeable");
+  if (!q.quote.hedgeable && !inp.adopt) throw new Error(q.quote.reason || "not hedgeable");
   const merchant = key("merchant");
   const id = Date.now();
   const refundUnits = Math.round(inp.refundUsd * 1_000_000);
@@ -51,7 +51,12 @@ export async function createPromise(inp: CreateInput): Promise<PromiseRec> {
   };
   mutate((s) => { s.promises[rec.id] = rec; });
   log("info", "create", `promise ${rec.id} created ${explorer(r.sig)}`, { pda: rec.pda });
-  hedge(rec.id, "create").catch((e) => log("error", "agent", String(e)));
+  if (inp.adopt) {
+    // Test promises (D20) adopt an existing position (e.g. the H0 gate fill) instead of buying. The attestor still
+    // attests min(adopted, real position - other promises' allocations), so nothing is claimed that Gemini doesn't show.
+    mutate((s) => { s.promises[rec.id].alloc = { ...inp.adopt }; s.promises[rec.id].agentNote = `adopted existing position ${JSON.stringify(inp.adopt)}`; });
+    attest(rec.id, 0).catch((e) => log("error", "attest", String(e)));
+  } else hedge(rec.id, "create").catch((e) => log("error", "agent", String(e)));
   return rec;
 }
 
@@ -284,7 +289,7 @@ export async function tick() {
             if (q.some((x, i) => x < last.qtyCenti[i])) await attest(id, 1);
           }
         }
-        if (now >= rec.expectedResolveTs - 1800 && !atts.some((a) => a.phase === 2) && every(`presettle:${id}`, 60_000)) await attest(id, 2);
+        if (atts.length && now >= rec.expectedResolveTs - 1800 && !atts.some((a) => a.phase === 2) && every(`presettle:${id}`, 60_000)) await attest(id, 2);
         const kind = /^WXHIGH/.test(rec.card.event_ticker) ? "weather" : /^(NBA|NCAA)/.test(rec.card.event_ticker) ? "game" : "crypto";
         const pollFrom = kind === "game" ? rec.salesCloseTs + 2.5 * 3600 : kind === "weather" ? Math.floor(Date.parse(rec.card.expiry ?? rec.terms.sales_close_iso) / 1000) + 5 * 3600 : rec.salesCloseTs;
         const env2 = process.env.HH_POLL_ALWAYS === "1";

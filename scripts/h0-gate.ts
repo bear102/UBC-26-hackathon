@@ -7,7 +7,7 @@ import fs from "node:fs";
 import { eventByTicker, book } from "../lib/hh/gemini";
 import { termsStatus, batchOrder, positions, orderHistory, balances, hasKeys, callLog, type OrderReq } from "../lib/hh/geminiPrivate";
 
-const TICKER = process.env.GATE_TICKER || "WXHIGH-AUS-2611190459";
+const TICKER = process.env.GATE_TICKER || "WXHIGH-AUS-2611200459";
 const QTY = Number(process.env.GATE_QTY || 1);
 const MAX_SPEND = Number(process.env.GATE_MAX_SPEND || 2.0);
 const BUY = process.argv.includes("--buy");

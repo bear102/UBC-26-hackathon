@@ -9,10 +9,10 @@ export async function GET() {
 }
 export async function POST(req: NextRequest) {
   const deny = requireAdmin(req); if (deny) return deny;
-  const b = await body<{ card: Card; cap?: number; refundUsd?: number; topupThreshold?: number; tranche?: number; salesCloseTs?: number; merchantName?: string; testLabel?: string }>(req);
+  const b = await body<{ card: Card; cap?: number; refundUsd?: number; topupThreshold?: number; tranche?: number; salesCloseTs?: number; merchantName?: string; testLabel?: string; adopt?: Record<string, number> }>(req);
   if (!b.card?.event_ticker || !b.card.strip?.length) return err("card required");
   try {
-    const rec = await createPromise({ card: b.card, cap: Math.max(1, Math.min(500, Math.floor(b.cap ?? 20))), refundUsd: b.refundUsd ?? 1, topupThreshold: b.topupThreshold ?? 3, tranche: b.tranche, salesCloseTs: b.salesCloseTs, merchantName: b.merchantName, testLabel: b.testLabel });
+    const rec = await createPromise({ card: b.card, cap: Math.max(1, Math.min(500, Math.floor(b.cap ?? 20))), refundUsd: b.refundUsd ?? 1, topupThreshold: b.topupThreshold ?? 3, tranche: b.tranche, salesCloseTs: b.salesCloseTs, merchantName: b.merchantName, testLabel: b.testLabel, adopt: b.adopt });
     return json({ id: rec.id, pda: rec.pda });
   } catch (e) { return err(String((e as Error).message ?? e), 400); }
 }

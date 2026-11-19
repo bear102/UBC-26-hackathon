@@ -16,7 +16,7 @@ const t0 = Date.now(); const ts = () => `${((Date.now() - t0) / 1000).toFixed(1)
 const [ticker, ...strip] = process.argv.slice(2);
 const N = Number(process.env.N || 3), CAP = Number(process.env.CAP || 5), TRANCHE = Number(process.env.TRANCHE || 2), REFUND = Number(process.env.REFUND || 0.1);
 const card = { event_ticker: ticker, event_title: ticker, strip, sentence: process.env.SENTENCE || "Test promo → $0.10 back", why: "e2e", applies_to: "test" };
-const c = await call("/api/promises", { card, cap: CAP, refundUsd: REFUND, topupThreshold: -1, tranche: TRANCHE, testLabel: "E2E TEST", salesCloseTs: process.env.CLOSE ? Number(process.env.CLOSE) : undefined });
+const c = await call("/api/promises", { card, cap: CAP, refundUsd: REFUND, topupThreshold: -1, tranche: TRANCHE, testLabel: "E2E TEST", adopt: process.env.ADOPT ? JSON.parse(process.env.ADOPT) : undefined, salesCloseTs: process.env.CLOSE ? Number(process.env.CLOSE) : undefined });
 console.log(ts(), "create", c);
 if (!c.id) process.exit(1);
 for (let i = 0; i < 30; i++) { const v = await call(`/api/promises/${c.id}`); if (v.status === "SELLING") { console.log(ts(), "SELLING, hedged", v.onchain.hedgedCapacity, v.agentNote); break; } if (v.status === "HEDGE_FAILED") { console.log("HEDGE_FAILED", v.agentNote); process.exit(1); } await sleep(1000); }
