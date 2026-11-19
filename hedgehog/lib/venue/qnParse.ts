@@ -4,11 +4,11 @@
 // and flattened ({ signature, accountKeys, meta }) shapes. accountKeys may be strings or { pubkey } objects.
 
 /** positionIds: when given, a memo-only match (tx touches none of our mints/accounts) must name a known position. */
-export interface QnWatch { mints: Set<string>; accounts: Set<string>; positionIds?: Set<string> }
+export interface QnWatch { mints: Set<string>; accounts: Set<string>; positionIds?: Set<string>; programs?: Set<string> }
 export interface TokenDelta { mint: string; owner?: string; delta: number }
 export interface QnHit {
   signature: string;
-  kind: "fill" | "transfer";
+  kind: "fill" | "transfer" | "policy_bought" | "policy_settled";
   positionId?: string;
   redeem: boolean;
   slot?: number;
@@ -101,7 +101,8 @@ export function parseQnPayload(payload: unknown, watch: QnWatch): QnHit[] {
     const deltas = tokenDeltas(tx);
     const keys = accountKeysOf(tx);
     const memo = JSON.stringify(tx).match(MEMO_RE);
-    const touches = deltas.some((d) => watch.mints.has(d.mint)) || keys.some((k) => watch.mints.has(k) || watch.accounts.has(k));
+    const touchesProgram = !!watch.programs && keys.some((k) => watch.programs!.has(k));
+    const touches = touchesProgram || deltas.some((d) => watch.mints.has(d.mint)) || keys.some((k) => watch.mints.has(k) || watch.accounts.has(k));
     if (!touches && (!memo || (watch.positionIds && !watch.positionIds.has(memo[2])))) continue;
     const redeem = !!memo?.[1];
     const positionId = memo?.[2];
@@ -109,13 +110,17 @@ export function parseQnPayload(payload: unknown, watch: QnWatch): QnHit[] {
     const recv = outcome.find((d) => d.delta > 0);
     const burned = outcome.find((d) => d.delta < 0);
     let text: string;
-    if (redeem) text = `QuickNode: payout tx for ${positionId}${burned ? ` (${-burned.delta} outcome tokens burned)` : ""}`;
+    const ix = touchesProgram ? (JSON.stringify(meta?.logMessages ?? []).match(/Instruction: (BuyPolicy|SettlePolicy|ExpirePolicy|FundVault|RegisterBusiness|SetBudget|InitUnderwriter|SetUnderwriter)/)?.[1]) : undefined;
+    if (ix) {
+      const label: Record<string, string> = { BuyPolicy: "Hedgehog Cover policy bought", SettlePolicy: "Hedgehog Cover policy settled", ExpirePolicy: "Hedgehog Cover policy expired (premium refunded)", FundVault: "Hedgehog Cover vault funded", RegisterBusiness: "business registered with Hedgehog Cover", SetBudget: "Hedgehog Cover budget updated", InitUnderwriter: "Hedgehog Cover underwriter created", SetUnderwriter: "Hedgehog Cover underwriter updated" };
+      text = `QuickNode: ${label[ix]} (tx ${short(signature)})`;
+    } else if (redeem) text = `QuickNode: payout tx for ${positionId}${burned ? ` (${-burned.delta} outcome tokens burned)` : ""}`;
     else if (memo && recv) text = `QuickNode: ${recv.delta} outcome tokens minted to ${short(recv.owner)} (${positionId})`;
     else if (recv) text = `QuickNode: ${recv.delta} outcome tokens moved to ${short(recv.owner)}`;
     else if (burned) text = `QuickNode: ${-burned.delta} outcome tokens left ${short(burned.owner)}`;
     else text = `QuickNode: tx ${short(signature)} touched the Hedgehog desk`;
     hits.set(signature, {
-      signature, kind: memo && !redeem ? "fill" : "transfer", positionId, redeem,
+      signature, kind: ix === "BuyPolicy" ? "policy_bought" : ix === "SettlePolicy" || ix === "ExpirePolicy" ? "policy_settled" : memo && !redeem ? "fill" : "transfer", positionId, redeem,
       slot: typeof tx.slot === "number" ? tx.slot : undefined, deltas, text,
     });
   }

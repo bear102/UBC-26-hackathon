@@ -3,6 +3,7 @@ import { store } from "../store";
 import { deskKeypair } from "./desk";
 import { MintRegistry } from "./mints";
 import type { QnWatch } from "./qnParse";
+import idl from "../solana/idl/hedgehog_policy.json";
 
 export function currentWatch(): QnWatch {
   const mints = new MintRegistry().mintSet();
@@ -10,5 +11,6 @@ export function currentWatch(): QnWatch {
   for (const p of store.list("positions")) { positionIds.add(p.id); if (p.mint) mints.add(p.mint); }
   const accounts = new Set<string>();
   try { accounts.add(deskKeypair().publicKey.toBase58()); } catch { /* no desk yet */ }
-  return { mints, accounts, positionIds };
+  const programs = new Set<string>([(idl as { address: string }).address]); // Hedgehog Cover program
+  return { mints, accounts, positionIds, programs };
 }
