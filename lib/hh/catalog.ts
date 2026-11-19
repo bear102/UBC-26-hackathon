@@ -26,7 +26,8 @@ export async function promoCatalog(): Promise<CatalogEvent[]> {
   const now = Date.now();
   const crypto = process.env.HH_ALLOW_CRYPTO === "1";
   const all = await searchEvents(
-    ["Spurs", "Rockets", "Mavericks", "Texas", "Aggies", "TCU", "Baylor", "SMU", "Rice", "UTSA", "Houston", "Austin", "San Antonio"],
+    // narrow queries: "Texas"/"Houston"/"Dallas" each return 2-4 MB, too slow on a home connection
+    ["Spurs", "Rockets", "Mavericks", "Longhorns", "Aggies", "TCU", "Baylor", "SMU", "UTSA", "Austin", "San Antonio"],
     ["category=Weather", ...(crypto ? ["category=Crypto", "category=Commodities"] : [])],
   );
   // Financial promos that can trade for real live on the trade venue (e.g. the sandbox): list them from there.

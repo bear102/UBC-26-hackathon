@@ -12,9 +12,10 @@ export default function Console({ params }: { params: Promise<{ id: string }> })
   const [out, setOut] = useState<string>("");
   const [attacks, setAttacks] = useState<{ n: number; label: string; error: string | null; code: number | null; explorer: string | null; ok: boolean }[]>([]);
   const [busy, setBusy] = useState("");
-  const load = () => getJSON<PromiseView>(`/api/promises/${id}`).then(setV).catch(() => {});
+  const [loadErr, setLoadErr] = useState("");
+  const load = () => getJSON<PromiseView>(`/api/promises/${id}`).then((x) => { setV(x); setLoadErr(""); }).catch((e) => setLoadErr(String(e.message)));
   useEffect(() => { load(); const t = setInterval(load, 3000); return () => clearInterval(t); }, [id]);
-  if (!v) return <main><p><span className="spin" /> Loading…</p></main>;
+  if (!v) return <main>{loadErr ? <p className="err">{loadErr}</p> : <p><span className="spin" /> Loading…</p>}</main>;
   const oc = v.onchain;
   async function act(action: string) {
     setBusy(action); setOut("");
@@ -24,6 +25,7 @@ export default function Console({ params }: { params: Promise<{ id: string }> })
   async function attack(n: number) {
     setBusy(`a${n}`);
     try { const r = await post<{ n: number; label: string; error: string | null; code: number | null; explorer: string | null; ok: boolean }>(`/api/promises/${id}/attack`, { n }); setAttacks((a) => [r, ...a]); }
+    catch (e) { setOut(String((e as Error).message)); }
     finally { setBusy(""); load(); }
   }
   const sold = oc?.sold ?? 0, hedged = oc?.hedgedCapacity ?? 0, cap = v.cap;

@@ -11,7 +11,7 @@ export function isAdmin(req: NextRequest): boolean {
   return got === want;
 }
 export function requireAdmin(req: NextRequest) {
-  return isAdmin(req) ? null : err("merchant login required (open /merchant?t=<token>)", 401);
+  return isAdmin(req) ? null : err("Not logged in as the merchant: open /api/login?t=<HH_ADMIN_TOKEN> once in this browser", 401);
 }
 export async function body<T>(req: NextRequest): Promise<T> {
   try { return (await req.json()) as T; } catch { return {} as T; }

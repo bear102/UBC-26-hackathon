@@ -15,7 +15,9 @@ const keyCache = new Map<string, Keypair>();
 export function key(name: "deployer" | "merchant" | "attestor" | "relayer" | "crank" | "attacker"): Keypair {
   if (keyCache.has(name)) return keyCache.get(name)!;
   const envv = process.env[`KEY_${name.toUpperCase()}`];
-  const raw = envv ? envv : fs.readFileSync(path.resolve(process.cwd(), "keys", `${name}.json`), "utf8");
+  const file = path.resolve(process.cwd(), "keys", `${name}.json`);
+  if (!envv && !fs.existsSync(file)) throw new Error(`Missing Solana key ${file}. Run \`npm run keys\` in the project folder (where package.json is), then restart the app.`);
+  const raw = envv ? envv : fs.readFileSync(file, "utf8");
   const kp = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(raw)));
   keyCache.set(name, kp);
   return kp;

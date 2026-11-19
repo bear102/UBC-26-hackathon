@@ -35,7 +35,7 @@ export default function Receipt({ params }: { params: Promise<{ code: string }> 
   useEffect(() => {
     if (started.current) return; started.current = true;
     const k = getKeypair(); setKp(k);
-    getJSON<Config>("/api/config").then(setCfg);
+    getJSON<Config>("/api/config").then(setCfg).catch((e) => setError(String(e.message)));
     (async () => {
       const first = await refresh(k);
       if (first?.code.mine && first.receipt) return;

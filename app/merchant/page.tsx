@@ -15,8 +15,14 @@ export default function Merchant() {
   const [msg, setMsg] = useState("");
   const [list, setList] = useState<PRow[]>([]);
   const [cfg, setCfg] = useState<{ hedgeMode: string; merchant: string; tradeHost: string; dataHost: string } | null>(null);
-  const refresh = () => getJSON<{ promises: PRow[] }>("/api/promises").then((r) => setList(r.promises)).catch(() => {});
-  useEffect(() => { refresh(); getJSON<{ hedgeMode: string; merchant: string; tradeHost: string; dataHost: string }>("/api/config").then(setCfg); const t = setInterval(refresh, 5000); return () => clearInterval(t); }, []);
+  const [loadErr, setLoadErr] = useState("");
+  const [authed, setAuthed] = useState<boolean | null>(null);
+  const refresh = () => getJSON<{ promises: PRow[] }>("/api/promises").then((r) => { setList(r.promises); setLoadErr(""); }).catch((e) => setLoadErr(String(e.message)));
+  useEffect(() => { refresh(); getJSON<{ hedgeMode: string; merchant: string; tradeHost: string; dataHost: string }>("/api/config").then(setCfg).catch((e) => setLoadErr(`Server not ready: ${e.message}`));
+    // merchant login: /merchant?t=<token> → set the cookie; otherwise check whether this browser is logged in
+    const tok = new URLSearchParams(location.search).get("t");
+    if (tok) { location.href = `/api/login?t=${encodeURIComponent(tok)}`; return; }
+    getJSON("/api/log").then(() => setAuthed(true)).catch(() => setAuthed(false)); const t = setInterval(refresh, 5000); return () => clearInterval(t); }, []);
 
   // Suite hand-off: /merchant?q=<business sentence> (from the Risk Scan "Make it a promo" button) prefills and runs the scan.
   useEffect(() => { const q = new URLSearchParams(location.search).get("q"); if (q) { setText(q); find(q); } }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -33,6 +39,8 @@ export default function Merchant() {
   return (
     <main>
       <div className="row spread"><h1>Hedgehog · merchant <a href="/suite" className="small" style={{ fontWeight: 600 }}>Risk Scan & Hedge Desk →</a></h1>{cfg && <span className={`pill ${cfg.hedgeMode === "live" ? "good" : "warn"}`}>{cfg.hedgeMode === "live" ? `LIVE on ${cfg.tradeHost} where listed · others PAPER on ${cfg.dataHost} odds` : "PAPER hedges (no Gemini keys yet)"}</span>}</div>
+      {authed === false && <div className="banner" style={{ marginTop: 10 }}><b>Not logged in as the merchant.</b> HH_ADMIN_TOKEN is set, so creating promises and opening counters will fail. Open <span className="mono">/api/login?t=&lt;your HH_ADMIN_TOKEN&gt;</span> once in this browser (or <span className="mono">/merchant?t=…</span>).</div>}
+      {loadErr && <p className="err">{loadErr} · <a href="/api/health" target="_blank">diagnostics</a></p>}
       <div className="card">
         <h3>Describe your business in one sentence</h3>
         <textarea value={text} onChange={(e) => setText(e.target.value)} maxLength={300} />

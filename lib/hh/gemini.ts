@@ -17,15 +17,15 @@ export type Book = { bids: BookLevel[]; asks: BookLevel[] };
 
 const cache = new Map<string, { t: number; v: unknown }>();
 
-async function getJson<T>(url: string, ttlMs = 0): Promise<T> {
+async function getJson<T>(url: string, ttlMs = 0, tries = 4, timeoutMs = 10_000): Promise<T> {
   if (ttlMs > 0) {
     const c = cache.get(url);
     if (c && Date.now() - c.t < ttlMs) return c.v as T;
   }
   let lastErr: unknown;
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < tries; i++) {
     try {
-      const r = await fetch(url, { headers: { accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(10_000) });
+      const r = await fetch(url, { headers: { accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(timeoutMs) });
       if (r.status === 429 || r.status >= 500) throw new Error(`GET ${url} -> ${r.status}`);
       if (!r.ok) throw Object.assign(new Error(`GET ${url} -> ${r.status}`), { fatal: true });
       const v = (await r.json()) as T;
@@ -34,7 +34,7 @@ async function getJson<T>(url: string, ttlMs = 0): Promise<T> {
     } catch (e) {
       lastErr = e;
       if ((e as { fatal?: boolean }).fatal) break;
-      if (i < 3) await new Promise((res) => setTimeout(res, 1000 * 2 ** i));
+      if (i < tries - 1) await new Promise((res) => setTimeout(res, 1000 * 2 ** i));
     }
   }
   throw lastErr;
@@ -57,12 +57,18 @@ export async function searchEvents(queries: string[], extra: string[] = [], base
     ...queries.map((q) => `${base}/v1/prediction-markets/events?status=active&limit=500&search=${encodeURIComponent(q)}`),
     ...extra.map((q) => `${base}/v1/prediction-markets/events?status=active&limit=500&${q}`),
   ];
-  for (const u of urls) {
-    try {
-      const r = await getJson<{ data: GEvent[] }>(u, 60_000);
-      for (const e of r.data) if (e.status === "active" && !seen.has(e.ticker)) seen.set(e.ticker, e);
-    } catch { /* one failed query should not kill the catalog */ }
-  }
+  // Parallel (6 at a time; public limit is 120/min), 2 tries x 8 s each, so a slow connection costs seconds, not minutes.
+  const results: ({ data: GEvent[] } | null)[] = new Array(urls.length).fill(null);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(6, urls.length) }, async () => {
+    while (next < urls.length) {
+      const i = next++;
+      try { results[i] = await getJson<{ data: GEvent[] }>(urls[i], 60_000, 2, 8_000); }
+      catch { /* one failed query should not kill the catalog */ }
+    }
+  }));
+  for (const r of results) for (const e of r?.data ?? []) if (e.status === "active" && !seen.has(e.ticker)) seen.set(e.ticker, e);
+  if (urls.length && results.every((r) => r === null)) throw new Error(`Gemini unreachable (${base}): every catalog query failed`);
   return [...seen.values()];
 }
 

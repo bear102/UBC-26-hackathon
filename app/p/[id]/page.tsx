@@ -9,8 +9,9 @@ export default function PublicPromise({ params }: { params: Promise<{ id: string
   const { id } = use(params);
   const [v, setV] = useState<PromiseView | null>(null);
   const [ticks, setTicks] = useState<{ ticks: VerifyTick[]; source: string } | null>(null);
-  useEffect(() => { const f = () => getJSON<PromiseView>(`/api/promises/${id}`).then(setV).catch(() => {}); f(); const t = setInterval(f, 8000); return () => clearInterval(t); }, [id]);
-  if (!v) return <main><span className="spin" /></main>;
+  const [err, setErr] = useState("");
+  useEffect(() => { const f = () => getJSON<PromiseView>(`/api/promises/${id}`).then(setV).catch((e) => setErr(String(e.message))); f(); const t = setInterval(f, 8000); return () => clearInterval(t); }, [id]);
+  if (!v) return <main>{err ? <p className="err">{err}</p> : <span className="spin" />}</main>;
   const oc = v.onchain;
   return (
     <main>
