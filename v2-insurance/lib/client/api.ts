@@ -76,12 +76,20 @@ export const getCoverInfo = () => withFallback<CoverInfo>("cover-info", () => ca
 export type HedgeBuyReq = { owner: string; contractId: string; side: "yes" | "no"; contracts: number; businessId: string };
 export type HedgeBuyRes = { positionId: string; txBase64: string; network: "devnet" | "mainnet" };
 export const hedgeBuy = (b: HedgeBuyReq) => call<HedgeBuyRes>("/api/hedge/buy", post(b));
-export const hedgeConfirm = (positionId: string, signature: string) => call<Position>("/api/hedge/confirm", post({ positionId, signature }));
+/** The desk's backing order on Gemini for a Gemini-priced sale (dry-run unless the server runs HEDGE_LIVE=1). */
+export type DeskHedge = {
+  id: string; kind: "position" | "policy"; refId: string; owner?: string; contractId: string; eventTitle?: string; label?: string; url?: string;
+  symbol: string; outcome: "yes" | "no"; quantity: number; limitPrice: number; refAsk: number; notionalUsd: number;
+  soldForUsd?: number; marginUsd?: number; mode: "dry-run" | "live"; status: string; orderId?: string; error?: string; createdAt: string;
+};
+export const hedgeConfirm = (positionId: string, signature: string) => call<Position & { backing?: DeskHedge }>("/api/hedge/confirm", post({ positionId, signature }));
+export const getBacking = (owner: string) =>
+  withFallback<{ live: boolean; hedges: DeskHedge[] }>("backing", () => call(`/api/hedge/backing?owner=${encodeURIComponent(owner)}`), () => ({ live: false, hedges: [] }));
 
-export type CoverBuyReq = { owner: string; businessId: string; peril: string; marketRef: string; trigger: string; premiumUsd: number; payoutUsd: number; expiry: string };
+export type CoverBuyReq = { owner: string; businessId: string; peril: string; marketRef: string; trigger: string; premiumUsd: number; payoutUsd: number; expiry: string; side?: "yes" | "no" };
 export type CoverBuyRes = { policyId: string; policyPda: string; txBase64: string };
 export const coverBuy = (b: CoverBuyReq) => call<CoverBuyRes>("/api/cover/buy", post(b));
-export const coverConfirm = (policyPda: string, signature: string) => call<unknown>("/api/cover/confirm", post({ policyPda, signature }));
+export const coverConfirm = (policyPda: string, signature: string) => call<{ backing?: DeskHedge }>("/api/cover/confirm", post({ policyPda, signature }));
 
 /** Devnet demo faucet: tops the wallet up to $50 test dollars + fee SOL. Never throws (mainnet / real-USDC setups just skip). */
 export async function devnetFaucet(owner: string): Promise<void> {

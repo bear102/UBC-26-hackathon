@@ -24,6 +24,8 @@ export async function POST(req: Request) {
     const contract = await defaultGetContract(b.contractId);
     if (!contract) throw new VenueError(`unknown contract ${b.contractId}`, 404, "not_found");
     const venue = getVenue();
+    if (!contract.tradable) throw new VenueError(`${contract.venue} contracts are read-only context in Hedgehog (not buyable)`, 400, "not_tradable");
+    if (venue.id === "dflow" && contract.venue !== "kalshi") throw new VenueError("the mainnet DFlow venue only sells Kalshi outcome tokens; Gemini-priced tokens are issued on devnet", 400, "not_tradable");
     const { position, txBase64 } = await venue.buildBuyTx({ owner: b.owner, contract, side: b.side, contracts: b.contracts, businessId: b.businessId });
     return NextResponse.json({ positionId: position.id, txBase64, network: venue.network, position });
   } catch (e) {

@@ -1,11 +1,12 @@
 // Tiny JSON-file store shared by API routes, worker and scripts. Server-only.
-// Collections: positions, feed, quotes, policies, kv. One file per collection in .data/.
+// Collections: positions, feed, quotes, policies, hedges (desk backing orders on Gemini), kv. One file per collection in .data/.
 import fs from "node:fs";
 import path from "node:path";
 import { env } from "./env";
 import type { FeedEvent, Position, Quote } from "./types";
+import type { DeskHedge } from "./venue/geminiHedge";
 
-type Collections = { positions: Position; feed: FeedEvent; quotes: Quote & { id: string }; policies: Record<string, unknown> & { id: string } };
+type Collections = { positions: Position; feed: FeedEvent; quotes: Quote & { id: string }; policies: Record<string, unknown> & { id: string }; hedges: DeskHedge };
 
 function file(name: string) {
   fs.mkdirSync(env.dataDir(), { recursive: true });

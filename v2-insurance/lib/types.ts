@@ -27,6 +27,31 @@ export interface Risk {
   lossUsd: number;            // estimated $ lost per occurrence
   lossReasoning: string;
   confidence: number;         // 0..1
+  /** direct = the obvious exposure; proxy = second-order / creative link (fuel, commodities, rates, rival games...). */
+  kind?: "direct" | "proxy";
+  /** How tightly the market tracks this business's loss. */
+  correlation?: "strong" | "medium" | "weak";
+  causalStory?: string;       // "Diesel follows Brent within ~2 weeks; 4 vans burn ~1,300 gal/month"
+  worthIt?: string;           // why the premium is (or isn't) worth paying
+  evidence?: string;          // backtest: "Austin hit >= 85°F on 3 of the last 29 days (Gemini settled markets)"
+}
+
+/** Something the business benefits from: say so, don't sell a hedge for it. */
+export interface NaturalHedge {
+  peril: Peril;
+  title: string;              // "Cold snaps help birria sales"
+  explanation: string;
+  advice: "dont-hedge" | "hedge-opposite" | "watch";
+}
+
+/** A pre-built plan the owner can switch to (all lines sized at the quote's coverage, inside the budget). */
+export interface QuotePackage {
+  id: "essentials" | "balanced" | "max";
+  name: string;               // "Essentials"
+  blurb: string;
+  picks: { riskId: string; contractId: string }[];
+  totalPremiumUsd: number;
+  totalPayoutUsd: number;
 }
 
 /** A normalized, tradable (or read-only) binary contract from any venue. */
@@ -47,7 +72,7 @@ export interface MarketContract {
   depthYes?: number;          // contracts available at/near ask
   depthNo?: number;
   url?: string;               // deep link to the venue market
-  tradable: boolean;          // can Hedgehog build a buy for it (mock/dflow); gemini = advice-only => false
+  tradable: boolean;          // can Hedgehog build a buy for it (devnet mock venue / dflow): gemini + kalshi true, polymarket false
   status: "open" | "closed" | "settled";
   resolution?: "yes" | "no" | null;
 }
@@ -72,6 +97,10 @@ export interface QuoteLine extends HedgeLeg {
   impliedProb: number;
   maxCoverable?: number;      // when depth limits size
   action: "buy-onchain" | "open-on-gemini" | "read-only";
+  /** Strike/window choice label, e.g. "Cheap tail" | "Balanced" | "Broad" | "Longer window". */
+  tier?: string;
+  /** Optional cross-venue price check (Polymarket, read-only): its probability that this line pays. */
+  crossCheck?: { venue: "polymarket"; contractId: string; title: string; prob: number; lineProb: number; diffPts: number; exact: boolean; url?: string };
 }
 
 export interface Quote {
@@ -85,6 +114,10 @@ export interface Quote {
   budgetUsd: number;
   summary: string;            // human paragraph from the AI
   model: string;              // which LLM produced it
+  /** All sized choices per risk (first = the AI's recommendation; `lines` uses one of them). */
+  options?: { riskId: string; choices: QuoteLine[] }[];
+  packages?: QuotePackage[];
+  naturalHedges?: NaturalHedge[];
 }
 
 /** A hedge position the owner bought (devnet mock venue or mainnet DFlow). */

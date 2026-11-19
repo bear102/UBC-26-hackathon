@@ -30,7 +30,7 @@ const mk = (c: Partial<MarketContract> & Pick<MarketContract, "id" | "venue" | "
   yesBid: c.yesAsk != null ? Math.max(0.01, +(c.yesAsk - 0.03).toFixed(2)) : null,
   noAsk: c.yesAsk != null ? +(1 - c.yesAsk + 0.03).toFixed(2) : null,
   noBid: c.yesAsk != null ? +(1 - c.yesAsk).toFixed(2) : null,
-  depthYes: 2500, depthNo: 2500, location: "Austin", tradable: c.venue !== "gemini", status: "open", resolution: null,
+  depthYes: 2500, depthNo: 2500, location: "Austin", tradable: c.venue !== "polymarket", status: "open", resolution: null,
   ...c,
 });
 
@@ -98,11 +98,9 @@ export function fixtureQuote(profile: BusinessProfile, coveragePct: Coverage = 5
     return {
       riskId: risk.id, contractId: c.id, side: "yes", rationale: s.rationale, basisRisk: s.basisRisk, contract: c,
       coveragePct, contracts: 0, pricePerContract: price, maxCoverable: c.depthYes, premiumUsd: 0, payoutUsd: 0, impliedProb: price,
-      action: !c.tradable ? "read-only" : c.venue === "gemini" ? "open-on-gemini" : "buy-onchain",
+      action: !c.tradable ? "read-only" : "buy-onchain",
     } satisfies QuoteLine;
   });
-  // Gemini contracts are advice-only (tradable=false) but still actionable via deep link.
-  for (const l of lines) if (l.contract.venue === "gemini") l.action = "open-on-gemini";
   for (const u of seed.uncovered) risks.push({ ...u.risk, lossUsd: Math.round(u.risk.lossUsd * scale) });
   const base: Quote = {
     businessId: profile.id, createdAt: new Date().toISOString(), risks, lines,

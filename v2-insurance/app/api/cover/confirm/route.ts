@@ -1,8 +1,11 @@
-// POST { policyPda, signature } -> DecodedPolicy. Verifies the policy exists on-chain, records a feed event.
+// POST { policyPda, signature } -> DecodedPolicy & { backing? }. Verifies the policy exists on-chain, records a feed event.
+// A policy written on a Gemini contract is then backed by the desk on Gemini (payout = contracts; dry-run by default).
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { store } from "@/lib/store";
 import { coverClient } from "@/lib/solana/policyClient";
+import { defaultGetContract } from "@/lib/venue";
+import { backConfirmedSale } from "@/lib/venue/geminiHedge";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,7 +31,13 @@ export async function POST(req: Request) {
       text: `Hedgehog Cover #${pol.policyId}: ${pol.premiumUsd} USDC premium for ${pol.payoutUsd} USDC payout (${pol.peril}, ${pol.marketRef})`,
       txSig: signature,
     });
-    return NextResponse.json(pol);
+    const side = prev?.side === "no" ? "no" : "yes";
+    const backing = await backConfirmedSale({
+      kind: "policy", refId: policyPda, contractId: String(pol.marketRef ?? prev?.marketRef ?? ""), outcome: side,
+      quantity: Math.ceil(Number(pol.payoutUsd) - 1e-9), owner: String(prev?.owner ?? pol.owner ?? ""), businessId: (prev?.businessId as string | undefined) ?? undefined,
+      soldForUsd: Number(pol.premiumUsd), txSig: signature,
+    }, defaultGetContract);
+    return NextResponse.json(backing ? { ...pol, backing } : pol);
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e), code: "cover_confirm_failed" }, { status: 500 });
   }

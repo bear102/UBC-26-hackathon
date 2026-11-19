@@ -3,17 +3,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import type { Position, QuoteLine, Risk } from "@/lib/types";
-import { addMockPosition, coverBuy, coverConfirm, devnetFaucet, hedgeBuy, hedgeConfirm, sleep } from "@/lib/client/api";
+import { addMockPosition, coverBuy, coverConfirm, devnetFaucet, hedgeBuy, hedgeConfirm, sleep, type DeskHedge } from "@/lib/client/api";
 import { isMock } from "@/lib/client/mode";
 import { signAndSend, walletErrorMessage, type Network } from "@/lib/client/tx";
-import { cents, explorerTx, shortAddr, usd, VENUE_LABEL } from "@/lib/client/format";
+import { cents, explorerTx, orderText, shortAddr, usd, VENUE_LABEL } from "@/lib/client/format";
 import { setLastOwner } from "@/lib/client/storage";
 import { DEMO_OWNER } from "@/lib/fixtures";
 import Link from "next/link";
 
 export type CheckoutKind = "hedge" | "cover";
 type Stage = "review" | "connect" | "build" | "signing" | "sending" | "confirming" | "record" | "done" | "error";
-export type CheckoutResult = { kind: CheckoutKind; signature: string; network: Network; position?: Position; policyId?: string; policyPda?: string; simulated?: boolean };
+export type CheckoutResult = { kind: CheckoutKind; signature: string; network: Network; position?: Position; policyId?: string; policyPda?: string; simulated?: boolean; backing?: DeskHedge };
 
 const ORDER: Stage[] = ["connect", "build", "signing", "sending", "confirming", "record", "done"];
 
@@ -29,6 +29,7 @@ export function CheckoutDialog({ kind, line, risk, businessId, onClose, onDone }
   const running = useRef(false);
   const mock = typeof window !== "undefined" && isMock();
   const isCover = kind === "cover";
+  const gemini = line.contract.venue === "gemini";
 
   const run = useCallback(async () => {
     if (running.current) return;
@@ -55,20 +56,21 @@ export function CheckoutDialog({ kind, line, risk, businessId, onClose, onDone }
       if (isCover) {
         const r = await coverBuy({
           owner, businessId, peril: risk?.peril ?? line.contract.peril, marketRef: line.contractId, trigger: risk?.trigger ?? line.contract.label,
-          premiumUsd: line.premiumUsd, payoutUsd: line.payoutUsd, expiry: line.contract.expiry,
+          premiumUsd: line.premiumUsd, payoutUsd: line.payoutUsd, expiry: line.contract.expiry, side: line.side,
         });
         const sig = await signAndSend(signTransaction, r.txBase64, "devnet", (s) => go(s));
-        try { await coverConfirm(r.policyPda, sig); } catch (e) { console.warn("cover confirm failed", e); }
-        const res: CheckoutResult = { kind, signature: sig, network: "devnet", policyId: r.policyId, policyPda: r.policyPda };
+        let backing: DeskHedge | undefined;
+        try { backing = (await coverConfirm(r.policyPda, sig))?.backing; } catch (e) { console.warn("cover confirm failed", e); }
+        const res: CheckoutResult = { kind, signature: sig, network: "devnet", policyId: r.policyId, policyPda: r.policyPda, backing };
         setResult(res); go("done"); onDone(res);
       } else {
         const r = await hedgeBuy({ owner, contractId: line.contractId, side: line.side, contracts: line.contracts, businessId });
         const net: Network = r.network === "mainnet" ? "mainnet" : "devnet";
         const sig = await signAndSend(signTransaction, r.txBase64, net, (s) => go(s));
         go("record");
-        let position: Position | undefined;
-        try { position = await hedgeConfirm(r.positionId, sig); } catch (e) { console.warn("confirm failed", e); }
-        const res: CheckoutResult = { kind, signature: sig, network: net, position };
+        let position: Position | undefined, backing: DeskHedge | undefined;
+        try { const p = await hedgeConfirm(r.positionId, sig); backing = p.backing; position = p; } catch (e) { console.warn("confirm failed", e); }
+        const res: CheckoutResult = { kind, signature: sig, network: net, position, backing };
         setResult(res); go("done"); onDone(res);
       }
     } catch (e) {
@@ -124,7 +126,8 @@ export function CheckoutDialog({ kind, line, risk, businessId, onClose, onDone }
           <>
             <p className="xs muted">{isCover
               ? "Trust model: Hedgehog's attestor settles the policy from the market's official result. If it never settles, you can reclaim the premium after expiry."
-              : "The trade desk partially signs the transaction; your wallet adds your signature. You receive SPL outcome tokens you can see in your wallet."}</p>
+              : "The trade desk partially signs the transaction; your wallet adds your signature. You receive SPL outcome tokens you can see in your wallet."}
+              {gemini && " Priced off Gemini's live book; Hedgehog backs your cover with the same contract on Gemini."}</p>
             {mock && <div className="alert alert-info small" style={{ marginBottom: 12 }}>Demo mode: this checkout is simulated, nothing is sent onchain.</div>}
             <div className="row" style={{ justifyContent: "flex-end" }}>
               <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
@@ -169,6 +172,14 @@ export function CheckoutDialog({ kind, line, risk, businessId, onClose, onDone }
                 : <a href={explorerTx(result.signature, result.network)} target="_blank" rel="noreferrer" className="mono">{shortAddr(result.signature, 8)} ↗</a>}</dd>
               {result.policyPda && <><dt>Policy account</dt><dd className="mono">{shortAddr(result.policyPda, 6)}</dd></>}
               {result.position?.mint && !result.simulated && <><dt>Token mint</dt><dd className="mono">{shortAddr(result.position.mint, 6)}</dd></>}
+              {(result.backing || (gemini && result.simulated)) && <>
+                <dt>Backed on Gemini</dt>
+                <dd className="small">
+                  {result.backing
+                    ? <><span className="mono">{orderText(result.backing)}</span> <span className="badge badge-gemini">{result.backing.mode === "live" ? result.backing.status : "dry-run"}</span>{result.backing.error ? <span className="muted"> · {result.backing.error}</span> : null}</>
+                    : <><span className="mono">BUY {line.contracts.toLocaleString()} {line.side.toUpperCase()} {line.contract.symbol}</span> <span className="badge badge-gemini">dry-run</span></>}
+                </dd>
+              </>}
             </dl>
             <div className="row" style={{ justifyContent: "flex-end" }}>
               <button className="btn btn-ghost" onClick={onClose}>Back to plan</button>

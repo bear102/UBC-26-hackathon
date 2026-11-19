@@ -30,6 +30,15 @@ export function timeAgo(iso: string) {
 }
 
 export const VENUE_LABEL: Record<string, string> = { gemini: "Gemini", kalshi: "Kalshi · DFlow", polymarket: "Polymarket" };
+/** One-line venue role shown under quote lines. */
+export const VENUE_ROLE: Record<string, string> = {
+  gemini: "Priced & hedged on Gemini · settled on Solana",
+  kalshi: "Kalshi contract · outcome tokens on Solana",
+  polymarket: "Polymarket · read-only context",
+};
+/** "BUY 5 YES GEMI-… @ $0.15" */
+export const orderText = (h: { quantity: number; outcome: string; symbol: string; limitPrice: number }) =>
+  `BUY ${h.quantity.toLocaleString()} ${h.outcome.toUpperCase()} ${h.symbol} @ $${h.limitPrice.toFixed(2)}`;
 export const PERIL_LABEL: Record<string, string> = {
   heat: "Heat", cold: "Cold snap", rain: "Rain", game: "Game result", oil: "Oil price", gas: "Gas price",
   fed: "Fed rate", cpi: "Inflation", crypto: "Crypto", other: "Other",

@@ -21,6 +21,7 @@ const Body = z.object({
   payoutUsd: z.number().positive(),
   expiry: z.union([z.string(), z.number()]), // ISO string or unix seconds
   monthlyBudgetUsd: z.number().positive().optional(),
+  side: z.enum(["yes", "no"]).optional(), // which outcome of marketRef pays the policy (desk backing on Gemini)
 });
 
 export async function POST(req: Request) {
@@ -37,7 +38,7 @@ export async function POST(req: Request) {
     });
     store.upsert("policies", {
       id: r.policyPda, policyId: r.policyId, owner: b.owner, businessId: b.businessId ?? null, peril: b.peril,
-      marketRef: b.marketRef, trigger: b.trigger, premiumUsd: b.premiumUsd, payoutUsd: b.payoutUsd,
+      marketRef: b.marketRef, trigger: b.trigger, premiumUsd: b.premiumUsd, payoutUsd: b.payoutUsd, side: b.side ?? "yes",
       expiry: new Date(expiry * 1000).toISOString(), status: "pending", createdAt: new Date().toISOString(),
     });
     return NextResponse.json(r);

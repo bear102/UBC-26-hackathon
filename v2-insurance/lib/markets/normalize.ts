@@ -238,7 +238,9 @@ export function normalizeGeminiEvents(events: GEvent[], opts: { includeProps?: b
         peril, location, expiry: c.expiryDate ?? e.expiryDate ?? "",
         ...px,
         url: geminiUrl(e.ticker),
-        tradable: false,
+        // "Sold on Solana, hedged on Gemini": the devnet venue issues outcome tokens priced off this book and
+        // the desk backs them with an order on Gemini (lib/venue/geminiHedge.ts). The deep link stays as `url`.
+        tradable: true,
         status: geminiStatus(e, c),
         resolution: c.resolutionSide === "yes" ? "yes" : c.resolutionSide === "no" ? "no" : null,
       };

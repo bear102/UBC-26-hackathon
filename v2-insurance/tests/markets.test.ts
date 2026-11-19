@@ -60,7 +60,7 @@ test("normalizeGeminiEvents: recorded Austin daily-high event", () => {
     assert.equal(c.venue, "gemini");
     assert.ok(c.id.startsWith("gemini:GEMI-WXHIGH-AUS-"));
     assert.equal(c.location, "Austin");
-    assert.equal(c.tradable, false);
+    assert.equal(c.tradable, true); // sold on Solana (devnet tokens), backed on Gemini
     assert.equal(c.status, "open");
     assert.equal(c.url, "https://www.gemini.com/predictions/WXHIGH-AUS-2611200459");
     assert.ok(c.yesAsk === null || (c.yesAsk > 0 && c.yesAsk < 1));

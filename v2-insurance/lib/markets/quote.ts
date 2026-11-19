@@ -1,6 +1,27 @@
 // Deterministic sizing + budget allocation (DESIGN §4 step 4). No LLM here.
 import type { HedgeLeg, MarketContract, QuoteLine, Risk } from "../types";
 import { getBook, type BookLevels } from "./book";
+import { contractMeta, type Bounds } from "./normalize";
+import { slotKey } from "./index";
+
+/** Integer-°F/whole-unit aware: "Above 77" (lo 77 exclusive) == "78°F or above" (lo 78 inclusive) for temperatures. */
+function boundsKey(b: Bounds | undefined): string | null {
+  if (!b) return null;
+  const temp = b.unit === "°F" || b.unit === "°C";
+  const lo = b.lo === undefined ? "" : String(temp && !b.loInclusive ? b.lo + 1 : b.lo);
+  const hi = b.hi === undefined ? "" : String(temp && !b.hiInclusive ? b.hi - 1 : b.hi);
+  return `${temp ? "T" : b.unit ?? ""}|${lo}|${hi}|${temp ? "" : `${b.loInclusive}${b.hiInclusive}`}`;
+}
+
+/** Same insured outcome on two venues: same slot (peril/day/place or game) and same YES definition. */
+export function sameContract(a: MarketContract, b: MarketContract): boolean {
+  if (a.peril !== b.peril || slotKey(a) !== slotKey(b)) return false;
+  if (a.peril === "game") return a.label.trim().toLowerCase() === b.label.trim().toLowerCase();
+  const lowSeries = (c: MarketContract) => /lowest|minimum|\blow\b/i.test(c.eventTitle);
+  if ((a.peril === "heat" || a.peril === "cold") && lowSeries(a) !== lowSeries(b)) return false; // daily high ≠ daily low
+  const ka = boundsKey(contractMeta(a.id)?.bounds), kb = boundsKey(contractMeta(b.id)?.bounds);
+  return ka !== null && ka === kb;
+}
 
 export const MAX_INSURANCE_ASK = 0.85;
 /** Don't walk the book more than this above the top ask (keeps the avg fill near the quoted price). */
@@ -10,8 +31,10 @@ type Level = { price: number; size: number };
 const r2 = (x: number) => Math.round(x * 100) / 100;
 const r4 = (x: number) => Math.round(x * 10000) / 10000;
 
+/** Gemini + Kalshi lines are bought onchain (Solana outcome tokens); Gemini lines are also backed on Gemini by the desk.
+ *  Polymarket (and anything non-tradable) is context only. A non-tradable Gemini contract falls back to the deep link. */
 export const actionFor = (c: MarketContract): QuoteLine["action"] =>
-  c.venue === "kalshi" && c.tradable ? "buy-onchain" : c.venue === "gemini" ? "open-on-gemini" : "read-only";
+  (c.venue === "gemini" || c.venue === "kalshi") && c.tradable ? "buy-onchain" : c.venue === "gemini" ? "open-on-gemini" : "read-only";
 
 /** Ask ladder for one side: real book if given, else a single level at the top ask (sized by depth if known, else unlimited). */
 export function ladderFor(c: MarketContract, side: "yes" | "no", book?: BookLevels | null): Level[] {
@@ -61,11 +84,44 @@ export interface SizeArgs {
   fetchBooks?: boolean;
   /** Max price above the top ask to walk the book (default MAX_SLIPPAGE). */
   maxSlippage?: number;
+  /** Attach a Polymarket cross-check to each line (default: same as fetchBooks; network, capped at ~4s). */
+  crossCheck?: boolean;
+  /** Best-execution routing: move a Kalshi leg to the identical Gemini contract when it is no dearer (default true). */
+  route?: boolean;
+}
+
+/** Gemini may cost at most this much more than Kalshi for the same contract and still win the route. */
+export const ROUTE_TOLERANCE = 0.01;
+
+/**
+ * Deterministic venue router ("priced & hedged on Gemini"): for each Kalshi leg, if `contracts` holds the SAME
+ * contract on Gemini (same game + same YES team, or same day/place + same bounds) whose ask on that side is an
+ * insurance price and not dearer than Kalshi's (+1¢ tolerance), the leg is re-pointed at Gemini. Kalshi keeps
+ * the leg when it is clearly cheaper or Gemini has no usable ask.
+ */
+export function routeToGemini(legs: HedgeLeg[], contracts: Map<string, MarketContract>): HedgeLeg[] {
+  const gem = [...contracts.values()].filter((c) => c.venue === "gemini" && c.status === "open" && c.tradable);
+  if (!gem.length) return legs;
+  const taken = new Set(legs.map((l) => l.contractId));
+  return legs.map((leg) => {
+    const k = contracts.get(leg.contractId);
+    if (!k || k.venue !== "kalshi") return leg;
+    const kAsk = leg.side === "yes" ? k.yesAsk : k.noAsk;
+    const best = gem
+      .filter((g) => !taken.has(g.id) && sameContract(k, g))
+      .map((g) => ({ g, ask: leg.side === "yes" ? g.yesAsk : g.noAsk }))
+      .filter((x): x is { g: MarketContract; ask: number } => x.ask !== null && x.ask <= MAX_INSURANCE_ASK && (kAsk === null || x.ask <= kAsk + ROUTE_TOLERANCE + 1e-9))
+      .sort((a, b) => a.ask - b.ask)[0];
+    if (!best) return leg;
+    taken.add(best.g.id);
+    return { ...leg, contractId: best.g.id, rationale: `${leg.rationale}${leg.rationale ? " " : ""}(Routed to the identical Gemini contract at ${Math.round(best.ask * 100)}¢${kAsk !== null ? ` vs Kalshi ${Math.round(kAsk * 100)}¢` : ""}.)` };
+  });
 }
 export interface SizeResult { lines: QuoteLine[]; uncovered: { riskId: string; reason: string }[]; totalPremiumUsd: number; totalPayoutUsd: number }
 
 export async function sizeQuote(args: SizeArgs): Promise<SizeResult> {
-  const { legs, risks, contracts, coveragePct, budgetUsd } = args;
+  const { risks, contracts, coveragePct, budgetUsd } = args;
+  const legs = args.route === false ? args.legs : routeToGemini(args.legs, contracts);
   const books = new Map(args.books ?? []);
   const uncovered: SizeResult["uncovered"] = [];
   const riskById = new Map(risks.map((r) => [r.id, r]));
@@ -108,6 +164,11 @@ export async function sizeQuote(args: SizeArgs): Promise<SizeResult> {
     cands.push({ line, ladder, want: filled });
   }
 
+  // Read-only (context) lines are shown but never bought, so they don't spend the budget or count in totals.
+  const context = cands.filter((c) => c.line.action === "read-only").map((c) => c.line);
+  const buyable = cands.filter((c) => c.line.action !== "read-only");
+  cands.length = 0; cands.push(...buyable);
+
   // Budget: keep the best payout-per-premium lines first; scale the marginal one; drop the rest.
   let total = cands.reduce((s, c) => s + c.line.premiumUsd, 0);
   let lines: QuoteLine[];
@@ -131,5 +192,13 @@ export async function sizeQuote(args: SizeArgs): Promise<SizeResult> {
     lines = cands.filter((c) => kept.has(c)).map((c) => c.line);
   }
   total = r2(lines.reduce((s, l) => s + l.premiumUsd, 0));
-  return { lines, uncovered, totalPremiumUsd: total, totalPayoutUsd: lines.reduce((s, l) => s + l.payoutUsd, 0) };
+  const totalPayoutUsd = lines.reduce((s, l) => s + l.payoutUsd, 0);
+  lines = [...lines, ...context];
+  if (args.crossCheck ?? args.fetchBooks !== false) {
+    try {
+      const { attachCrossChecks } = await import("./index");
+      await Promise.race([attachCrossChecks(lines), new Promise((r) => setTimeout(r, 4_000))]);
+    } catch { /* cross-check is optional */ }
+  }
+  return { lines, uncovered, totalPremiumUsd: total, totalPayoutUsd };
 }

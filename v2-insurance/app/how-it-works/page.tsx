@@ -38,7 +38,7 @@ export default function HowItWorks() {
       <section className="card" style={{ padding: 12 }}>
         <div className={s.diagram}>
           <svg viewBox="0 0 980 430" role="img" aria-labelledby="arch-t">
-            <title id="arch-t">Hedgehog architecture: business intake to AI advisor, market data from Gemini and Kalshi, Solana devnet programs, QuickNode Streams feed.</title>
+            <title id="arch-t">Hedgehog architecture: business intake to AI advisor; cover priced on Gemini and Kalshi, sold as Solana devnet tokens and policies, backed by the desk on Gemini; QuickNode Streams feed.</title>
             <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--line-2)" /></marker></defs>
             <text x="20" y="28" fill="var(--muted)" fontSize="11" letterSpacing="2" fontFamily="var(--sans)">OFFCHAIN · NEXT.JS APP</text>
             <text x="20" y="300" fill="var(--muted)" fontSize="11" letterSpacing="2" fontFamily="var(--sans)">ONCHAIN · SOLANA DEVNET</text>
@@ -46,18 +46,19 @@ export default function HowItWorks() {
 
             <Box x={20} y={50} w={180} h={62} title="Business owner" sub="preset or one sentence" tone="var(--ink-2)" />
             <Box x={260} y={50} w={210} h={62} title="AI risk advisor" sub="risk map → market match" />
-            <Box x={530} y={40} w={200} h={52} title="Gemini Prediction Markets" sub="live book · pricing · odds" tone="var(--gemini)" />
-            <Box x={530} y={108} w={200} h={52} title="Kalshi via DFlow API" sub="contracts · outcome tokens" tone="var(--kalshi)" />
+            <Box x={530} y={40} w={200} h={52} title="Gemini Prediction Markets" sub="prices cover · desk backs it here" tone="var(--gemini)" />
+            <Box x={530} y={108} w={200} h={52} title="Kalshi (DFlow) · Polymarket" sub="gaps Gemini can't fill · cross-check" tone="var(--kalshi)" />
             <Box x={260} y={170} w={210} h={62} title="Quote engine" sub="size · walk book · fit budget" tone="var(--gold)" />
             <Box x={790} y={70} w={170} h={62} title="Phantom wallet" sub="owner signs every buy" tone="var(--ink-2)" />
             <Box x={530} y={196} w={200} h={52} title="Settlement crank" sub="reads official results" tone="var(--gold)" />
 
-            <Box x={20} y={320} w={250} h={70} title="Outcome-token desk (mock DFlow)" sub="YES/NO SPL mints · redeem $1" tone="var(--kalshi)" />
+            <Box x={20} y={320} w={250} h={70} title="Outcome-token desk (devnet)" sub="YES/NO SPL mints at the live ask · $1" tone="var(--kalshi)" />
             <Box x={320} y={320} w={260} h={70} title="hedgehog_policy (Anchor)" sub="USDC vault · budget · parametric payout" />
             <Box x={630} y={320} w={330} h={70} title="QuickNode Streams → /api webhook" sub="fills, transfers, payouts → live dashboard" tone="var(--info)" />
 
             <Arrow d="M200 81 L258 81" />
             <Arrow d="M470 72 L528 66" label="prices" lx={500} ly={60} />
+            <Arrow d="M255 318 C 505 300, 505 130, 528 88" label="backing" lx={466} ly={268} />
             <Arrow d="M470 92 L528 128" />
             <Arrow d="M365 112 L365 168" label="picks (IDs only)" lx={420} ly={145} />
             <Arrow d="M470 201 C 650 270, 760 200, 820 134" label="quote → buy tx" lx={690} ly={268} />
@@ -74,13 +75,13 @@ export default function HowItWorks() {
         <div className="grid grid-3">
           <div className="card">
             <span className="badge badge-gemini">Gemini Prediction Markets</span>
-            <h3 style={{ marginTop: 10 }}>The pricing engine</h3>
-            <p className="small">Gemini&apos;s live order books (Austin daily-high weather, NBA/NFL games, WTI crude) price each risk. Every quote line shows the bid/ask, the depth and the implied probability, and is sized by walking the book. Hedgehog deep-links to the exact Gemini contract and quantity (advice only, the owner trades in their own account).</p>
+            <h3 style={{ marginTop: 10 }}>Priced &amp; hedged on Gemini</h3>
+            <p className="small">Gemini is the primary venue. Its live books (Austin daily highs, NBA/NFL games, WTI and Brent) price the cover: every line shows ask, depth and odds, sized by walking the book. When a business buys, Hedgehog&apos;s desk <b>backs the exposure with the same contract on Gemini</b> through the Trader API, like an insurer reinsuring. Kalshi fills perils Gemini doesn&apos;t list (rain, gas, Fed, CPI); Polymarket is a read-only price check.</p>
           </div>
           <div className="card">
             <span className="badge badge-kalshi">Solana</span>
-            <h3 style={{ marginTop: 10 }}>Outcome tokens + an onchain policy book</h3>
-            <p className="small">Kalshi contracts become SPL outcome tokens (DFlow model). The desk co-signs a transaction; the owner signs in Phantom and receives YES tokens that redeem for $1 of USDC. <b>Hedgehog Cover</b> is our Anchor program: premiums go into a USDC vault PDA, a monthly budget mandate is enforced onchain, and payouts are parametric.</p>
+            <h3 style={{ marginTop: 10 }}>Settled on Solana</h3>
+            <p className="small">Each hedge is an SPL outcome token (the DFlow model) minted at the venue&apos;s live ask. The desk co-signs, the owner signs in Phantom, and winning tokens pay $1 of USDC automatically. <b>Hedgehog Cover</b> is our Anchor program: premiums go into a USDC vault PDA, a monthly budget mandate is enforced onchain, and payouts are parametric.</p>
           </div>
           <div className="card">
             <span className="badge badge-neutral">QuickNode Streams</span>
@@ -97,8 +98,9 @@ export default function HowItWorks() {
             <ul className={s.list}>
               <li><b>The AI can&apos;t invent markets.</b> It picks from candidate contract IDs that our code pulled from live venue APIs; sizing and budget allocation are deterministic code.</li>
               <li><b>Basis risk is real.</b> Rain at the airport ≠ rain on your patio; a loss ≠ an empty bar. Every line shows its mismatch note.</li>
+              <li><b>Desk solvency.</b> Gemini-priced tokens are a promise from Hedgehog&apos;s desk, backed by an offsetting Gemini position and a USDC vault whose balance anyone can check onchain (below). Backing orders are <b>dry-run</b> until the desk&apos;s Gemini account is funded; each one is shown on the dashboard.</li>
               <li><b>Settlement attestor.</b> Cover policies are settled by a single attestor key (our crank) from the venue&apos;s official result. If it never settles, the owner can reclaim the premium after expiry. Future: oracle or multisig.</li>
-              <li><b>Devnet only.</b> Hedges and Cover run on Solana devnet with test USDC. The outcome-token desk mirrors real prices but is our own mock venue; the DFlow mainnet path is the same interface.</li>
+              <li><b>Devnet only.</b> Hedges and Cover run on Solana devnet with test USDC. The outcome-token desk mirrors real Gemini/Kalshi prices but is our own venue; the DFlow mainnet path (Kalshi) is the same interface.</li>
               <li><b>Not an insurer.</b> Hedgehog is an advisor plus self-directed hedges; the Cover program is a prototype of the long-term product.</li>
             </ul>
             <Link href="/" className="btn btn-primary" style={{ marginTop: 8 }}>Try it with a preset →</Link>

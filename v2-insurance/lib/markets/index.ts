@@ -1,13 +1,14 @@
 // Market layer entry point. Other modules code against these exports only:
 //   listMarkets, findCandidates, getContract, hitRate (+ helpers contractMeta, parseBounds, getBook).
-import type { BusinessProfile, MarketContract, Peril, Risk, VenueId } from "../types";
+import type { BusinessProfile, MarketContract, Peril, QuoteLine, Risk, VenueId } from "../types";
 import { activeEventsByCategory, eventByTicker, settledEvents } from "./geminiPm";
 import { getKalshiContract, kalshiSource, listKalshiMarkets, settledKalshi } from "./dflow";
 import { addDays, centralDate, contractMeta, daysBetween, normalizeGeminiEvents, parseBounds, type Bounds, type ContractMeta } from "./normalize";
 import { getBook } from "./book";
+import { crossCheckLine, getPolymarket, listPolymarkets, type CrossCheck } from "./polymarket";
 
 export { contractMeta, parseBounds, getBook, kalshiSource };
-export type { Bounds, ContractMeta };
+export type { Bounds, ContractMeta, CrossCheck };
 
 const TTL = 45_000;
 export const NATIONAL_PERILS: Peril[] = ["oil", "gas", "fed", "cpi", "crypto", "game", "other"];
@@ -36,11 +37,12 @@ async function geminiMarkets(perils: Peril[]): Promise<MarketContract[]> {
 
 export async function listMarkets(opts: { perils?: Peril[]; venues?: VenueId[]; includeClosed?: boolean } = {}): Promise<MarketContract[]> {
   const perils = opts.perils?.length ? opts.perils : ALL_PERILS;
+  // Polymarket is read-only context: opt-in via `venues` (findCandidates asks for it on national perils/games).
   const venues = opts.venues?.length ? opts.venues : (["gemini", "kalshi"] as VenueId[]);
   const parts = await Promise.allSettled([
     venues.includes("gemini") ? geminiMarkets(perils) : Promise.resolve([]),
     venues.includes("kalshi") ? cached(`kalshi:${[...perils].sort().join(",")}`, () => listKalshiMarkets(perils)) : Promise.resolve([]),
-    // polymarket: optional read-only venue, not indexed yet
+    venues.includes("polymarket") ? listPolymarkets(perils) : Promise.resolve([]),
   ]);
   const seen = new Set<string>();
   const out: MarketContract[] = [];
@@ -89,15 +91,15 @@ export function parseWindow(w: string | undefined, now = new Date()): { start: s
 // ---------- teams ----------
 
 /** Nickname -> how venues name the team (city label) + league. */
-const TEAMS: { re: RegExp; names: string[]; league: string[] }[] = [
-  { re: /\bspurs\b/i, names: ["San Antonio", "San Antonio Spurs"], league: ["NBA"] },
-  { re: /\brockets\b/i, names: ["Houston", "Houston Rockets"], league: ["NBA"] },
-  { re: /\bmavericks\b|\bmavs\b/i, names: ["Dallas", "Dallas Mavericks"], league: ["NBA"] },
-  { re: /\btexans\b/i, names: ["Houston", "Houston Texans"], league: ["NFL"] },
-  { re: /\bcowboys\b/i, names: ["Dallas", "Dallas Cowboys"], league: ["NFL"] },
-  { re: /\blonghorns\b|\bUT Austin\b|\btexas football\b/i, names: ["Texas", "Texas Longhorns"], league: ["NCAAF", "NCAAM"] },
+export const TEAMS: { re: RegExp; names: string[]; league: string[] }[] = [
+  { re: /\bspurs\b/i, names: ["San Antonio", "San Antonio Spurs", "Spurs"], league: ["NBA"] },
+  { re: /\brockets\b/i, names: ["Houston", "Houston Rockets", "Rockets"], league: ["NBA"] },
+  { re: /\bmavericks\b|\bmavs\b/i, names: ["Dallas", "Dallas Mavericks", "Mavericks"], league: ["NBA"] },
+  { re: /\btexans\b/i, names: ["Houston", "Houston Texans", "Texans"], league: ["NFL"] },
+  { re: /\bcowboys\b/i, names: ["Dallas", "Dallas Cowboys", "Cowboys"], league: ["NFL"] },
+  { re: /\blonghorns\b|\bUT Austin\b|\btexas football\b/i, names: ["Texas", "Texas Longhorns", "Longhorns"], league: ["NCAAF", "NCAAM"] },
   { re: /\baustin fc\b/i, names: ["Austin", "Austin FC"], league: ["MLS"] },
-  { re: /\bstars\b/i, names: ["Dallas", "Dallas Stars"], league: ["NHL"] },
+  { re: /\bstars\b/i, names: ["Dallas", "Dallas Stars", "Stars"], league: ["NHL"] },
 ];
 
 export function teamsIn(text: string): { names: string[]; league: string[] }[] {
@@ -147,7 +149,7 @@ function boundsDistance(b: Bounds | undefined, target: number | null): number | 
  */
 export async function findCandidates(risk: Risk, profile: BusinessProfile, limit = 15): Promise<MarketContract[]> {
   const family: Peril[] = risk.peril === "heat" || risk.peril === "cold" ? ["heat", "cold"] : [risk.peril];
-  const all = await listMarkets({ perils: family });
+  const all = await listMarkets({ perils: family, venues: POLY_PERILS.includes(risk.peril) ? ["gemini", "kalshi", "polymarket"] : ["gemini", "kalshi"] });
   const now = Date.now();
   const win = parseWindow(risk.window);
   const local = !NATIONAL_PERILS.includes(risk.peril);
@@ -200,8 +202,11 @@ export async function findCandidates(risk: Risk, profile: BusinessProfile, limit
     const cheapest = Math.min(c.yesAsk ?? 1, c.noAsk ?? 1);
     if (cheapest > 0.85) s -= 1;
     if (c.tradable) s += 0.3;
+    if (c.venue === "gemini") s += GEMINI_BONUS;          // primary venue: priced + backed on Gemini
+    if (c.venue === "polymarket") s -= 2;                 // read-only context: below anything buyable
     scored.push({ c, s, exp: Number.isFinite(exp) ? exp : Infinity });
   }
+  preferGemini(scored);
   scored.sort((a, b) => b.s - a.s || a.exp - b.exp);
   const top = scored.slice(0, limit).map((x) => ({ ...x.c }));
   await Promise.all(top.map(async (c) => {
@@ -214,6 +219,57 @@ export async function findCandidates(risk: Risk, profile: BusinessProfile, limit
   return top;
 }
 
+/** Perils where Polymarket adds candidates (read-only context lines). */
+export const POLY_PERILS: Peril[] = ["game", "fed", "cpi", "gas", "oil"];
+export const GEMINI_BONUS = 0.6;
+/** Kalshi lines in a peril/date slot Gemini also covers drop this much (unless Gemini's side is unusable there). */
+export const KALSHI_DUP_PENALTY = 1.5;
+
+/** A Gemini contract is a usable hedge when some side is offered at an insurance price and the book is not empty. */
+export function geminiUsable(c: MarketContract): boolean {
+  const ok = (ask: number | null, depth?: number) => ask !== null && ask <= 0.85 && (depth === undefined || depth >= 5);
+  const spreadOk = c.yesAsk === null || c.yesBid === null || c.yesAsk - c.yesBid <= 0.2;
+  return spreadOk && (ok(c.yesAsk, c.depthYes) || ok(c.noAsk, c.depthNo));
+}
+
+/** Same insured event across venues: peril + event day + place (city for weather, sorted teams for games). */
+export function slotKey(c: MarketContract): string {
+  const m = contractMeta(c.id);
+  const day = m?.eventDate ?? (c.expiry ? centralDate(new Date(c.expiry)) : "");
+  const peril = c.peril === "cold" ? "heat" : c.peril;
+  let where = normLoc(c.location);
+  if (c.peril === "game") where = [m?.teams?.[0] ?? c.label, m?.opponents?.[0] ?? ""].map((x) => x.toLowerCase()).sort().join("/");
+  return `${peril}|${day}|${where}`;
+}
+
+/**
+ * "Prefer Gemini unless Kalshi is clearly better": when a peril/day/place slot has a usable Gemini contract,
+ * every Kalshi contract in that slot is pushed down by KALSHI_DUP_PENALTY. Kalshi stays on top for perils
+ * Gemini doesn't list (rain, gas, Fed, CPI) and for slots where Gemini has no ask, only > $0.85, or an empty book.
+ */
+export function preferGemini<T extends { c: MarketContract; s: number }>(scored: T[]): T[] {
+  const geminiSlots = new Set(scored.filter((x) => x.c.venue === "gemini" && geminiUsable(x.c)).map((x) => slotKey(x.c)));
+  for (const x of scored) if (x.c.venue === "kalshi" && geminiSlots.has(slotKey(x.c))) x.s -= KALSHI_DUP_PENALTY;
+  return scored;
+}
+
+// ---------- cross-venue check (Polymarket) ----------
+
+/** Adds `crossCheck` ("Polymarket says X%") to lines whose event Polymarket also lists. Never throws. */
+export async function attachCrossChecks(lines: QuoteLine[]): Promise<QuoteLine[]> {
+  const perils = [...new Set(lines.filter((l) => l.contract.venue !== "polymarket").map((l) => l.contract.peril))].filter((p) => POLY_PERILS.includes(p));
+  if (!perils.length) return lines;
+  try {
+    const poly = await listPolymarkets(perils);
+    const aliases = TEAMS.map(({ re, names }) => ({ re, names }));
+    for (const l of lines) {
+      const cc = crossCheckLine(l, poly, aliases);
+      if (cc) l.crossCheck = cc;
+    }
+  } catch { /* optional */ }
+  return lines;
+}
+
 // ---------- getContract ----------
 
 /** Fresh prices + status + resolution for one contract id (`gemini:<instrumentSymbol>` | `kalshi:<ticker>`). */
@@ -221,6 +277,7 @@ export async function getContract(id: string): Promise<MarketContract | null> {
   const i = id.indexOf(":");
   const venue = id.slice(0, i), sym = id.slice(i + 1);
   if (venue === "kalshi") return getKalshiContract(sym);
+  if (venue === "polymarket") return getPolymarket(id);
   if (venue !== "gemini") return null;
   const guesses: string[] = [];
   const cached = [...srcCache.values()].flatMap((x) => x.v).find((c) => c.id === id);
