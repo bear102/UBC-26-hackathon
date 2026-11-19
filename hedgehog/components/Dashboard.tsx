@@ -167,7 +167,7 @@ export function Dashboard() {
           <h1>My <em>cover</em></h1>
           <p className={s.wallet}>Wallet <span className="mono">{shortAddr(owner, 6)}</span> · Solana devnet · updates live</p>
         </div>
-        <Link href="/" className="btn btn-primary"><IconPlus size={15} /> New quote</Link>
+        <Link href="/#pick" className="btn btn-primary"><IconPlus size={15} /> New quote</Link>
       </header>
 
       <section className={s.stats} aria-label="Totals">
