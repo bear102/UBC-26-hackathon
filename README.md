@@ -1,9 +1,8 @@
-# UBC 2026 Hackathon: prediction markets for small business
+# Hedgehog: prediction markets as small-business insurance (UBC Hackathon 2026)
 
 | Folder | What |
 |---|---|
-| [`cover/`](cover/) | **New direction (Nov 19):** an AI that scans a business and offers Gemini prediction-market contracts as insurance (an ice-cream shop hedges a cold day with a temperature contract). Research, judged design iterations, then the build. |
-| [`hedgehog/`](hedgehog/) | **Insurance build (Nov 19, VPS):** AI risk advisor that maps a business to live Gemini / Kalshi / Polymarket markets, sizes an insurance-style quote, and settles on Solana devnet (outcome tokens + Hedgehog Cover Anchor program, desk backing on Gemini). Working app in `hedgehog/v2-insurance/` (see its `docs/DESIGN.md`). |
-| [`promos/`](promos/) | **Hedgehog v1-v3:** hedged money-back promos ("your drink's on us if the Spurs lose") with a Solana escrow program (live on devnet), plus the Risk Scan + Hedge Desk suite. Working app: `cd promos && npm install && npm run build && npm start`. |
-| [`docs/`](docs/) | Shared hackathon facts (`HACKATHON.md`) and research on past winners and judging (`research/`). |
-| `hedgehog-export/` | An old snapshot upload; superseded by `promos/`. |
+| [`hedgehog/`](hedgehog/) | **The current project.** An AI risk advisor: a business describes itself, the AI finds the events that hurt it (heat, rain, a home-team loss, fuel or rate spikes, snow, power prices…), matches them to live prediction markets (Gemini first, Kalshi where Gemini lists nothing, Polymarket as a cross-check), and builds an insurance-style quote. The owner buys with one signature on Solana devnet (outcome tokens or a Hedgehog Cover policy from our Anchor program); Hedgehog backs each sale on Gemini, and winners are paid automatically. Start with [`hedgehog/docs/DESIGN.md`](hedgehog/docs/DESIGN.md). |
+| [`old/`](old/) | Earlier work: the original "your drink's on us if the Spurs lose" hedged-promos app with its Solana escrow and the Risk Scan + Hedge Desk suite (`old/promos/`), an early upload snapshot (`old/hedgehog-export/`), and the first VPS scaffold (`old/vps-v1/`). |
+
+Run the app: `cd hedgehog && npm install && cp .env.example .env.local` (fill in keys), then `npm run dev` and `npm run worker`.
