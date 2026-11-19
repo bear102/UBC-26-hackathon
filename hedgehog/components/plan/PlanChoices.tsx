@@ -19,8 +19,7 @@ export function PlanChoices({ quote, coverage, onChange }: { quote: Quote; cover
     const q = applyPicks(quote, pp, coverage);
     return { p, picks: pp, premium: q.totalPremiumUsd, payout: q.totalPayoutUsd, n: q.lines.filter((l) => l.contracts > 0).length };
   }), [quote, coverage]);
-  const multi = (quote.options ?? []).filter((o) => o.choices.length > 1 && quote.risks.find((r) => r.id === o.riskId)?.kind !== "proxy");
-  if (!pkgs.length && !multi.length) return null;
+  if (!pkgs.length) return null;
 
   const set = (next: Picks) => onChange(applyPicks(quote, next, coverage));
   const risk = (id: string) => quote.risks.find((r) => r.id === id);
@@ -46,34 +45,6 @@ export function PlanChoices({ quote, coverage, onChange }: { quote: Quote; cover
             </button>
           ))}
         </div>
-      )}
-      {multi.length > 0 && (
-        <details className={s.tune} open>
-          <summary>Fine-tune each hedge</summary>
-          <div className={s.rows}>
-            {multi.map((o) => {
-              const r = risk(o.riskId);
-              return (
-                <div key={o.riskId} className={s.row}>
-                  <div>
-                    <b className="small">{r?.title ?? o.riskId}</b>
-                    <div className="xs muted">~{usd(r?.lossUsd)} at risk</div>
-                  </div>
-                  <div className={s.choices} role="group" aria-label={`Choices for ${r?.title ?? o.riskId}`}>
-                    {o.choices.map((c) => (
-                      <button key={c.contractId} className={s.choice} aria-pressed={picks[o.riskId] === c.contractId}
-                        title={c.rationale} onClick={() => set({ ...picks, [o.riskId]: c.contractId })}>
-                        <span className={s.tier}>{c.tier ?? "Option"}</span>
-                        <span className={s.lbl}>{choiceLabel(c)}</span>
-                        <span className={s.nums}>{cents(c.pricePerContract)} per $1 · {Math.round(c.impliedProb * 100)}% odds · {shortExpiry(c.contract.expiry)}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </details>
       )}
     </section>
   );
