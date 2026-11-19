@@ -10,12 +10,12 @@ export const VENUES: Record<VenueId, { name: string; role: VenueRole; roleLabel:
     desc: "Our main market. Its live prices set your cost, and Hedgehog backs every sale with a matching order on Gemini.",
   },
   kalshi: {
-    name: "Kalshi", role: "buyable", roleLabel: "Buyable", cls: "badge-kalshi",
-    desc: "Used when Gemini doesn't list the event (rain, gas, Fed, CPI) or has no sellers. You get the same Solana outcome token (DFlow model).",
+    name: "Kalshi", role: "buyable", roleLabel: "via DFlow on Solana", cls: "badge-kalshi",
+    desc: "Used where Gemini lists nothing (rain, snow, Texas power, lake levels, diesel, CPI) or has no sellers. Kalshi markets are tokenized on Solana by DFlow, so you hold an SPL outcome token.",
   },
   polymarket: {
     name: "Polymarket", role: "reference", roleLabel: "Reference only", cls: "badge-polymarket",
-    desc: "A second opinion on the odds. We never buy there.",
+    desc: "Reference only — Polymarket isn't available to US desks. A second opinion on the odds (and the only venue for some disaster events); we never buy there.",
   },
 };
 export const VENUE_ORDER: VenueId[] = ["gemini", "kalshi", "polymarket"];
@@ -109,9 +109,10 @@ export function getComparison(line: QuoteLine): Promise<Comparison> {
 
 /** /markets deep link for a risk: group + city. */
 export function marketsHref(peril: string, location?: string): string {
-  const group = peril === "heat" || peril === "cold" ? "heat" : peril === "game" ? "games" : peril === "oil" || peril === "gas" ? "energy" : peril === "fed" || peril === "cpi" ? "rates" : peril;
+  const group = peril === "heat" || peril === "cold" ? "heat" : peril === "game" ? "games" : peril === "oil" || peril === "gas" ? "energy" : peril === "fed" || peril === "cpi" ? "rates"
+    : peril === "water" || peril === "quake" || peril === "storm" ? "disaster" : peril === "natgas" || peril === "metals" ? "commodities" : peril;
   const sp = new URLSearchParams({ risk: group });
   const city = (location ?? "").split(",")[0].trim();
-  if (city && city !== "US" && (group === "heat" || group === "rain")) sp.set("city", city);
+  if (city && city !== "US" && ["heat", "rain", "snow", "power", "disaster"].includes(group)) sp.set("city", city);
   return `/markets?${sp.toString()}`;
 }

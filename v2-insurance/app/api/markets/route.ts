@@ -1,11 +1,11 @@
 // GET /api/markets?peril=heat,rain&venue=kalshi&closed=1  -> MarketContract[] (UI + debugging)
 import { NextResponse } from "next/server";
 import { listMarkets } from "@/lib/markets";
-import type { Peril, VenueId } from "@/lib/types";
+import { ALL_PERILS, type Peril, type VenueId } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-const PERILS = ["heat", "cold", "rain", "game", "oil", "gas", "fed", "cpi", "crypto", "other"];
+const PERILS: string[] = [...ALL_PERILS];
 const VENUES = ["gemini", "kalshi", "polymarket"];
 const list = (v: string | null, ok: string[]) => (v ?? "").split(",").map((x) => x.trim().toLowerCase()).filter((x) => ok.includes(x));
 

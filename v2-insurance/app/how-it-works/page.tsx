@@ -77,7 +77,7 @@ export default function HowItWorks() {
           <div className="card">
             <span className="badge badge-gemini">Gemini Prediction Markets</span>
             <h3 style={{ marginTop: 10 }}>Priced &amp; hedged on Gemini</h3>
-            <p className="small">Gemini is the primary venue. Its live books (Austin daily highs, NBA/NFL games, WTI and Brent) price the cover: every line shows ask, depth and odds, sized by walking the book. When a business buys, Hedgehog&apos;s desk <b>backs the exposure with the same contract on Gemini</b> through the Trader API, like an insurer reinsuring. Kalshi fills perils Gemini doesn&apos;t list (rain, gas, Fed, CPI); Polymarket is a read-only price check.</p>
+            <p className="small">Gemini is the primary venue. Its live books (Austin daily highs, NBA/NFL games, WTI and Brent) price the cover: every line shows ask, depth and odds, sized by walking the book. When a business buys, Hedgehog&apos;s desk <b>backs the exposure with the same contract on Gemini</b> through the Trader API, like an insurer reinsuring. Kalshi (tokenized on Solana by DFlow) fills perils Gemini doesn&apos;t list: rain, snow, Texas power, lake levels, diesel, CPI. Polymarket is a read-only price check.</p>
           </div>
           <div className="card">
             <span className="badge badge-kalshi">Solana</span>
@@ -96,8 +96,15 @@ export default function HowItWorks() {
         <div className={s.two}>
           <div>
             <h2>One market layer, three venues</h2>
-            <p className="small" style={{ color: "var(--ink-2)" }}>You never have to pick a venue. Every hedge carries the same three badges, and each one means one thing:</p>
+            <p className="small" style={{ color: "var(--ink-2)" }}>You never have to pick a venue. <b>Gemini first · Kalshi on Solana where Gemini lists nothing · Polymarket reference.</b> Every hedge carries the same three badges, and each one means one thing:</p>
             <div className="card-soft"><VenueLegend /></div>
+            <h3 style={{ marginTop: 16 }}>What&apos;s on the menu</h3>
+            <ul className={s.list}>
+              <li><b>Gemini:</b> daily highs in 60+ cities, games, crude, natural gas, metals, crypto, Fed decisions.</li>
+              <li><b>Kalshi via DFlow on Solana:</b> rain (daily and monthly totals in 30+ cities), daily highs and lows, December snowfall by city, ski-resort snowfall, season snow days, ERCOT power prices, Lake Mead, heating degree days, weekly diesel and gas, CPI, tornado counts.</li>
+              <li><b>Polymarket (reference only, it isn&apos;t available to US desks):</b> Mississippi River low water, Lake Powell, Great Salt Lake, LA earthquake, US tornado totals.</li>
+              <li><b>Not hedgeable on any venue today:</b> wildfire, flood, hail and air quality. We say so instead of forcing a bad proxy. Hurricanes are out of season (the Atlantic season ends Nov 30).</li>
+            </ul>
           </div>
           <div>
             <h2>How we choose, and show it</h2>

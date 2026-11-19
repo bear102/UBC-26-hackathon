@@ -72,12 +72,15 @@ export const family = (p: Peril): Peril => (p === "cold" ? "heat" : p);
 export function underlying(c: MarketContract): string {
   const t = `${c.eventTitle} ${c.symbol}`.toLowerCase();
   switch (family(c.peril)) {
-    case "heat": return /lowest|minimum|\blow\b|wxlow|lowt/.test(t) ? "low" : "high";
+    case "heat": return /degree days/.test(t) ? "hdd" : /lowest|minimum|\blow\b|wxlow|lowt/.test(t) ? "low" : "high";
     case "oil": return /brent/.test(t) ? "brent" : /wti|crude/.test(t) ? "wti" : "oil";
     case "gas": return /diesel/.test(t) ? "diesel" : "gas";
     case "cpi": return /core/.test(t) ? "core" : /year|yoy|annual/.test(t) ? "cpi-yoy" : "cpi";
     case "crypto": { const m = c.symbol.match(/(?:GEMI-|KX)?([A-Z]{2,5})/); return (m?.[1] ?? c.eventTitle.split(/\s/)[0]).toLowerCase().replace(/\d+.*$/, ""); }
     case "rain": return /snow/.test(t) ? "snow" : "rain";
+    case "snow": return /snow days/.test(t) ? "snow-days" : /more snow than average/.test(t) ? "vs-average" : "snowfall";
+    case "power": return /peak/.test(t) ? "peak-demand" : "hub-price";
+    case "water": return t.replace(/[^a-z ]/g, "").split(" ").filter((w) => /mead|powell|salt|mississippi|louis|baton/.test(w)).join("-") || "water";
     default: return family(c.peril);
   }
 }

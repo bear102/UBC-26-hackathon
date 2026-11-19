@@ -1,6 +1,7 @@
 // Market layer entry point. Other modules code against these exports only:
 //   listMarkets, findCandidates, getContract, hitRate (+ helpers contractMeta, parseBounds, getBook).
 import type { BusinessProfile, MarketContract, Peril, QuoteLine, Risk, VenueId } from "../types";
+import { ALL_PERILS as PERIL_LIST } from "../types";
 import { activeEventsByCategory, eventByTicker, settledEvents } from "./geminiPm";
 import { getKalshiContract, kalshiSource, listKalshiMarkets, settledKalshi } from "./dflow";
 import { addDays, centralDate, contractMeta, daysBetween, normalizeGeminiEvents, parseBounds, type Bounds, type ContractMeta } from "./normalize";
@@ -11,26 +12,34 @@ export { contractMeta, parseBounds, getBook, kalshiSource };
 export type { Bounds, ContractMeta, CrossCheck };
 
 const TTL = 45_000;
-export const NATIONAL_PERILS: Peril[] = ["oil", "gas", "fed", "cpi", "crypto", "game", "other"];
-const ALL_PERILS: Peril[] = ["heat", "cold", "rain", "game", "oil", "gas", "fed", "cpi", "crypto", "other"];
+export const NATIONAL_PERILS: Peril[] = ["oil", "gas", "fed", "cpi", "crypto", "game", "other", "storm", "natgas", "metals"];
+const ALL_PERILS: Peril[] = [...PERIL_LIST];
 
 // ---------- listMarkets ----------
 
-const GEMINI_CATEGORY: Partial<Record<Peril, string>> = { heat: "Weather", cold: "Weather", rain: "Weather", game: "Sports", oil: "Commodities", gas: "Commodities", other: "Commodities", crypto: "Crypto" };
+// Gemini categories per peril. Economics carries Gemini's own Fed / CPI / monthly US gas / GDP / unemployment / recession
+// markets (so those hedges stay on Gemini first); Politics only contributes shutdown/funding events (see normalize.ts).
+const GEMINI_CATEGORY: Partial<Record<Peril, string[]>> = {
+  heat: ["Weather"], cold: ["Weather"], rain: ["Weather"], game: ["Sports"], oil: ["Commodities"], gas: ["Commodities", "Economics"],
+  natgas: ["Commodities"], metals: ["Commodities"], other: ["Commodities", "Economics", "Politics"], crypto: ["Crypto"], fed: ["Economics"], cpi: ["Economics"],
+};
 const srcCache = new Map<string, { t: number; v: MarketContract[]; p?: Promise<MarketContract[]> }>();
 
+/** Serve a stale (< STALE_MAX) list while a refresh runs in the background: a full Kalshi pass is ~120 series. */
+const STALE_MAX = 5 * 60_000;
 async function cached(key: string, f: () => Promise<MarketContract[]>): Promise<MarketContract[]> {
   const c = srcCache.get(key);
   if (c && Date.now() - c.t < TTL) return c.v;
-  if (c?.p) return c.p;
+  const staleOk = !!c && c.v.length > 0 && Date.now() - c.t < STALE_MAX;
+  if (c?.p) return staleOk ? c.v : c.p;
   const p = f().then((v) => { srcCache.set(key, { t: Date.now(), v }); return v; })
     .catch((e) => { if (c) { srcCache.set(key, { t: c.t, v: c.v }); return c.v; } srcCache.delete(key); throw e; });
   srcCache.set(key, { t: c?.t ?? 0, v: c?.v ?? [], p });
-  return p;
+  return staleOk ? c!.v : p;
 }
 
 async function geminiMarkets(perils: Peril[]): Promise<MarketContract[]> {
-  const cats = [...new Set(perils.map((p) => GEMINI_CATEGORY[p]).filter((x): x is string => !!x))];
+  const cats = [...new Set(perils.flatMap((p) => GEMINI_CATEGORY[p] ?? []))];
   const res = await Promise.allSettled(cats.map((cat) => cached(`gemini:${cat}`, async () => normalizeGeminiEvents(await activeEventsByCategory(cat)))));
   return res.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
 }
@@ -121,8 +130,28 @@ function teamMatch(c: MarketContract, meta: ContractMeta | undefined, wanted: { 
 
 const LOC_ALIASES: Record<string, string[]> = {
   "new york": ["nyc", "new york", "new york city"], "washington": ["washington dc", "washington", "dc"],
-  "los angeles": ["la", "los angeles"], "dallas": ["dallas", "dfw", "dallas-fort worth"], "san antonio": ["san antonio", "satx"],
+  "los angeles": ["la", "los angeles"], "dallas": ["dallas", "dfw", "dallas-fort worth", "dallas–fort worth"], "san antonio": ["san antonio", "satx"],
+  "st. louis": ["st. louis", "st louis", "saint louis"], "minneapolis": ["minneapolis", "minneapolis-st. paul", "st. paul"],
 };
+/** Regional markets (a state grid, a lake, a fault zone, a ski town) and the customer cities they cover. */
+export const REGIONS: Record<string, string[]> = {
+  texas: ["austin", "dallas", "houston", "san antonio", "fort worth", "el paso", "college station", "waco", "round rock", "plano", "arlington", "corpus christi", "lubbock", "texas"],
+  california: ["los angeles", "san francisco", "san diego", "san jose", "sacramento", "oakland", "napa", "fresno", "long beach", "mammoth lakes", "california"],
+  "lake mead": ["las vegas", "henderson", "boulder city", "lake mead"],
+  "lake powell": ["page", "lake powell", "kanab", "st. george"],
+  "great salt lake": ["salt lake city", "ogden", "provo", "park city", "great salt lake"],
+  "baton rouge": ["baton rouge", "new orleans"],
+  "st. louis": ["st. louis", "memphis"],
+  "park city": ["park city", "salt lake city"],
+  "big sky": ["big sky", "bozeman"],
+  "mammoth lakes": ["mammoth lakes", "mammoth"],
+  napa: ["napa", "sonoma", "yountville", "st. helena"],
+};
+/** Does a contract measured at `contractLoc` cover a business in `wanted` (normLoc form)? City match or region membership. */
+export function locMatches(contractLoc: string | undefined, wanted: string): boolean {
+  const c = normLoc(contractLoc);
+  return c === wanted || (REGIONS[c]?.includes(wanted) ?? false) || (REGIONS[wanted]?.includes(c) ?? false);
+}
 export function normLoc(s: string | undefined): string {
   const x = (s ?? "").split(",")[0].trim().toLowerCase();
   for (const [k, al] of Object.entries(LOC_ALIASES)) if (al.includes(x)) return k;
@@ -173,7 +202,8 @@ export function underlyings(text: string): { key: string; group: string }[] {
   return UNDERLYINGS.filter(([, , re]) => re.test(text)).map(([key, group]) => ({ key, group }));
 }
 
-const perilFamily = (p: Peril): Peril[] => (p === "heat" || p === "cold" ? ["heat", "cold"] : [p]);
+// "other" still reaches natural gas and metals (they were "other" before they got their own perils).
+const perilFamily = (p: Peril): Peril[] => (p === "heat" || p === "cold" ? ["heat", "cold"] : p === "other" ? ["other", "natgas", "metals"] : [p]);
 const candidateVenues = (p: Peril): VenueId[] => (POLY_PERILS.includes(p) ? ["gemini", "kalshi", "polymarket"] : ["gemini", "kalshi"]);
 
 /** Pure ranking step of findCandidates over a given market universe (no network; used by the eval harness). */
@@ -195,7 +225,7 @@ export function rankCandidates(risk: Risk, profile: BusinessProfile, universe: M
     const exp = Date.parse(c.expiry);
     if (Number.isFinite(exp) && exp <= now) continue;
     if (c.yesAsk === null && c.noAsk === null) continue;
-    if (local && normLoc(c.location) !== loc) continue;
+    if (local && !locMatches(c.location, loc)) continue;
     const meta = contractMeta(c.id);
 
     // time window
@@ -248,7 +278,7 @@ export function rankCandidates(risk: Risk, profile: BusinessProfile, universe: M
 }
 
 /** Perils where Polymarket adds candidates (read-only context lines). */
-export const POLY_PERILS: Peril[] = ["game", "fed", "cpi", "gas", "oil", "heat", "cold"];
+export const POLY_PERILS: Peril[] = ["game", "fed", "cpi", "gas", "oil", "heat", "cold", "snow", "water", "quake", "storm"];
 export const GEMINI_BONUS = 0.6;
 /** Kalshi lines in a peril/date slot Gemini also covers drop this much (unless Gemini's side is unusable there). */
 export const KALSHI_DUP_PENALTY = 1.5;
@@ -265,9 +295,10 @@ export function slotKey(c: MarketContract): string {
   const m = contractMeta(c.id);
   const day = m?.eventDate ?? (c.expiry ? centralDate(new Date(c.expiry)) : "");
   const peril = c.peril === "cold" ? "heat" : c.peril;
+  const day2 = peril === "fed" || peril === "cpi" ? day.slice(0, 7) : day; // decision/print month: venues close a day apart
   let where = normLoc(c.location);
   if (c.peril === "game") where = [m?.teams?.[0] ?? c.label, m?.opponents?.[0] ?? ""].map((x) => x.toLowerCase()).sort().join("/");
-  return `${peril}|${day}|${where}`;
+  return `${peril}|${day2}|${where}`;
 }
 
 /**

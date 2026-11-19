@@ -164,6 +164,25 @@ export function teamWords(text: string): string[] {
   return [...out];
 }
 
+/** teamWords + team cities written out ("Los Angeles C beats our team (Los Angeles C vs San Antonio)" = Spurs). */
+export function teamKeys(text: string): string[] {
+  const out = new Set(teamWords(text)); const l = text.toLowerCase();
+  for (const city of new Set(Object.values(TEAM_CITY))) if (new RegExp(`\\b${city}\\b(?! a&m| tech)`).test(l)) out.add(city);
+  return [...out];
+}
+
+const MATCHUP = /([A-Z][A-Za-z.&']*(?: [A-Z][A-Za-z.&']*)*) (?:vs\.?|v\.?|at|@) ([A-Z][A-Za-z.&']*(?: [A-Z][A-Za-z.&']*)*)/;
+/** Same exposure, with games compared by matchup when both name one ("Southern Utah vs Texas" is not "Arkansas vs Texas"),
+ *  else by team/city keys ("Los Angeles C beats our team (... San Antonio)" = "Spurs lose"). */
+export function sameExposureX(a: Risk, b: Risk): boolean {
+  if (a.peril === "game" && b.peril === "game") {
+    const pair = (r: Risk) => { const m = `${r.trigger} ${r.title}`.match(MATCHUP); return m ? [m[1], m[2]].map((x) => x.toLowerCase().trim()).sort().join("|") : null; };
+    const pa = pair(a), pb = pair(b);
+    if (pa && pb) return pa === pb;
+  }
+  return sameExposure(a, b, teamKeys);
+}
+
 const STOP = new Set(["lose", "loses", "lost", "game", "home", "night", "their", "next", "with", "against", "this", "week", "match"]);
 
 /** HARD RULE: picks must reference a candidate id; unknown/closed/duplicate ids are dropped. */
@@ -193,9 +212,16 @@ const DOWN_RE = /\b(below|under|drops?|falls?|falling|crash(es)?|lower|declines?
 export function guardSide<L extends HedgeLeg>(risk: Risk, leg: L, c: MarketContract | undefined): L | null {
   if (!c || ["game", "fed", "rain"].includes(risk.peril) || ["game", "fed", "rain"].includes(c.peril)) return leg;
   const b = labelBound(c.label);
-  if (b.dir === "range") return leg.side === "no" ? null : leg;
-  if (b.dir !== "up" && b.dir !== "down") return leg;
   const wantUp = risk.peril === "heat" ? true : risk.peril === "cold" ? false : !DOWN_RE.test(risk.trigger);
+  if (b.dir === "range") {
+    if (leg.side === "no") return null;
+    // YES on a bucket only if the whole bucket is on the bad side of the trigger ("45-46°F" does not pay for "low <= 44°F")
+    const [lo, hi] = (c.label.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
+    const t = Number((risk.trigger.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/) ?? [])[0]);
+    if (!Number.isFinite(t) || hi === undefined) return leg;
+    return (wantUp ? lo >= t - 1 : hi <= t + 1) ? leg : null;
+  }
+  if (b.dir !== "up" && b.dir !== "down") return leg;
   const side: "yes" | "no" = (b.dir === "up") === wantUp ? "yes" : "no";
   if (side === leg.side) return leg;
   const ask = side === "yes" ? c.yesAsk : c.noAsk;
@@ -204,14 +230,39 @@ export function guardSide<L extends HedgeLeg>(risk: Risk, leg: L, c: MarketContr
 }
 
 /** Deterministic pick used only if the matcher LLM is unreachable. Conservative: may return nothing. */
-export function heuristicPick(risk: Risk, candidates: MarketContract[]): HedgeLeg | null {
+const MON = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+/** Weekdays a daily/weekend market observes, from its title ("... this weekend", "... on Nov 19, 2026?"); null = unknown/longer. */
+export function marketDays(c: MarketContract): string[] | null {
+  if (/weekend/i.test(c.eventTitle)) return ["Sat", "Sun"];
+  if (/thanksgiving/i.test(c.eventTitle)) return ["Thu"];
+  const m = c.eventTitle.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})\b/i);
+  if (!m) return null;
+  const y = Number((c.eventTitle.match(/\b20\d\d\b/) ?? [])[0]) || new Date(c.expiry).getUTCFullYear();
+  return [DOW[new Date(Date.UTC(y, MON.indexOf(m[1].toLowerCase().slice(0, 3)), Number(m[2]), 12)).getUTCDay()]];
+}
+
+export function heuristicPick(risk: Risk, candidates: MarketContract[], busyDays: string[] = []): HedgeLeg | null {
   const open = candidates.filter((c) => c.status === "open");
   const ok = (a: number | null) => a != null && a >= 0.03 && a <= 0.85;
   const note = "Heuristic pick (AI matcher unavailable); review before buying.";
   if (risk.peril === "game") {
     const words = [...(`${risk.title} ${risk.trigger}`.toLowerCase().match(/[a-z]{4,}/g)?.filter((w) => !STOP.has(w)) ?? []), ...teamWords(`${risk.title} ${risk.trigger}`)];
-    const own = open.find((c) => words.some((w) => c.label.toLowerCase().includes(w)) && ok(c.noAsk));
-    return own ? { riskId: risk.id, contractId: own.id, side: "no", rationale: `Pays if ${own.label} does not win.`, basisRisk: `A loss does not always mean an empty venue. ${note}` } : null;
+    // "X wins / beats Y" hurts the business (rival crowd): YES on X; otherwise "our team loses": NO on our team
+    const text = `${risk.title} ${risk.trigger}`;
+    const win = /\b(wins?|beats?|upsets?)\b/i.test(text) && !/\b(lose|loses|losing|loss|lost)\b/i.test(text);
+    const own = open.find((c) => words.some((w) => c.label.toLowerCase().includes(w)) && ok(win ? c.yesAsk : c.noAsk));
+    if (!own) return null;
+    return win
+      ? { riskId: risk.id, contractId: own.id, side: "yes", rationale: `Pays if ${own.label} wins.`, basisRisk: `A result does not always move your crowd. ${note}` }
+      : { riskId: risk.id, contractId: own.id, side: "no", rationale: `Pays if ${own.label} does not win.`, basisRisk: `A loss does not always mean an empty venue. ${note}` };
+  }
+  if (risk.peril === "rain") {
+    // "Will it rain in <city> on <day> / this weekend" (label = the city) beats monthly rainfall totals; candidates are already ranked by date fit
+    const onBusyDay = (c: MarketContract) => { const d = marketDays(c); return !busyDays.length || !d || d.some((x) => busyDays.includes(x)); };
+    const evs = open.filter((c) => !/\d/.test(c.label) && ok(c.yesAsk) && onBusyDay(c));
+    const ev = evs.find((c) => marketDays(c)) ?? evs[0]; // a market on a known busy day first
+    if (ev) return { riskId: risk.id, contractId: ev.id, side: "yes", rationale: `Pays if "${ev.eventTitle}" resolves YES for ${ev.label}.`, basisRisk: `Rain at the official station may miss your site or your busiest hours. ${note}` };
   }
   const dirRe = risk.peril === "cold" ? /below|under|or less|lower/i : /above|over|or more|higher|at least|≥|>/i;
   const pool = open.filter((c) => dirRe.test(c.label) && ok(c.yesAsk)).sort((a, b) => (a.yesAsk ?? 1) - (b.yesAsk ?? 1));
@@ -223,7 +274,7 @@ export function heuristicPick(risk: Risk, candidates: MarketContract[]): HedgeLe
  *  mortgage broker, a coffee cart and an online merch shop because a gas market exists). */
 const GROUNDING: Partial<Record<string, RegExp>> = {
   gas: /fuel|\bgas\b|gasoline|diesel|petrol|\bvans?\b|truck|\bcars?\b|vehicle|\bdriv|deliver|\bmiles?\b|fleet|generator|equipment|haul|tractor|commut|courier|\broutes?\b|boat/i,
-  fed: /loan|credit|\brates?\b|mortgage|debt|financ|refi|lease|interest/i,
+  fed: /loan|credit line|line of credit|credit card|mortgage|debt|financ|refi|interest|variable[- ]rate/i, // not bare "rates": "nightly rates" are prices
   cpi: /inflation|food cost|ingredient|price|cost|milk|bean|menu|wholesale|\brates?\b|mortgage/i,
 };
 GROUNDING.oil = GROUNDING.gas;
@@ -253,7 +304,20 @@ function sanitizeRisks(raw: z.infer<typeof riskMapSchema>["risks"], profile: Bus
 export function fallbackRisks(profile: BusinessProfile): Risk[] {
   const preset = getPreset(profile.presetId) ?? getPreset(profile.id);
   if (preset) return preset.fallbackRisks.map((r) => ({ ...r }));
-  const d = profile.avgDailyRevenueUsd;
+  const d = profile.avgDailyRevenueUsd, t = profile.description;
+  const days = profile.busyDays.length ? profile.busyDays.join("/") : "a busy day";
+  const r10 = (x: number) => Math.max(10, Math.round(x / 10) * 10);
+  const out: Omit<Risk, "id">[] = [];
+  if (/outdoor|outside|patio|cart|truck|roof|crew|deliver|courier|market|park|rain|weather|cold|heat|\bhot\b|event|tour|lake|garden|nursery|landscap|construction|pop-up|rental|guests|drivers?/i.test(t)) {
+    out.push({ peril: "rain", title: `Rain on ${days}`, trigger: `Measurable rain in Austin on ${days}`, location: "Austin", window: "next 7 days", lossUsd: r10(d * 0.35), lossReasoning: `Assumes ~35% of a ${usd(d)} day is lost to rain.`, confidence: 0.4 });
+    if (/cold|winter|freez|chill|outdoor|outside|patio|cart|market|pop-up|crew|roof/i.test(t)) out.push({ peril: "cold", title: "Cold snap", trigger: "Austin daily high at or below 55°F", location: "Austin", window: "next 7 days", lossUsd: r10(d * 0.15), lossReasoning: `Assumes ~15% of a ${usd(d)} day is lost on a cold day.`, confidence: 0.3 });
+    if (/heat|\bhot\b|\bsun|summer/i.test(t)) out.push({ peril: "heat", title: "Extreme heat", trigger: "Austin daily high >= 90°F", location: "Austin", window: "next 7 days", lossUsd: r10(d * 0.15), lossReasoning: `Assumes ~15% of a ${usd(d)} day is lost when it is very hot.`, confidence: 0.3 });
+  }
+  if (groundedRisk("fed", profile)) out.push({ peril: "fed", title: "Rates stay high (no Fed cut)", trigger: "No Fed rate cut at the next FOMC meeting", location: "US", window: "next FOMC meeting", lossUsd: r10(d * (/mortgage|refi|loan officer/i.test(t) ? 0.3 : 0.05)), lossReasoning: "Variable-rate costs (or rate-driven demand) stay where they are instead of easing.", confidence: 0.35 });
+  if (/crypto|bitcoin|\bbtc\b|solana|\bsol\b/i.test(t)) out.push({ peril: "crypto", title: "Bitcoin drawdown", trigger: "BTC falls below this week's lower strikes", location: "US", window: "next 7 days", lossUsd: r10(d * 0.3), lossReasoning: "Crypto-paying customers pull back and coins held as revenue lose value.", confidence: 0.35 });
+  if (groundedRisk("gas", profile) && /fuel|gas|diesel|vans?|truck|cars?|vehicle|deliver|miles?|fleet|courier|drivers?/i.test(t)) out.push({ peril: "gas", title: "Fuel price spike", trigger: "US gas prices above this week's top strike", location: "US", window: "this week", lossUsd: r10(d * 0.05), lossReasoning: `Assumes fuel is ~5% of a ${usd(d)} day's costs.`, confidence: 0.35 });
+  if (/inflation|cpi|food cost|milk|bean|ingredient|mortgage/i.test(t)) out.push({ peril: "cpi", title: "Hot inflation print", trigger: "CPI above consensus at the next release", location: "US", window: "next CPI release", lossUsd: r10(d * 0.1), lossReasoning: "Input costs (or rates) rise faster than prices can follow.", confidence: 0.3 });
+  if (out.length >= 2) return out.slice(0, 4).map((r, i) => ({ ...r, id: `r${i + 1}` }));
   return [
     { id: "r1", peril: "rain", title: "Rain on a busy day", trigger: "Measurable rain in Austin on a busy day", location: "Austin", window: "next 7 days", lossUsd: Math.round(d * 0.35 / 10) * 10, lossReasoning: `Assumes ~35% of a ${usd(d)} day is lost to rain-driven no-shows.`, confidence: 0.4 },
     { id: "r2", peril: "heat", title: "Extreme heat", trigger: "Austin daily high >= 90°F", location: "Austin", window: "next 7 days", lossUsd: Math.round(d * 0.15 / 10) * 10, lossReasoning: `Assumes ~15% of a ${usd(d)} day is lost when it is very hot.`, confidence: 0.3 },
@@ -374,7 +438,7 @@ export async function advise(profile: BusinessProfile, opts: AdviseOpts = {}): P
   const kept: Idea[] = [];
   const addIdeas = (xs: Idea[]) => {
     for (const idea of xs) {
-      const dup = [...risks, ...kept.map((k) => k.risk)].find((r) => sameExposure(idea.risk, r, teamWords));
+      const dup = [...risks, ...kept.map((k) => k.risk)].find((r) => sameExposureX(idea.risk, r));
       if (dup) { console.warn(`[advise] idea "${idea.risk.title}" dropped: same exposure as "${dup.title}"`); continue; }
       kept.push(idea);
     }
@@ -434,7 +498,7 @@ export async function advise(profile: BusinessProfile, opts: AdviseOpts = {}): P
   const choicesByRisk = new Map<string, TieredLeg[]>();
   const heuristic = (risk: Risk): TieredLeg | null => {
     const cands = candsByRisk.get(risk.id)!;
-    const leg = risk.kind === "proxy" && risk.peril !== "game" ? directionalPick(risk, cands) : heuristicPick(risk, cands) ?? (risk.peril !== "game" ? directionalPick(risk, cands) : null);
+    const leg = risk.kind === "proxy" && risk.peril !== "game" ? directionalPick(risk, cands) : heuristicPick(risk, cands, profile.busyDays) ?? (risk.peril !== "game" ? directionalPick(risk, cands) : null);
     return leg ? { ...leg, tier: "recommended" } : null;
   };
   if (matchable.length) {

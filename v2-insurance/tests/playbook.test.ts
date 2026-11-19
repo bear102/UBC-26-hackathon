@@ -64,7 +64,8 @@ test("resolveQuery against the fixture: right series, right city, priced protect
   const dallas = resolveQuery(byId("bar-rain-night").marketQuery, biz("patio bar", { city: "Dallas, TX" }), MARKETS, NOW);
   assert.ok(dallas.length && dallas.every((r) => r.contract.location === "Dallas"));
   for (const e of PLAYBOOK) {
-    const res = resolveQuery(e.marketQuery, biz("Spurs and Texans fans"), MARKETS, NOW);
+    const regional = e.marketQuery.cities?.length && !e.marketQuery.cities.includes("austin") ? { city: e.marketQuery.cities[0] } : {};
+    const res = resolveQuery(e.marketQuery, biz("Spurs and Texans fans", regional), MARKETS, NOW);
     assert.ok(res.length > 0, `${e.id}: no live candidate in fixture`);
     for (const r of res) assert.ok(r.ask >= 0.02 && r.ask <= MAX_ASK, `${e.id}: ask ${r.ask}`);
   }

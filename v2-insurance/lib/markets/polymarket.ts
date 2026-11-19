@@ -189,6 +189,75 @@ async function fetchWeather(now = new Date()): Promise<MarketContract[]> {
   return normalizePolyWeather(events, info, centralDate(now));
 }
 
+// ---------- disaster / climate events (READ-ONLY reference: Polymarket isn't available to US desks) ----------
+// Multi-outcome "bucket" events with no Kalshi/Gemini equivalent (Mississippi low water, Lake Powell, Great Salt Lake,
+// LA earthquake, US tornado totals) plus a couple that complement Kalshi (Lake Mead season low, winter snow vs average).
+// Fetched by slug. Hurricane landfall events are deliberately left out: the Atlantic season ends Nov 30.
+
+export interface PolyEventSpec { slug: string; peril: Peril; location: string; cityFromGroup?: boolean; label?: string }
+export const POLY_EVENTS: PolyEventSpec[] = [
+  { slug: "lowest-mississippi-level-at-st-louis-by-november-30", peril: "water", location: "St. Louis" },
+  { slug: "lowest-mississippi-level-at-baton-rouge-by-november-30", peril: "water", location: "Baton Rouge" },
+  { slug: "how-low-will-lake-powell-drop-1786980780361", peril: "water", location: "Lake Powell" },
+  { slug: "how-low-will-lake-mead-drop-1786981653904", peril: "water", location: "Lake Mead" },
+  { slug: "lowest-great-salt-lake-elevation-in-2026", peril: "water", location: "Great Salt Lake" },
+  { slug: "how-many-tornadoes-in-the-us-in-2026", peril: "storm", location: "US" },
+  { slug: "us-tornadoes-in-november-2026", peril: "storm", location: "US" },
+  { slug: "magnitude-6pt5-earthquake-in-la-before-2027", peril: "quake", location: "Los Angeles", label: "M6.5+ in LA" },
+  { slug: "will-california-experience-a-7pt0-or-above-magnitude-earthquake-in-2026-20260723232901145", peril: "quake", location: "California", label: "M7.0+ in California" },
+  { slug: "which-cities-will-get-more-snow-than-average-this-winter-2026-2027", peril: "snow", location: "", cityFromGroup: true, label: "More snow than average" },
+];
+export const DISASTER_SOURCE: PolySource = { key: "disaster", tagId: 0, perils: ["water", "storm", "quake", "snow"], days: 180 };
+
+interface PEventFull extends PEvent { startDate?: string }
+
+/** Disaster/climate events -> read-only contracts. Bucket labels ("1,033–1,038 ft", "Below 3.00 ft", "1250+") become bounds. */
+export function normalizePolyEvents(events: PEventFull[], specs: PolyEventSpec[] = POLY_EVENTS, now = new Date()): MarketContract[] {
+  const out: MarketContract[] = [];
+  const bySlug = new Map(specs.map((x) => [x.slug, x]));
+  const today = centralDate(now);
+  for (const e of events) {
+    const spec = bySlug.get(e.slug);
+    if (!spec || e.closed) continue;
+    for (const m of e.markets ?? []) {
+      if (!m?.slug || m.closed) continue;
+      const outs = arr(m.outcomes), pxs = arr(m.outcomePrices).map(Number);
+      if (outs.length !== 2 || outs[0].toLowerCase() !== "yes") continue;
+      const group = (m.groupItemTitle || "").trim();
+      const location = spec.cityFromGroup ? group : spec.location;
+      if (!location) continue;
+      const label = spec.cityFromGroup ? `${group}: ${spec.label ?? "Yes"}` : group || spec.label || m.question;
+      const bounds = spec.cityFromGroup ? null : parseBounds(group);
+      const mid = Number.isFinite(pxs[0]) ? pxs[0] : null;
+      const yesAsk = price(m.bestAsk) ?? price(mid);
+      const yesBid = price(m.bestBid) ?? price(mid);
+      const id = `polymarket:${m.slug}`;
+      const end = m.endDate || e.endDate || "";
+      const start = e.startDate ? centralDate(e.startDate) : today;
+      setMeta(id, {
+        eventDate: start < today ? today : start, eventEnd: end ? centralDate(end) : undefined, bounds: bounds ?? undefined,
+        volume: num(m.volumeNum) ?? undefined, openInterest: num(m.liquidityNum) ?? undefined, category: spec.peril, rules: m.question,
+      });
+      out.push({
+        id, venue: "polymarket", eventTitle: e.title, label, symbol: m.conditionId || m.slug, eventTicker: e.slug,
+        peril: spec.peril, location, expiry: end,
+        yesAsk, yesBid, noAsk: yesBid !== null ? price(1 - yesBid) : null, noBid: yesAsk !== null ? price(1 - yesAsk) : null,
+        url: `https://polymarket.com/event/${encodeURIComponent(e.slug)}`, tradable: false,
+        status: m.acceptingOrders === false ? "closed" : "open", resolution: null,
+      });
+    }
+  }
+  return out;
+}
+
+async function fetchDisasters(): Promise<MarketContract[]> {
+  const qs = POLY_EVENTS.map((x) => `slug=${encodeURIComponent(x.slug)}`).join("&");
+  const r = await fetch(`${GAMMA}/events?${qs}`, { headers: { accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(10_000) });
+  if (!r.ok) throw new Error(`polymarket disasters -> ${r.status}`);
+  const rows = (await r.json()) as unknown;
+  return normalizePolyEvents(Array.isArray(rows) ? (rows as PEventFull[]) : []);
+}
+
 // ---------- fetch + cache ----------
 
 const cache = new Map<string, { t: number; v: MarketContract[]; p?: Promise<MarketContract[]> }>();
@@ -212,7 +281,7 @@ async function cachedSource(src: PolySource): Promise<MarketContract[]> {
   const c = cache.get(src.key);
   if (c && Date.now() - c.t < TTL) return c.v;
   if (c?.p) return c.p;
-  const p = (src.key === "weather" ? fetchWeather() : fetchSource(src))
+  const p = (src.key === "weather" ? fetchWeather() : src.key === "disaster" ? fetchDisasters() : fetchSource(src))
     .then((v) => { cache.set(src.key, { t: Date.now(), v }); return v; })
     .catch(() => { cache.set(src.key, { t: Date.now() - TTL + 15_000, v: c?.v ?? [] }); return c?.v ?? []; }); // retry in 15s
   cache.set(src.key, { t: c?.t ?? 0, v: c?.v ?? [], p });
@@ -221,14 +290,14 @@ async function cachedSource(src: PolySource): Promise<MarketContract[]> {
 
 /** Polymarket contracts for the given perils. Never throws. */
 export async function listPolymarkets(perils: Peril[]): Promise<MarketContract[]> {
-  const srcs = [...POLY_SOURCES, WEATHER_SOURCE].filter((s) => s.perils.some((p) => perils.includes(p)));
+  const srcs = [...POLY_SOURCES, WEATHER_SOURCE, DISASTER_SOURCE].filter((s) => s.perils.some((p) => perils.includes(p)));
   const res = await Promise.allSettled(srcs.map(cachedSource));
   return res.flatMap((r) => (r.status === "fulfilled" ? r.value : [])).filter((c) => perils.includes(c.peril));
 }
 
 /** Fresh-ish (cached) contract by id, or null. */
 export async function getPolymarket(id: string): Promise<MarketContract | null> {
-  for (const s of [...POLY_SOURCES, WEATHER_SOURCE]) {
+  for (const s of [...POLY_SOURCES, WEATHER_SOURCE, DISASTER_SOURCE]) {
     const hit = (await cachedSource(s)).find((c) => c.id === id);
     if (hit) return hit;
   }

@@ -36,6 +36,7 @@ export function seriesOf(c: MarketContract): string {
 const LOC_ALIASES: Record<string, string[]> = {
   "new york": ["nyc", "new york", "new york city"], washington: ["washington dc", "washington", "dc"],
   "los angeles": ["la", "los angeles"], dallas: ["dallas", "dfw", "dallas-fort worth"], "san antonio": ["san antonio", "satx"],
+  "st. louis": ["st. louis", "st louis", "saint louis"],
 };
 export function normCity(s: string | undefined): string {
   const x = (s ?? "").split(",")[0].trim().toLowerCase();
@@ -106,6 +107,7 @@ export function resolveQuery(q: MarketQuery, profile: Pick<BusinessProfile, "cit
   const horizon = now.getTime() + (q.maxDays ?? 45) * 86_400_000;
   const series = q.series?.map((s) => s.toUpperCase());
   const out: ResolvedCandidate[] = [];
+  if (q.cities && !q.cities.includes(city)) return out; // regional market (ERCOT, Lake Mead, ski towns) for another region
   for (const c of markets) {
     if (c.status !== "open" || !q.venues.includes(c.venue) || !q.perils.includes(c.peril)) continue;
     const exp = Date.parse(c.expiry);
@@ -187,7 +189,7 @@ export function playbookIdeas(profile: BusinessProfile, markets: MarketContract[
         id: e.id, industry: e.industry, problem: e.problem, title: e.title, trigger: triggerText(e, best), causalStory: e.causalStory,
         peril: e.peril, correlation: e.correlation, basisRisk: e.basisRisk, naturalHedgeNote: e.naturalHedgeNote,
         evidence: e.evidence.map((x) => `${x.claim} (${x.source})`).join(" "), marketQuery: e.marketQuery.describe, side: best.side,
-        location: e.marketQuery.location === "profile-city" ? profile.city.split(",")[0].trim() : e.marketQuery.location === "team" ? best.contract.eventTitle : "US",
+        location: e.marketQuery.location === "profile-city" || e.marketQuery.cities ? profile.city.split(",")[0].trim() : e.marketQuery.location === "team" ? best.contract.eventTitle : "US",
         window: `until ${shortDate(best.contract.expiry)}`,
         worthIt: `${e.correlation === "strong" ? "Direct link" : e.correlation === "medium" ? "Real but partial link" : "Loose link; keep it small"}; protective side costs ${Math.round(best.ask * 100)}¢ per $1. ${e.basisRisk}`,
         lossUsd: loss,

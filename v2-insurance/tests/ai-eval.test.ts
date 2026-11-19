@@ -52,3 +52,24 @@ test("iter4: macro risks need a hook in the owner's words", () => {
   assert.equal(groundedRisk("fed", p("we carry a $150k line of credit")), true);
   assert.equal(groundedRisk("rain", p("anything")), true);
 });
+
+import { fallbackRisks, heuristicPick, marketDays, sameExposureX } from "../lib/ai/advisor";
+test("iter5: fallback risks follow the business (no weather map for a mortgage broker)", () => {
+  const mb = fallbackRisks({ ...profile, id: "x", description: "Independent mortgage broker; refi volume follows mortgage rates and inflation prints." });
+  assert.deepEqual(mb.map((r) => r.peril).sort(), ["cpi", "fed"]);
+  const cart = fallbackRisks({ ...profile, id: "y", description: "Outdoor coffee cart at the farmers market", busyDays: ["Sat", "Sun"] });
+  assert.ok(cart.some((r) => r.peril === "rain") && !cart.some((r) => r.peril === "fed"));
+});
+test("iter5: heuristic game pick follows win/lose; rain pick lands on a busy day", () => {
+  const g = [mk("k:AM", "Texas A&M vs Oklahoma", "Texas A&M", "game", 0.4), mk("k:OU", "Texas A&M vs Oklahoma", "Oklahoma", "game", 0.62)];
+  assert.equal(heuristicPick(risk({ peril: "game", title: "Texas A&M wins (rival game pulls the crowd)", trigger: "Texas A&M wins its next game" }), g)?.side, "yes");
+  const rain = [mk("k:WK", "Where will it rain this weekend (Nov 21 - Nov 22)?", "Austin", "rain", 0.35), mk("k:TG", "Where will it rain on Thanksgiving?", "Austin", "rain", 0.23)];
+  assert.deepEqual(marketDays(rain[0]), ["Sat", "Sun"]);
+  assert.equal(heuristicPick(risk({ peril: "rain", title: "Rain", trigger: "Rain on Mon-Fri" }), rain, ["Mon", "Tue", "Wed", "Thu", "Fri"])?.contractId, "k:TG");
+  assert.equal(heuristicPick(risk({ peril: "rain", title: "Rain", trigger: "Rain on Sat/Sun" }), rain, ["Sat", "Sun"])?.contractId, "k:WK");
+});
+test("iter5: one game hedged once; different matchups of the same team stay separate", () => {
+  const a = risk({ peril: "game", title: "Spurs lose to the Clippers", trigger: "Los Angeles C vs San Antonio on Nov 21" });
+  assert.equal(sameExposureX(risk({ peril: "game", title: "Our team loses", trigger: "Los Angeles C beats our team (Los Angeles C vs San Antonio, Nov 21)" }), a), true);
+  assert.equal(sameExposureX(risk({ peril: "game", title: "Longhorns lose", trigger: "Southern Utah vs Texas on Nov 21" }), risk({ peril: "game", title: "Our team loses", trigger: "Arkansas beats our team (Arkansas vs Texas, Nov 23)" })), false);
+});

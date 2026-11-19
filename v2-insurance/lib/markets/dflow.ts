@@ -7,12 +7,26 @@
 // the data until a DFlow key (DFLOW_API_KEY + DFLOW_METADATA_BASE) is configured.
 import { env } from "../env";
 import type { MarketContract, Peril } from "../types";
-import { addDays, centralDate, num, parseBounds, price, setMeta, tempPeril, type ContractMeta } from "./normalize";
+import { addDays, centralDate, daysBetween, num, parseBounds, price, setMeta, tempPeril, type ContractMeta } from "./normalize";
 
 export const KALSHI_PUBLIC = "https://api.elections.kalshi.com/trade-api/v2";
 
-/** Kalshi series Hedgehog indexes. `location: "subtitle"` = multi-city series, city is the market's yes_sub_title. */
-export interface SeriesSpec { series: string; peril: Peril; location?: string; league?: string; low?: boolean; period?: "day" | "weekend" | "month" | "game" | "other" }
+/**
+ * Kalshi series Hedgehog indexes (all reachable on Solana as SPL outcome tokens via DFlow; devnet mock venue mints them).
+ * location: a fixed place; "subtitle" = multi-city series (city = the market's yes_sub_title, before " · ");
+ *           "title" = city parsed from the event title ("Highest temperature in Atlanta on ...", "Rain in NYC in Nov ...").
+ * period:   day | weekend | month (ticker -26DEC) | game | other (ticker date or close) |
+ *           range = observation window: two DDMMMYY ticker dates (dmy) -> start/end, else open_time .. close_time.
+ * fixedPeril: keep `peril` even for bounds that would flip heat<->cold (heating degree days).
+ * Every series here was checked live on the Kalshi public API on 2026-11-19 (open events with priced strikes).
+ */
+export interface SeriesSpec {
+  series: string; peril: Peril; location?: string; league?: string; low?: boolean;
+  period?: "day" | "weekend" | "month" | "game" | "other" | "range"; dmy?: boolean; fixedPeril?: boolean;
+}
+const highs = (codes: string[]): SeriesSpec[] => codes.map((series) => ({ series, peril: "heat" as Peril, location: "title", period: "day" as const }));
+const lows = (codes: string[]): SeriesSpec[] => codes.map((series) => ({ series, peril: "cold" as Peril, location: "title", low: true, period: "day" as const }));
+const monthly = (peril: Peril, codes: string[]): SeriesSpec[] => codes.map((series) => ({ series, peril, location: "title", period: "month" as const }));
 export const SERIES: SeriesSpec[] = [
   // Austin weather
   { series: "KXRAIN", peril: "rain", location: "subtitle", period: "day" },          // "Will it rain in <city> on <date>?" (Austin included)
@@ -30,11 +44,41 @@ export const SERIES: SeriesSpec[] = [
   { series: "KXHIGHMIA", peril: "heat", location: "Miami", period: "day" },
   { series: "KXHIGHLAX", peril: "heat", location: "Los Angeles", period: "day" },
   { series: "KXHIGHDEN", peril: "heat", location: "Denver", period: "day" },
+  // every other live US city: daily highs + lows (city from the event title)
+  ...highs(["KXHIGHPHIL", "KXHIGHTATL", "KXHIGHTBOS", "KXHIGHTDC", "KXHIGHTEWR", "KXHIGHTLV", "KXHIGHTMIN", "KXHIGHTNOLA", "KXHIGHTOKC",
+    "KXHIGHTPHX", "KXHIGHTSAN", "KXHIGHTSATX", "KXHIGHTSDF", "KXHIGHTSEA", "KXHIGHTSFO", "KXHIGHTTTN"]),
+  ...lows(["KXLOWTATL", "KXLOWTCHI", "KXLOWTDAL", "KXLOWTDC", "KXLOWTDEN", "KXLOWTEWR", "KXLOWTHOU", "KXLOWTLAX", "KXLOWTLV", "KXLOWTMIA",
+    "KXLOWTMIN", "KXLOWTNOLA", "KXLOWTOKC", "KXLOWTPHIL", "KXLOWTPHX", "KXLOWTSAN", "KXLOWTSATX", "KXLOWTSDF", "KXLOWTSEA", "KXLOWTSFO"]),
+  // monthly rain totals, every live US city ("Rain in <city> in <month>?")
+  ...monthly("rain", ["KXRAINATLM", "KXRAINBOSM", "KXRAINCHIM", "KXRAINCLLM", "KXRAINDALM", "KXRAINDCM", "KXRAINDENM", "KXRAINDTWM", "KXRAINEWRM",
+    "KXRAINHOUM", "KXRAININDM", "KXRAINLAXM", "KXRAINLEXM", "KXRAINLVM", "KXRAINMIAM", "KXRAINMINM", "KXRAINMKEM", "KXRAINNOLAM", "KXRAINNYCM",
+    "KXRAINOKCM", "KXRAINPHILM", "KXRAINPHXM", "KXRAINPVDM", "KXRAINSATXM", "KXRAINSEAM", "KXRAINSFOM", "KXRAINSGFM", "KXRAINSTLM", "KXRAINTPAM",
+    "KXRAINTTNM", "KXRAINWPBM"]),
+  { series: "KXRAINNAPAM", peril: "rain", location: "Napa", period: "range", dmy: true },  // Napa month + Nov–Mar season totals (vineyards)
+  // winter: December snowfall by city, ski towns, season snow days
+  ...monthly("snow", ["KXBOSSNOWM", "KXCHISNOWM", "KXDCSNOWM", "KXDENSNOWM", "KXDETSNOWM", "KXMKESNOWM", "KXMSPSNOWM", "KXNYCSNOWM",
+    "KXPHILSNOWM", "KXPITSNOWM", "KXSEASNOWM", "KXTTNSNOWM"]),
+  { series: "KXTSNOWFALLBIGSKYM", peril: "snow", location: "Big Sky", period: "month" },
+  { series: "KXPARKCSNOW", peril: "snow", location: "Park City", period: "range", dmy: true },     // season-to-date total by Dec 24
+  { series: "KXMAMMOTHSNOW", peril: "snow", location: "Mammoth Lakes", period: "range", dmy: true },
+  { series: "KXSNOWDAYS", peril: "snow", location: "subtitle", period: "range", dmy: true },       // "Atlanta · 0–4 days", Dec 1 – Apr 1
+  // Texas power (ERCOT): peak demand (MW) and North Hub real-time price ($/MWh)
+  { series: "KXTXERCOTPEAK", peril: "power", location: "Texas", period: "range" },
+  { series: "KXERCOTNORTHM", peril: "power", location: "Texas", period: "range", dmy: true },
+  { series: "KXERCOTNORTHW", peril: "power", location: "Texas", period: "range", dmy: true },
+  // water, heating degree days, storms, quakes
+  { series: "KXMEAD", peril: "water", location: "Lake Mead", period: "month" },                    // end-of-month elevation (ft)
+  { series: "KXHDDCVG", peril: "cold", location: "Cincinnati", period: "range", dmy: true, fixedPeril: true }, // Q4 heating degree days
+  { series: "KXTORNADO", peril: "storm", location: "US", period: "month" },                       // monthly US tornado count
+  { series: "KXEARTHQUAKECALIFORNIA", peril: "quake", location: "California", period: "range" },   // M8+ in California
   // national economic perils
   { series: "KXAAAGASW", peril: "gas", period: "other" },   // AAA US avg gas price, weekly
   { series: "KXAAAGASM", peril: "gas", period: "other" },   // monthly
+  { series: "KXDIESELW", peril: "gas", period: "range" },   // EIA weekly diesel (fleets): fuel shares the gas peril
   { series: "KXWTI", peril: "oil", period: "other" },
   { series: "KXWTIW", peril: "oil", period: "other" },
+  { series: "KXBRENTD", peril: "oil", period: "other" },
+  { series: "KXBRENTW", peril: "oil", period: "other" },
   { series: "KXFEDDECISION", peril: "fed", period: "other" },
   { series: "KXFED", peril: "fed", period: "other" },
   { series: "KXCPI", peril: "cpi", period: "other" },
@@ -86,7 +130,7 @@ async function getJson<T>(url: string, ttlMs: number, headers: Record<string, st
 /** Kalshi public trade-api v2 market (fields we use). */
 export interface KMarket {
   ticker: string; event_ticker: string; title?: string; yes_sub_title?: string; no_sub_title?: string;
-  status: string; result?: string; close_time?: string; occurrence_datetime?: string; expected_expiration_time?: string;
+  status: string; result?: string; open_time?: string; close_time?: string; occurrence_datetime?: string; expected_expiration_time?: string;
   yes_ask_dollars?: string; yes_bid_dollars?: string; no_ask_dollars?: string; no_bid_dollars?: string;
   yes_ask_size_fp?: string; yes_bid_size_fp?: string; volume_fp?: string; open_interest_fp?: string;
   rules_primary?: string; floor_strike?: number; cap_strike?: number; strike_type?: string;
@@ -140,6 +184,19 @@ export function kalshiTickerDate(eventTicker: string): { date?: string; month?: 
   return m[3] ? { date: `${ym}-${m[3]}`, month: ym } : { month: ym };
 }
 
+/** All DDMMMYY dates in a ticker: "KXSNOWDAYS-01DEC26-01APR27" -> ["2026-12-01","2027-04-01"]. */
+export function kalshiDmyDates(eventTicker: string): string[] {
+  return [...eventTicker.matchAll(/-(?:[A-Z]+-)?(\d{2})([A-Z]{3})(\d{2})(?=-|$)/g)]
+    .filter((m) => MON[m[2]])
+    .map((m) => `20${m[3]}-${String(MON[m[2]]).padStart(2, "0")}-${m[1]}`);
+}
+
+/** City in an event title: "Highest temperature in Atlanta on Nov 19, 2026?" / "Rain in NYC in Nov 2026?" / "Snow in Boston in Dec 2026?". */
+export function cityFromTitle(title: string): string | undefined {
+  const m = title.match(/\b(?:temperature|rain|snow|snowfall)\s+in\s+(.+?)\s+(?:on|in|for|this|by)\b/i);
+  return m ? m[1].trim() : undefined;
+}
+
 function lastDayOfMonth(ym: string): string {
   const [y, mo] = ym.split("-").map(Number);
   return new Date(Date.UTC(y, mo, 0)).toISOString().slice(0, 10);
@@ -154,18 +211,29 @@ function kStatus(s: string | undefined, result: string | undefined): MarketContr
 
 interface Common {
   ticker: string; eventTicker: string; eventTitle: string; label: string; status: string; result?: string;
-  closeTime?: string; occurrence?: string; yesAsk: unknown; yesBid: unknown; noAsk: unknown; noBid: unknown;
+  openTime?: string; closeTime?: string; occurrence?: string; yesAsk: unknown; yesBid: unknown; noAsk: unknown; noBid: unknown;
   depthYes?: number; depthNo?: number; volume?: number; openInterest?: number; rules?: string;
   outcomeMints?: ContractMeta["outcomeMints"]; source: "dflow" | "kalshi-public";
 }
 
 function toContract(c: Common, spec: SeriesSpec): MarketContract {
   const bounds = parseBounds(c.label) ?? parseBounds(c.eventTitle.match(/(above|below)\s+\$?[\d.]+/i)?.[0] ?? "");
-  const peril: Peril = spec.peril === "heat" || spec.peril === "cold" ? tempPeril(bounds, !!spec.low) : spec.peril;
-  const location = spec.location === "subtitle" ? c.label : spec.location;
+  const peril: Peril = (spec.peril === "heat" || spec.peril === "cold") && !spec.fixedPeril ? tempPeril(bounds, !!spec.low) : spec.peril;
+  const location = spec.location === "subtitle" ? c.label.split(" · ")[0].trim()
+    : spec.location === "title" ? cityFromTitle(c.eventTitle) : spec.location;
   const td = kalshiTickerDate(c.eventTicker);
   let eventDate: string | undefined, eventEnd: string | undefined;
-  if (spec.period === "game" && c.occurrence) eventDate = centralDate(c.occurrence);
+  if (spec.period === "range") {
+    // observation window: two DDMMMYY dates = start/end; one date = start (or the end when it is the close day); else open..close
+    const ds = spec.dmy ? kalshiDmyDates(c.eventTicker) : [];
+    const close = c.closeTime ? centralDate(new Date(Date.parse(c.closeTime) - 60_000)) : undefined;
+    const open = c.openTime ? centralDate(c.openTime) : undefined;
+    if (ds.length >= 2) { eventDate = ds[0]; eventEnd = ds[ds.length - 1]; }
+    else if (ds.length === 1 && close && Math.abs(daysBetween(ds[0], close)) <= 1) { eventDate = open ?? ds[0]; eventEnd = ds[0]; }
+    else if (ds.length === 1) { eventDate = ds[0]; eventEnd = close; }
+    else { eventDate = open ?? close; eventEnd = close; }
+    if (eventDate && eventEnd && eventEnd < eventDate) eventEnd = eventDate;
+  } else if (spec.period === "game" && c.occurrence) eventDate = centralDate(c.occurrence);
   else if (spec.period === "month" && td.month) { eventDate = `${td.month}-01`; eventEnd = lastDayOfMonth(td.month); }
   else if (spec.period === "weekend" && td.date) { eventDate = td.date; eventEnd = addDays(td.date, 1); }
   else if (td.date) eventDate = td.date;
@@ -200,7 +268,7 @@ export function normalizeKalshiEvent(e: KEvent, spec: SeriesSpec = specForTicker
   return (e.markets ?? []).map((m) => toContract({
     ticker: m.ticker, eventTicker: m.event_ticker || e.event_ticker, eventTitle: e.title || m.title || m.ticker,
     label: m.yes_sub_title || m.title || m.ticker, status: m.status, result: m.result || undefined,
-    closeTime: m.close_time, occurrence: m.occurrence_datetime || m.expected_expiration_time,
+    openTime: m.open_time, closeTime: m.close_time, occurrence: m.occurrence_datetime || m.expected_expiration_time,
     yesAsk: m.yes_ask_dollars, yesBid: m.yes_bid_dollars, noAsk: m.no_ask_dollars, noBid: m.no_bid_dollars,
     depthYes: num(m.yes_ask_size_fp) ?? undefined, depthNo: num(m.yes_bid_size_fp) ?? undefined, // NO ask = 1 - YES bid
     volume: num(m.volume_fp) ?? undefined, openInterest: num(m.open_interest_fp) ?? undefined,
@@ -234,7 +302,9 @@ async function kalshiSeries(spec: SeriesSpec, status: "open" | "settled", extra 
   let cursor = "";
   for (let page = 0; page < 5; page++) {
     const url = `${KALSHI_PUBLIC}/events?series_ticker=${spec.series}&status=${status}&with_nested_markets=true&limit=200${extra}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
-    const r = await getJson<{ events: KEvent[]; cursor?: string }>(url, status === "open" ? 60_000 : 30 * 60_000);
+    // monthly / seasonal ladders barely move minute to minute: 5 min cache keeps us under Kalshi's public rate limit
+    const ttl = status !== "open" ? 30 * 60_000 : spec.period === "month" || spec.period === "range" ? 5 * 60_000 : 60_000;
+    const r = await getJson<{ events: KEvent[]; cursor?: string }>(url, ttl);
     for (const e of r.events ?? []) out.push(...normalizeKalshiEvent(e, spec));
     if (!r.cursor || (r.events ?? []).length < 200) break;
     cursor = r.cursor;
@@ -271,7 +341,7 @@ async function pool<T, R>(items: T[], n: number, f: (t: T) => Promise<R>): Promi
 export async function listKalshiMarkets(perils?: Peril[]): Promise<MarketContract[]> {
   const specs = SERIES.filter((s) => !perils || perils.includes(s.peril) || (s.peril === "heat" && perils.includes("cold")) || (s.peril === "cold" && perils.includes("heat")));
   const useDflow = await dflowUsable();
-  const results = await pool(specs, 4, async (spec) => {
+  const results = await pool(specs, Number(process.env.HEDGEHOG_KALSHI_POOL || 6), async (spec) => {
     if (useDflow) {
       try { return await dflowSeries(spec); } catch { /* fall through */ }
     }

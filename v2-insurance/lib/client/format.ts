@@ -42,7 +42,9 @@ export const orderText = (h: { quantity: number; outcome: string; symbol: string
 export const PERIL_LABEL: Record<string, string> = {
   heat: "Heat", cold: "Cold snap", rain: "Rain", game: "Game result", oil: "Oil price", gas: "Gas price",
   fed: "Fed rate", cpi: "Inflation", crypto: "Crypto", other: "Other",
+  snow: "Snow", power: "Power price", water: "Water level", quake: "Earthquake", storm: "Storms", natgas: "Natural gas", metals: "Metals",
 };
 export const PERIL_ICON: Record<string, string> = {
   heat: "☀", cold: "❄", rain: "☂", game: "🏀", oil: "🛢", gas: "⛽", fed: "🏦", cpi: "📈", crypto: "◎", other: "•",
+  snow: "🌨", power: "⚡", water: "🌊", quake: "⚠", storm: "🌪", natgas: "🔥", metals: "⛏",
 };

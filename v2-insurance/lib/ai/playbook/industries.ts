@@ -28,6 +28,9 @@ export interface MarketQuery {
   labelRe?: string;
   /** profile-city: weather at the owner's city; national: US-wide series; team: games of teams named in the description. */
   location: "profile-city" | "national" | "team";
+  /** Only for businesses in these cities (normalized, lower case): regional markets (ERCOT = Texas, Lake Mead = Las Vegas area).
+   *  scripts/validate-playbook.ts validates the idea as a business in cities[0]. */
+  cities?: string[];
   hurtWhen: HurtWhen;
   /** Strike rule: absolute bounds on the label's number, and the protective-side price we aim for. */
   strike?: { min?: number; max?: number; targetAsk?: number };
@@ -103,17 +106,19 @@ export const INDUSTRIES: Industry[] = [
   { id: "farm-nursery", name: "Farms, ranches, greenhouses & nurseries", keywords: ["farm", "ranch", "nursery", "greenhouse", "grower", "orchard", "crop", "cattle", "plants", "garden center", "\\bhay\\b", "vineyard"] },
   { id: "retail-apparel", name: "Seasonal retail & apparel", keywords: ["boutique", "apparel", "clothing", "outerwear", "coats?", "jackets?", "boots", "retail", "store", "shop\\b", "gift shop", "sporting goods"],
     naturalHedges: [{ peril: "cold", note: "Cold snaps sell coats, boots and heaters; they help a winter-stocked store." }] },
-  { id: "tourism", name: "Tourism, hotels, short-term rentals & tours", keywords: ["hotel", "motel", "inn\\b", "airbnb", "vrbo", "short-term rental", "vacation rental", "\\btours?\\b", "kayak", "boat rental", "paddle", "beach", "tourist", "bed and breakfast", "b&b", "lake"] },
+  { id: "tourism", name: "Tourism, hotels, short-term rentals & tours", keywords: ["hotel", "motel", "inn\\b", "airbnb", "vrbo", "short-term rental", "vacation rental", "\\btours?\\b", "kayak", "boat rental", "paddle", "beach", "tourist", "bed and breakfast", "b&b", "lake", "marina", "houseboat", "boat slip"] },
   { id: "sports-bar-merch", name: "Sports bars, watch parties & team merch", keywords: ["sports bar", "watch part", "game nights?", "game-day", "merch", "jerseys?", "fan shop", "spurs", "rockets", "mavericks", "mavs", "texans", "cowboys", "longhorns", "austin fc"] },
   { id: "auto", name: "Auto dealers & repair shops", keywords: ["dealer", "dealership", "used cars?", "car lot", "auto (repair|shop|body)", "mechanic", "\\btires?\\b", "floor ?plan", "car sales"],
     naturalHedges: [{ peril: "cold", note: "Cold snaps kill batteries and tires: more repair tickets for a shop. Don't hedge cold." }] },
   { id: "crypto-merchant", name: "Crypto-accepting merchants", keywords: ["crypto", "bitcoin", "\\bbtc\\b", "solana", "\\bsol\\b", "ethereum", "\\beth\\b", "web3", "stablecoin", "usdc", "nft"] },
   { id: "jeweler", name: "Jewelers, metalsmiths & pawn", keywords: ["jewel", "gold", "silver", "metalsmith", "goldsmith", "engagement ring", "pawn", "bullion", "coin shop"],
-    naturalHedges: [{ peril: "other", note: "If you BUY scrap gold/silver from customers (pawn, we-buy-gold), a metal rally lifts your inventory value: hedge only net short exposure (fixed-price quotes not yet bought)." }] },
+    naturalHedges: [{ peril: "metals", note: "If you BUY scrap gold/silver from customers (pawn, we-buy-gold), a metal rally lifts your inventory value: hedge only net short exposure (fixed-price quotes not yet bought)." }] },
   { id: "real-estate", name: "Real estate agents & mortgage brokers", keywords: ["mortgage", "realtor", "real estate", "broker", "loan officer", "refinanc", "title company", "home sales", "property management"] },
   { id: "laundromat", name: "Laundromats & dry cleaners", keywords: ["laundromat", "laundry", "dry clean", "wash and fold", "wash-and-fold", "coin.?op"] },
   { id: "car-wash", name: "Car washes & mobile detailing", keywords: ["car ?wash", "detailing", "detailer", "auto spa"] },
   { id: "golf-recreation", name: "Golf, driving ranges & outdoor recreation", keywords: ["golf", "driving range", "mini golf", "putt", "disc golf", "zip ?line", "climbing park", "water park", "amusement", "trail rides?", "horseback"] },
+  { id: "ski-town", name: "Ski shops, rentals & ski-town businesses", keywords: ["\\bski", "snowboard", "lift tickets?", "ski rental", "ski shop", "resort town", "big sky", "park city", "mammoth", "tahoe", "aspen", "vail"] },
+  { id: "propane-heating", name: "Propane, heating oil & firewood dealers", keywords: ["propane", "heating oil", "fuel oil", "firewood", "heating fuel", "pellet", "chimney"] },
   { id: "borrower", name: "Any business with a variable-rate loan", keywords: ["line of credit", "credit line", "\\bloc\\b", "sba", "variable.?rate", "\\bloan\\b", "debt", "financ", "\\blease", "prime rate", "floor ?plan"] },
 ];
 
@@ -127,12 +132,16 @@ const RAIN_DAY: MarketQuery = {
   describe: "Kalshi 'Will it rain in <city>' (weekend / daily / Thanksgiving), the owner's city, YES",
 };
 const WET_MONTH: MarketQuery = {
-  venues: ["kalshi"], perils: ["rain"], series: ["KXRAINAUSM"], location: "profile-city", hurtWhen: "above",
+  venues: ["kalshi"], perils: ["rain"], series: ["KXRAINAUSM", "KXRAINATLM", "KXRAINBOSM", "KXRAINCHIM", "KXRAINCLLM", "KXRAINDALM", "KXRAINDCM", "KXRAINDENM", "KXRAINDTWM",
+    "KXRAINEWRM", "KXRAINHOUM", "KXRAININDM", "KXRAINLAXM", "KXRAINLEXM", "KXRAINLVM", "KXRAINMIAM", "KXRAINMINM", "KXRAINMKEM", "KXRAINNOLAM", "KXRAINNYCM",
+    "KXRAINOKCM", "KXRAINPHILM", "KXRAINPHXM", "KXRAINPVDM", "KXRAINSATXM", "KXRAINSEAM", "KXRAINSFOM", "KXRAINSGFM", "KXRAINSTLM", "KXRAINTPAM", "KXRAINTTNM", "KXRAINWPBM"],
+  location: "profile-city", hurtWhen: "above",
   strike: { targetAsk: 0.3 }, maxDays: 45,
-  describe: "Kalshi monthly rainfall total in the owner's city (Austin today), YES on 'Above N inches'",
+  describe: "Kalshi monthly rainfall total in the owner's city (32 US cities), YES on 'Above N inches'",
 };
 const COLD_HIGH: MarketQuery = {
-  venues: ["gemini", "kalshi"], perils: ["cold", "heat"], series: ["WXHIGH", "KXHIGHAUS", "KXHIGHTDAL", "KXHIGHTHOU", "KXHIGHNY", "KXHIGHCHI", "KXHIGHMIA", "KXHIGHLAX", "KXHIGHDEN"],
+  venues: ["gemini", "kalshi"], perils: ["cold", "heat"], series: ["WXHIGH", "KXHIGHAUS", "KXHIGHTDAL", "KXHIGHTHOU", "KXHIGHNY", "KXHIGHCHI", "KXHIGHMIA", "KXHIGHLAX", "KXHIGHDEN",
+    "KXHIGHPHIL", "KXHIGHTATL", "KXHIGHTBOS", "KXHIGHTDC", "KXHIGHTEWR", "KXHIGHTLV", "KXHIGHTMIN", "KXHIGHTNOLA", "KXHIGHTOKC", "KXHIGHTPHX", "KXHIGHTSAN", "KXHIGHTSATX", "KXHIGHTSDF", "KXHIGHTSEA", "KXHIGHTSFO"],
   titleRe: "highest temperature", location: "profile-city", hurtWhen: "below", strike: { targetAsk: 0.15 }, maxDays: 7,
   describe: "Daily high in the owner's city (Gemini WXHIGH, Kalshi KXHIGH*), YES on the 'X°F or below' tail",
 };
@@ -146,20 +155,58 @@ const BRENT_UP: MarketQuery = {
   describe: "Brent / WTI crude settle (Gemini daily + month-end, Kalshi), YES on '$X or above'",
 };
 const NGAS_UP: MarketQuery = {
-  venues: ["gemini"], perils: ["other"], series: ["NGAS"], titleRe: "natural gas", location: "national", hurtWhen: "above", strike: { targetAsk: 0.3 }, maxDays: 14,
+  venues: ["gemini"], perils: ["natgas"], series: ["NGAS"], titleRe: "natural gas", location: "national", hurtWhen: "above", strike: { targetAsk: 0.3 }, maxDays: 14,
   describe: "Gemini Henry Hub natural gas settle (daily + month-end), YES on '$X or above'",
 };
 const COPPER_UP: MarketQuery = {
-  venues: ["gemini"], perils: ["other"], series: ["COPPER"], titleRe: "copper", location: "national", hurtWhen: "above", strike: { targetAsk: 0.25 }, maxDays: 14,
+  venues: ["gemini"], perils: ["metals"], series: ["COPPER"], titleRe: "copper", location: "national", hurtWhen: "above", strike: { targetAsk: 0.25 }, maxDays: 14,
   describe: "Gemini copper settle (daily + month-end), YES on '$X or above'",
 };
 const FED_HIKE: MarketQuery = {
-  venues: ["kalshi"], perils: ["fed"], series: ["KXFEDDECISION"], labelRe: "^hike", location: "national", hurtWhen: "event", strike: { targetAsk: 0.4 }, maxDays: 75,
-  describe: "Kalshi 'Fed decision in <month>?', YES on 'Hike 25bps' / 'Hike >25bps' (next two meetings)",
+  venues: ["gemini", "kalshi"], perils: ["fed"], series: ["FED", "KXFEDDECISION"], labelRe: "^hike", location: "national", hurtWhen: "event", strike: { targetAsk: 0.4 }, maxDays: 75,
+  describe: "Fed decision in <month>? (Gemini FED first, Kalshi KXFEDDECISION), YES on 'Hike 25bps' / 'Hike >25bps' (next two meetings)",
 };
 const CPI_HOT: MarketQuery = {
   venues: ["kalshi"], perils: ["cpi"], series: ["KXCPI", "KXCPIYOY"], location: "national", hurtWhen: "above", strike: { targetAsk: 0.2 }, maxDays: 60,
   describe: "Kalshi CPI MoM / YoY print, YES on 'Above X%' (hot print)",
+};
+
+// Winter / power / water / fuel queries (Kalshi via DFlow on Solana; added 2026-11-19 with the venue expansion)
+const TX = ["austin", "dallas", "houston", "san antonio", "fort worth", "el paso", "college station", "waco", "round rock", "plano", "corpus christi"];
+const SNOW_CITIES = ["chicago", "new york", "boston", "denver", "philadelphia", "detroit", "minneapolis", "washington", "seattle", "milwaukee", "pittsburgh", "trenton"];
+const DIESEL_UP: MarketQuery = {
+  venues: ["kalshi"], perils: ["gas"], series: ["KXDIESELW"], location: "national", hurtWhen: "above", strike: { targetAsk: 0.3 }, maxDays: 14,
+  describe: "Kalshi weekly US on-highway diesel (EIA), YES on 'Above $X'",
+};
+const SNOW_MONTH: MarketQuery = {
+  venues: ["kalshi"], perils: ["snow"], series: ["KXBOSSNOWM", "KXCHISNOWM", "KXDCSNOWM", "KXDENSNOWM", "KXDETSNOWM", "KXMKESNOWM", "KXMSPSNOWM", "KXNYCSNOWM", "KXPHILSNOWM", "KXPITSNOWM", "KXSEASNOWM", "KXTTNSNOWM"],
+  location: "profile-city", cities: SNOW_CITIES, hurtWhen: "above", strike: { targetAsk: 0.35 }, maxDays: 45,
+  describe: "Kalshi 'Snow in <city> in Dec?' monthly snowfall, the owner's city, YES on 'Above N inches'",
+};
+const SKI_LOW_SNOW: MarketQuery = {
+  venues: ["kalshi"], perils: ["snow"], series: ["KXTSNOWFALLBIGSKYM", "KXPARKCSNOW", "KXMAMMOTHSNOW"], location: "profile-city", cities: ["park city", "big sky", "mammoth lakes"],
+  hurtWhen: "below", strike: { targetAsk: 0.4 }, maxDays: 45,
+  describe: "Kalshi resort snowfall (Big Sky December, Park City / Mammoth season-to-date by Dec 24), NO on 'Above N inches' (pays on a thin snow year)",
+};
+const ERCOT_UP: MarketQuery = {
+  venues: ["kalshi"], perils: ["power"], series: ["KXERCOTNORTHW", "KXERCOTNORTHM"], location: "national", cities: TX, hurtWhen: "above",
+  strike: { targetAsk: 0.3 }, maxDays: 45,
+  describe: "Kalshi ERCOT North Hub average real-time price (weekly / monthly, $/MWh), YES on 'Above $X/MWh'",
+};
+const MEAD_LOW: MarketQuery = {
+  venues: ["kalshi"], perils: ["water"], series: ["KXMEAD"], location: "national", cities: ["las vegas", "henderson", "boulder city", "lake mead"], hurtWhen: "below",
+  strike: { targetAsk: 0.45 }, maxDays: 60,
+  describe: "Kalshi Lake Mead end-of-month elevation, NO on 'Above X ft' (pays when the lake ends lower)",
+};
+const HDD_WARM: MarketQuery = {
+  venues: ["kalshi"], perils: ["cold"], series: ["KXHDDCVG"], location: "national", cities: ["cincinnati", "covington", "dayton"], hurtWhen: "below",
+  strike: { targetAsk: 0.25 }, maxDays: 50,
+  describe: "Kalshi Cincinnati cumulative heating degree days Oct-Dec, YES on 'Below N' (a mild early winter)",
+};
+const NAPA_DRY: MarketQuery = {
+  venues: ["kalshi"], perils: ["rain"], series: ["KXRAINNAPAM"], titleRe: "through march", location: "national", cities: ["napa", "sonoma", "yountville", "st. helena"], hurtWhen: "below",
+  strike: { targetAsk: 0.5 }, maxDays: 140,
+  describe: "Kalshi Napa Nov-Mar season rainfall, NO on 'Above N inches' (pays on a dry winter)",
 };
 
 // ---------- validated playbook ----------
@@ -258,7 +305,7 @@ export const PLAYBOOK: HedgeIdea[] = [
   { id: "electrician-copper", industry: "construction", keywords: ["electric", "wire", "wiring", "copper", "fixed-price", "bid"],
     title: "Copper spikes between bid and buy", problem: "Fixed-price bids sit 60-90 days before wire is bought; a copper rally eats the margin.",
     causalStory: "Building wire is priced off exchange copper; the copper market pays when copper settles above the strike.",
-    peril: "other", marketQuery: COPPER_UP, side: "yes", correlation: "strong", lossShareOfDay: 0.3,
+    peril: "metals", marketQuery: COPPER_UP, side: "yes", correlation: "strong", lossShareOfDay: 0.3,
     basisRisk: "Wire distributors lag the exchange by weeks and add their own spread; hedge the copper share of open bids only.",
     evidence: [{ claim: "Most commercial bids assume only 60-90 days of price stability; a ~30% wire jump can wipe out the margin on a fixed-price bid.", source: "https://www.copperweld.com/blog/copperweld-building-wires-impact-on-cost-stability" },
                { claim: "Copper hit records in 2026 as construction cost pressures built (ConstructConnect).", source: "https://news.constructconnect.com/copper-prices-hit-record-as-cost-pressures-build" }],
@@ -290,7 +337,7 @@ export const PLAYBOOK: HedgeIdea[] = [
   { id: "plumber-copper", industry: "hvac-plumbing", keywords: ["pipe", "line set", "copper", "repipe", "install", "fixed-price"],
     title: "Copper pipe and line-set costs jump", problem: "Repipes and A/C installs are quoted fixed-price; copper tube and line sets reprice with copper.",
     causalStory: "Copper tube is priced off exchange copper; the copper market pays when copper settles above the strike.",
-    peril: "other", marketQuery: COPPER_UP, side: "yes", correlation: "strong", lossShareOfDay: 0.2,
+    peril: "metals", marketQuery: COPPER_UP, side: "yes", correlation: "strong", lossShareOfDay: 0.2,
     basisRisk: "Supply-house prices lag; PEX substitutes on some jobs.",
     naturalHedgeNote: "Freezes (burst pipes) and heat waves (A/C calls) bring emergency work: don't hedge weather.",
     evidence: [{ claim: "Copper price lag is a named estimating risk for trades; drops don't pass through to products quickly (ACHR News).", source: "https://www.achrnews.com/articles/166665-copper-prices-just-fell-sharply-but-dont-call-it-relief-just-yet" }],
@@ -388,7 +435,7 @@ export const PLAYBOOK: HedgeIdea[] = [
   { id: "jeweler-gold", industry: "jeweler", keywords: ["gold", "ring", "custom", "quote", "bench"],
     title: "Gold spikes after a custom quote", problem: "Custom pieces are quoted weeks before metal is bought; jewelers say volatility, not the level, is what hurts.",
     causalStory: "Casting gold is priced off spot; the gold market pays when gold settles above the strike.",
-    peril: "other", marketQuery: { venues: ["gemini"], perils: ["other"], series: ["XAU"], titleRe: "gold price", location: "national", hurtWhen: "above", strike: { targetAsk: 0.25 }, maxDays: 14, describe: "Gemini gold settle (daily + month-end), YES on '$X or above'" },
+    peril: "metals", marketQuery: { venues: ["gemini"], perils: ["metals"], series: ["XAU"], titleRe: "gold price", location: "national", hurtWhen: "above", strike: { targetAsk: 0.25 }, maxDays: 14, describe: "Gemini gold settle (daily + month-end), YES on '$X or above'" },
     side: "yes", correlation: "strong", lossShareOfDay: 0.3,
     basisRisk: "Size to the open (quoted, unbought) ounces only; mill/refiner premiums vary.",
     naturalHedgeNote: "Gold you already hold (or buy as scrap) gains in a rally: hedge only the net short quotes.",
@@ -398,7 +445,7 @@ export const PLAYBOOK: HedgeIdea[] = [
   { id: "jeweler-silver", industry: "jeweler", keywords: ["silver", "sterling", "silversmith"],
     title: "Silver spikes after a quote", problem: "Sterling pieces are priced off silver, which has been more volatile than gold.",
     causalStory: "Sterling stock is priced off spot silver; the silver market pays when silver settles above the strike.",
-    peril: "other", marketQuery: { venues: ["gemini"], perils: ["other"], series: ["XAG"], titleRe: "silver price", location: "national", hurtWhen: "above", strike: { targetAsk: 0.25 }, maxDays: 14, describe: "Gemini silver settle (daily + month-end), YES on '$X or above'" },
+    peril: "metals", marketQuery: { venues: ["gemini"], perils: ["metals"], series: ["XAG"], titleRe: "silver price", location: "national", hurtWhen: "above", strike: { targetAsk: 0.25 }, maxDays: 14, describe: "Gemini silver settle (daily + month-end), YES on '$X or above'" },
     side: "yes", correlation: "strong", lossShareOfDay: 0.2,
     basisRisk: "Fabrication premiums; size to open silver quotes.",
     naturalHedgeNote: "Silver inventory you hold gains in a rally.",
@@ -460,6 +507,88 @@ export const PLAYBOOK: HedgeIdea[] = [
     evidence: [{ claim: "Most variable 7(a) loans are prime + spread; prime follows the Fed within days (NerdWallet).", source: "https://www.nerdwallet.com/blog/small-business/sba-loan-rates/" },
                { claim: "A $100k 7(a) loan moving 8.0% -> 8.25% adds ~$13/month (SmartBiz illustration).", source: "https://smartbizloans.com/blog/interest-rate-increase-what-does-it-mean-for-your-business" }],
     validated: V("kalshi:KXFEDDECISION-27JAN-H25", 0.59) },
+
+  // ---- winter, power, water & diesel (Kalshi via DFlow on Solana; Gemini lists none of these) ----
+  { id: "delivery-diesel", industry: "delivery", keywords: ["diesel", "box truck", "semi", "trucking", "freight", "fleet", "reefer"],
+    title: "Diesel spike on a fixed-rate route", problem: "Fleets quote routes and contracts weeks ahead; diesel is bought daily at the pump.",
+    causalStory: "Weekly EIA diesel is the price fleets actually pay (minus a local spread); the market pays when the weekly average prints above the strike.",
+    peril: "gas", marketQuery: DIESEL_UP, side: "yes", correlation: "strong", lossShareOfDay: 0.08,
+    basisRisk: "US average on-highway diesel, not your fuel card; fuel surcharges recover part of a spike after a lag.",
+    evidence: [{ claim: "Fuel is ~20-25% of trucking operating cost per mile (ATRI 2024 operational costs).", source: "https://truckingresearch.org/2024/07/an-analysis-of-the-operational-costs-of-trucking-2024-update/" }],
+    validated: V("kalshi:KXDIESELW-26NOV23-T5.84", 0.21) },
+  { id: "farm-diesel-weekly", industry: "farm-nursery", keywords: ["tractor", "diesel", "harvest", "equipment", "irrigation pump"],
+    title: "Diesel spike for tractors and pumps", problem: "Field work and irrigation pumps burn diesel; crop prices don't move with fuel.",
+    causalStory: "Farm diesel tracks the EIA weekly average; the weekly diesel market pays above the strike.",
+    peril: "gas", marketQuery: DIESEL_UP, side: "yes", correlation: "medium", lossShareOfDay: 0.05,
+    basisRisk: "Off-road (dyed) diesel trades below on-highway by the road tax, but moves with it.",
+    evidence: [{ claim: "Fuel and oil are a top-5 variable cost for US row crops (USDA ERS cost and returns).", source: "https://www.ers.usda.gov/data-products/commodity-costs-and-returns" }],
+    validated: V("kalshi:KXDIESELW-26NOV23-T5.84", 0.21) },
+  { id: "tx-power-restaurant", industry: "bar-restaurant", keywords: ["kitchen", "walk-in", "cooler", "freezer", "electric", "texas", "austin"],
+    title: "ERCOT power-price spike hits the electric bill", problem: "Texas businesses on index or variable-rate electricity eat wholesale spikes (Winter Storm Uri: $9,000/MWh).",
+    causalStory: "Variable-rate Texas power bills pass through the ERCOT real-time price; the North Hub price market pays when the weekly/monthly average prints above the strike.",
+    peril: "power", marketQuery: ERCOT_UP, side: "yes", correlation: "weak", lossShareOfDay: 0.05,
+    basisRisk: "North Hub (Dallas) average, not your load zone or your retail plan; a fixed-rate plan has no exposure at all. On 2026-11-19 only November/this-week strikes near the current price were offered (72¢): real Uri-style tail cover needs the Dec/Jan listings.",
+    evidence: [{ claim: "Real-time ERCOT prices hit the $9,000/MWh cap for ~4 days in Feb 2021 (Uri); index-plan customers got bills in the thousands.", source: "https://www.eia.gov/todayinenergy/detail.php?id=47876" }],
+    validated: V("kalshi:KXERCOTNORTHM-01NOV26-T35", 0.72) },
+  { id: "tx-power-laundromat", industry: "laundromat", keywords: ["dryer", "washer", "electric", "texas", "austin"],
+    title: "ERCOT power-price spike on dryer-heavy bills", problem: "Washers, dryers and water heaters make power a top-3 cost; prices are posted on the machines.",
+    causalStory: "A variable-rate electricity plan passes the ERCOT price through; the market pays above the strike.",
+    peril: "power", marketQuery: ERCOT_UP, side: "yes", correlation: "weak", lossShareOfDay: 0.08,
+    basisRisk: "Hub price vs your retail rate; gas dryers are exposed to natural gas instead. Strikes offered today sit near the current price (72¢), so it's expensive cover until winter months list.",
+    evidence: [{ claim: "Utilities are typically 15-25% of laundromat revenue (Coin Laundry Association).", source: "https://coinlaundry.org/" }],
+    validated: V("kalshi:KXERCOTNORTHM-01NOV26-T35", 0.72) },
+  { id: "snow-restaurant", industry: "bar-restaurant", keywords: ["dine-in", "walk-in", "downtown", "chicago", "new york", "boston", "denver", "minneapolis"],
+    title: "Snowy December keeps diners home", problem: "Snowstorms cancel reservations and close streets in December, the biggest month for holiday parties.",
+    causalStory: "Monthly snowfall above the strike means several snow days; the city's December snowfall market pays on the total.",
+    peril: "snow", marketQuery: SNOW_MONTH, side: "yes", correlation: "medium", lossShareOfDay: 0.6,
+    basisRisk: "Inches at the official station for the whole month: one big storm and five light dustings settle the same.",
+    naturalHedgeNote: "Delivery-heavy kitchens get some orders back on snow days.",
+    evidence: [{ claim: "Snow cut restaurant foot traffic more than any other weather type in Foursquare x AccuWeather data.", source: "https://location.foursquare.com/?p=8611" }],
+    validated: V("kalshi:KXCHISNOWM-26DEC-8", 0.30) },
+  { id: "snow-retail", industry: "retail-apparel", keywords: ["store", "boutique", "holiday", "foot traffic", "chicago", "new york", "boston"],
+    title: "Snowed-out holiday shopping days", problem: "December is up to a third of a small retailer's year; snow days push shoppers online.",
+    causalStory: "Heavy December snowfall in the city removes in-store shopping days; the snowfall market pays above the strike.",
+    peril: "snow", marketQuery: SNOW_MONTH, side: "yes", correlation: "weak", lossShareOfDay: 0.5,
+    basisRisk: "Monthly inches, not weekend storms; a snowy weekday hurts less than a snowy Saturday.",
+    naturalHedgeNote: "Boots, coats and shovels sell better when it snows: winter-stocked stores should hedge only the closure days.",
+    evidence: [{ claim: "Weather sensitivity of consumer spending peaks in Nov-Dec (Planalytics).", source: "https://www.planalytics.com/?p=11419" }],
+    validated: V("kalshi:KXCHISNOWM-26DEC-8", 0.30) },
+  { id: "ski-low-snow", industry: "ski-town", keywords: ["ski", "rental", "lift", "lodging", "shuttle", "lessons"],
+    title: "Thin snow year empties the ski town", problem: "Rental shops, ski schools and ski-town bars live on December-January visits; a slow start means cancelled trips.",
+    causalStory: "Resort snowfall drives skier visits; NO on 'Above N inches' pays when the resort's snow total comes in low.",
+    peril: "snow", marketQuery: SKI_LOW_SNOW, side: "no", correlation: "strong", lossShareOfDay: 0.4,
+    basisRisk: "Snowfall at the resort's report, not base depth or snowmaking; a cold dry December with good snowmaking still pays.",
+    evidence: [{ claim: "Low-snow seasons cost US ski areas ~$1B and 17,400 jobs vs good years (Protect Our Winters / REMI).", source: "https://protectourwinters.org/climate-report/" }],
+    validated: V("kalshi:KXPARKCSNOW-24DEC26-GT30", 0.57) },
+  { id: "marina-lake-mead", industry: "tourism", keywords: ["marina", "houseboat", "boat", "lake mead", "las vegas", "slip"],
+    title: "Lake Mead drops and closes launch ramps", problem: "Low water closes ramps and slips at Lake Mead marinas (2022: several marinas relocated or closed).",
+    causalStory: "Ramp closures follow the lake elevation; NO on 'Above X ft' pays when the month-end elevation comes in lower.",
+    peril: "water", marketQuery: MEAD_LOW, side: "no", correlation: "strong", lossShareOfDay: 0.3,
+    basisRisk: "Month-end Bureau of Reclamation elevation, not your ramp's usable depth; one month is a small slice of a multi-year drought.",
+    evidence: [{ claim: "At ~1,040 ft in 2022 the NPS closed multiple Lake Mead launch ramps and Callville Bay relocated.", source: "https://www.nps.gov/lake/learn/news/" }],
+    validated: V("kalshi:KXMEAD-26DEC-A1035", 0.46) },
+  { id: "propane-mild-winter", industry: "propane-heating", keywords: ["propane", "heating oil", "delivery", "gallons", "winter"],
+    title: "Mild early winter cuts heating-fuel gallons", problem: "Propane and heating-oil dealers sell by the gallon; a warm Q4 means fewer fills while trucks and staff are fixed.",
+    causalStory: "Gallons sold track heating degree days; YES on 'Below N HDD' pays when the season is mild.",
+    peril: "cold", marketQuery: HDD_WARM, side: "yes", correlation: "strong", lossShareOfDay: 0.5,
+    basisRisk: "Cincinnati (CVG) only: strong for Ohio Valley dealers, partial for anyone else.",
+    evidence: [{ claim: "Heating degree days are the standard driver of residential propane and heating-oil demand (EIA winter fuels outlook).", source: "https://www.eia.gov/outlooks/steo/special/winter/" }],
+    validated: V("kalshi:KXHDDCVG-KCVG-01OCT26-31DEC26-T1250", 0.50) },
+  { id: "hvac-mild-winter", industry: "hvac-plumbing", keywords: ["heating", "furnace", "no-heat", "service calls", "cincinnati"],
+    title: "Mild early winter means fewer no-heat calls", problem: "Furnace repair demand comes from cold spells; a warm Q4 leaves techs idle.",
+    causalStory: "Service-call volume tracks heating degree days; the Cincinnati HDD market pays in a mild Q4.",
+    peril: "cold", marketQuery: HDD_WARM, side: "yes", correlation: "medium", lossShareOfDay: 0.3,
+    basisRisk: "One city's degree days; only Ohio Valley shops get a tight fit.",
+    naturalHedgeNote: "Cold snaps are your busy season: never buy cold cover.",
+    evidence: [{ claim: "Heating degree days are the standard driver of heating demand (EIA).", source: "https://www.eia.gov/energyexplained/units-and-calculators/degree-days.php" }],
+    validated: V("kalshi:KXHDDCVG-KCVG-01OCT26-31DEC26-T1250", 0.50) },
+  { id: "vineyard-dry-winter", industry: "farm-nursery", keywords: ["vineyard", "winery", "grapes", "napa", "sonoma", "orchard"],
+    title: "Dry winter in Napa", problem: "Winter rain refills soils and ponds; a dry season means bought water and lower yields next vintage.",
+    causalStory: "Nov-Mar rainfall sets the season's soil moisture; NO on 'Above N inches' pays when the season comes in dry.",
+    peril: "rain", marketQuery: NAPA_DRY, side: "no", correlation: "medium", lossShareOfDay: 0.5,
+    basisRisk: "One gauge in Napa for the whole season; groundwater and reservoir allocations matter too.",
+    evidence: [{ claim: "California's 2012-16 drought cost agriculture ~$2.7B in 2015 alone (UC Davis).", source: "https://watershed.ucdavis.edu/files/biblio/Final_Drought%20Report_08182015_Full_Report_WithAppendices.pdf" }],
+    validated: V("kalshi:KXRAINNAPAM-01NOV26-31MAR27-T10", 0.23) },
 ];
 
 // ---------- rejected (with reasons) ----------
@@ -515,20 +644,10 @@ export const REJECTED: RejectedIdea[] = [
     retryWhen: "Index Kalshi KXEGGS / KXEGGPRICEM (peril cpi)" },
   { id: "coffee-bean-price", industry: "coffee-shop", title: "Coffee bean price spike", status: "future-source",
     reason: "Kalshi KXCOFFEEM/KXCOFFEEH exist but have no open markets today; Gemini has no coffee." , retryWhen: "When Kalshi reopens coffee monthly markets" },
-  { id: "delivery-diesel-weekly", industry: "delivery", title: "Diesel price (weekly EIA) for fleets", status: "future-source",
-    reason: "Kalshi KXDIESELW is live (24 priced strikes, ~78k volume) and is a near-perfect hedge for diesel fleets, but Hedgehog doesn't index it yet. Brent is the stand-in.",
-    retryWhen: "Add { series: 'KXDIESELW', peril: 'gas' } to lib/markets/dflow.ts SERIES" },
-  { id: "texas-power-price", industry: "bar-restaurant", title: "ERCOT power price spike (Texas electric bills)", status: "future-source",
-    reason: "Kalshi KXERCOTNORTHM/W exist but are thin (1-2 priced strikes).", retryWhen: "Index KXERCOTNORTHM when depth improves" },
-  { id: "ski-snow", industry: "tourism", title: "Low snowfall for ski / snow businesses", status: "future-source",
-    reason: "No snow series indexed. Kalshi KXDENSNOWM / KXCHISNOWM (Dec snowfall, ~10k volume) and KXSNOWDAYS are live.", retryWhen: "Index monthly snow series (new peril or 'other')" },
   { id: "tourism-tsa", industry: "tourism", title: "Weak travel week (TSA throughput)", status: "future-source",
     reason: "Kalshi KXTSAW (weekly TSA screenings) is live but not indexed; a direct demand proxy for airport-area hotels and rentals.", retryWhen: "Index KXTSAW" },
   { id: "realestate-home-sales", industry: "real-estate", title: "Weak new-home sales print", status: "future-source",
     reason: "Kalshi KXNHSALES (new home sales, ~12k volume) is live but not indexed; a closer proxy than the Fed for agents.", retryWhen: "Index KXNHSALES" },
   { id: "restaurant-fastfood-traffic", industry: "bar-restaurant", title: "Restaurant traffic index (McDonald's foot traffic / fast-food spend)", status: "future-source",
     reason: "Kalshi KXMCDFT / KXFASTARRAY are live but thin; industry-wide demand proxies.", retryWhen: "Index if depth improves" },
-  { id: "other-city-weather", industry: "bar-restaurant", title: "Weather hedges outside Austin/Dallas/Houston/NYC/CHI/MIA/LA/DEN", status: "future-source",
-    reason: "Gemini WXHIGH covers ~60 cities already; Kalshi daily highs for ATL, SEA, PHX, LV, MIN, BOS, SATX, NOLA, PHIL (KXHIGHT*) and monthly rain for Houston/Dallas/NYC (KXRAINHOUM/DALM/NYCM) are live but not indexed.",
-    retryWhen: "Append those series to SERIES in lib/markets/dflow.ts" },
 ];

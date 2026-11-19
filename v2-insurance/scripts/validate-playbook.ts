@@ -20,7 +20,9 @@ async function depthFor(c: MarketContract, side: "yes" | "no", ask: number): Pro
 }
 
 async function check(q: MarketQuery, markets: MarketContract[]) {
-  const res = resolveQuery(q, profile, markets, new Date(), 6);
+  // regional ideas (ERCOT, Lake Mead, snow cities, ski towns) are validated as a business in their first city
+  const p = q.cities?.length && !q.cities.includes(city.split(",")[0].trim().toLowerCase()) ? { ...profile, city: q.cities[0] } : profile;
+  const res = resolveQuery(q, p, markets, new Date(), 6);
   if (!res.length) return { pass: false, why: "no live contract with protective side priced 2-85¢", best: undefined as undefined | { id: string; side: string; ask: number; depth: number | null } };
   // first candidate (best-ranked) with enough depth
   for (const r of res) {

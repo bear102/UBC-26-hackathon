@@ -245,7 +245,9 @@ test("advise: matcher failure -> heuristic pick + ladder; non-preset profile get
   const free: BusinessProfile = { id: "x", name: "Yoga Studio", description: "Outdoor yoga in the park", city: "Austin, TX", avgDailyRevenueUsd: 1000, busyDays: ["Sat"], monthlyBudgetUsd: 50 };
   const q2 = await advise(free, { deps: { llm: fakeLlm({}), findCandidates: async () => [], sizeQuote: stubSize } });
   assert.equal(q2.risks[0].lossUsd, 350);
-  assert.equal(q2.uncovered.filter((u) => q2.risks.find((r) => r.id === u.riskId)?.kind === "direct").length, 3);
+  // business-aware fallback map (eval iter 5): outdoor yoga gets rain + cold, no 90°F heat risk in a description without heat
+  assert.deepEqual(q2.risks.filter((r) => r.kind === "direct").map((r) => r.peril), ["rain", "cold"]);
+  assert.equal(q2.uncovered.filter((u) => q2.risks.find((r) => r.id === u.riskId)?.kind === "direct").length, 2);
   // keyword idea (cold) duplicates the generic cold risk, so the generic gas idea fills the section
   assert.deepEqual(q2.risks.filter((r) => r.kind === "proxy").map((r) => r.peril), ["gas"]);
 });

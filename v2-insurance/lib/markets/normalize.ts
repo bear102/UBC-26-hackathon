@@ -10,7 +10,7 @@ export interface Bounds {
   hi?: number;               // upper bound
   loInclusive: boolean;
   hiInclusive: boolean;
-  unit?: string;             // "°F" | "°C" | "$" | "%" | "in" | "pts"
+  unit?: string;             // "°F" | "°C" | "$" | "%" | "in" | "pts" | "ft" | "MW" | "days"
   text: string;              // compact human form: "≥95°F", "74–75°F", ">$3.65"
 }
 
@@ -78,6 +78,8 @@ export function parseLongDate(s: string): string | undefined {
 // ---------- label bounds ----------
 
 const NUM = String.raw`(-?\$?-?[\d,]*\.?\d+)`;
+/** Optional unit after a number: °F / F / ft / inches / days / MW. */
+const UW = String.raw`(?:°\s*[FC]?|[FC]\b|ft\b|feet\b|inch(?:es)?\b|days?\b|MW\b)?`;
 
 function unitOf(s: string): string | undefined {
   if (/°\s*C\b/i.test(s)) return "°C";
@@ -85,6 +87,9 @@ function unitOf(s: string): string | undefined {
   if (/\$/.test(s)) return "$";
   if (/%/.test(s)) return "%";
   if (/inch/i.test(s)) return "in";
+  if (/\bft\b|\bfeet\b/i.test(s)) return "ft";
+  if (/\bMW\b/.test(s)) return "MW";
+  if (/\bdays?\b/i.test(s)) return "days";
   if (/points?\b/i.test(s)) return "pts";
   return undefined;
 }
@@ -93,6 +98,9 @@ function fmt(n: number, unit?: string): string {
   if (unit === "$") return `$${v}`;
   if (unit === "in") return `${v}in`;
   if (unit === "pts") return `${v}pts`;
+  if (unit === "ft") return `${v} ft`;
+  if (unit === "MW") return `${n.toLocaleString("en-US")} MW`;
+  if (unit === "days") return `${v} days`;
   return `${v}${unit ?? ""}`;
 }
 function boundsText(b: Omit<Bounds, "text">): string {
@@ -108,17 +116,22 @@ function boundsText(b: Omit<Bounds, "text">): string {
  * "Above 5 inches", "Above -0.3%", "More than 23.5 points"). Returns null for non-numeric labels ("Spurs").
  */
 export function parseBounds(label: string): Bounds | null {
-  const s = label.trim();
+  // multi-city ladders put the city first: "Atlanta · 0–4 days"
+  const s = (label.includes(" · ") ? label.slice(label.lastIndexOf(" · ") + 3) : label).trim();
   const unit = unitOf(s);
   const n = (x: string) => num(x.replace(/\$/g, "")) as number;
   let m: RegExpMatchArray | null;
   let b: Omit<Bounds, "text"> | null = null;
   if ((m = s.match(new RegExp(`${NUM}\\s*°?\\s*[FC]?\\s*(?:to|–|-)\\s*${NUM}`, "i"))) && !/^(above|below|more|less)/i.test(s)) {
     b = { lo: n(m[1]), hi: n(m[2]), loInclusive: true, hiInclusive: true, unit };
-  } else if ((m = s.match(new RegExp(`${NUM}\\s*°?\\s*[FC]?\\s*(?:or|and)\\s*(above|higher|more|over)`, "i")))) {
+  } else if ((m = s.match(new RegExp(`${NUM}\\s*${UW}\\s*(?:or|and)\\s*(above|higher|more|over)`, "i")))) {
     b = { lo: n(m[1]), loInclusive: true, hiInclusive: false, unit };
-  } else if ((m = s.match(new RegExp(`${NUM}\\s*°?\\s*[FC]?\\s*(?:or|and)\\s*(below|lower|less|under)`, "i")))) {
+  } else if ((m = s.match(new RegExp(`${NUM}\\s*${UW}\\s*(?:or|and)\\s*(below|lower|less|under)`, "i")))) {
     b = { hi: n(m[1]), loInclusive: false, hiInclusive: true, unit };
+  } else if ((m = s.match(new RegExp(`^${NUM}\\s*${UW}\\s*or\\s*${NUM}\\s*${UW}$`, "i")))) {
+    b = { lo: n(m[1]), hi: n(m[2]), loInclusive: true, hiInclusive: true, unit }; // "4,189.3 or 4,189.4 ft"
+  } else if ((m = s.match(new RegExp(`^${NUM}\\s*\\+$`)))) {
+    b = { lo: n(m[1]), loInclusive: true, hiInclusive: false, unit };          // "1250+"
   } else if ((m = s.match(new RegExp(`^(?:above|more than|over|greater than|>)\\s*${NUM}`, "i")))) {
     b = { lo: n(m[1]), loInclusive: false, hiInclusive: false, unit };
   } else if ((m = s.match(new RegExp(`^(?:below|less than|under|<)\\s*${NUM}`, "i")))) {
@@ -149,9 +162,16 @@ export function tempPeril(b: Bounds | null, lowSeries = false): Peril {
 export function perilFromText(t: string): Peril {
   const s = t.toLowerCase();
   if (/highest temperature|maximum temperature|heat/.test(s)) return "heat";
-  if (/lowest temperature|minimum temperature|freeze|cold/.test(s)) return "cold";
+  if (/lowest temperature|minimum temperature|freeze|cold|degree days/.test(s)) return "cold";
+  if (/snow/.test(s)) return "snow";
+  if (/tornado|hurricane|tropical storm|landfall/.test(s)) return "storm";
+  if (/earthquake|magnitude/.test(s)) return "quake";
+  if (/\blake (mead|powell)\b|great salt lake|river level|mississippi|reservoir|water (level|elevation)/.test(s)) return "water";
+  if (/\bercot\b|\bpjm\b|\bmiso\b|electricity|power price|\/mwh|peak (power|electricity) demand/.test(s)) return "power";
   if (/rain|precip|storm/.test(s)) return "rain";
-  if (/\bgas prices?\b|gasoline/.test(s)) return "gas";
+  if (/natural gas|\bngas\b|henry hub/.test(s)) return "natgas";
+  if (/\bgold\b|\bsilver\b|\bcopper\b|platinum|palladium|\bxau\b|\bxag\b/.test(s)) return "metals";
+  if (/\bgas prices?\b|gasoline|diesel/.test(s)) return "gas";
   if (/\boil\b|wti|brent|crude/.test(s)) return "oil";
   if (/\bfed\b|federal funds|fomc|rate (cut|hike)/.test(s)) return "fed";
   if (/\bcpi\b|inflation/.test(s)) return "cpi";
@@ -195,8 +215,10 @@ export function normalizeGeminiEvents(events: GEvent[], opts: { includeProps?: b
     else if (cat === "sports") kind = "sports";
     else if (cat === "commodities") kind = "commodity";
     else if (cat === "crypto") kind = "crypto";
-    else kind = "other";
+    else kind = "other"; // Economics (Fed, CPI, GDP, unemployment, recession, monthly US gas), Politics (shutdown)
     if (kind === "sports" && !opts.includeProps && !/-M$/.test(e.ticker)) continue;
+    // Politics: only what moves a small business's cash flow (government shutdown / funding); elections are noise here.
+    if (cat === "politics" && !/shutdown|funded|funding|debt ceiling/i.test(e.title)) continue;
 
     let location: string | undefined;
     let eventDate: string | undefined;
@@ -221,7 +243,8 @@ export function normalizeGeminiEvents(events: GEvent[], opts: { includeProps?: b
       let peril: Peril;
       if (kind === "weather") peril = wm ? tempPeril(bounds, lowSeries) : perilFromText(e.title);
       else if (kind === "sports") peril = "game";
-      else if (kind === "commodity") peril = /\b(WTI|Brent|crude)\b|^Oil/i.test(e.title) ? "oil" : /gasoline|gas prices/i.test(e.title) ? "gas" : "other";
+      else if (kind === "commodity") peril = /\b(WTI|Brent|crude)\b|^Oil/i.test(e.title) ? "oil" : /gasoline|gas prices/i.test(e.title) ? "gas"
+        : /natural gas/i.test(e.title) ? "natgas" : /\b(gold|silver|copper|platinum|palladium)\b/i.test(e.title) ? "metals" : "other";
       else if (kind === "crypto") peril = "crypto";
       else peril = perilFromText(e.title);
 

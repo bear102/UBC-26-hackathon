@@ -5,12 +5,16 @@ import type { MarketContract, Peril, VenueId } from "../types";
 import { listMarkets } from "./index";
 import { boundsKey, boundsOf, eventDay, family, gameInfo, sideProb, underlying } from "./compare";
 
-export type RiskGroup = "heat" | "rain" | "games" | "energy" | "rates" | "crypto" | "other";
+export type RiskGroup = "heat" | "rain" | "snow" | "power" | "disaster" | "games" | "energy" | "commodities" | "rates" | "crypto" | "other";
 export const RISK_GROUPS: { id: RiskGroup; label: string; perils: Peril[] }[] = [
   { id: "heat", label: "Heat & cold", perils: ["heat", "cold"] },
   { id: "rain", label: "Rain", perils: ["rain"] },
+  { id: "snow", label: "Snow & winter", perils: ["snow"] },
+  { id: "power", label: "Power & grid", perils: ["power"] },
+  { id: "disaster", label: "Water, quakes & storms", perils: ["water", "quake", "storm"] },
   { id: "games", label: "Games", perils: ["game"] },
-  { id: "energy", label: "Oil & gas", perils: ["oil", "gas"] },
+  { id: "energy", label: "Fuel & oil", perils: ["oil", "gas"] },
+  { id: "commodities", label: "Natural gas & metals", perils: ["natgas", "metals"] },
   { id: "rates", label: "Rates & inflation", perils: ["fed", "cpi"] },
   { id: "crypto", label: "Crypto", perils: ["crypto"] },
   { id: "other", label: "Other", perils: ["other"] },
@@ -41,7 +45,9 @@ export interface ExplorerData {
 }
 
 const ORDER: VenueId[] = ["gemini", "kalshi", "polymarket"];
-const NATIONAL: Peril[] = ["oil", "gas", "fed", "cpi"];
+const NATIONAL: Peril[] = ["oil", "gas", "fed", "cpi", "natgas", "metals"];
+/** Groups whose events are tied to a place (city filter applies). */
+export const LOCAL_GROUPS: RiskGroup[] = ["heat", "rain", "snow", "power", "disaster"];
 
 function placeOf(c: MarketContract): string {
   if (c.peril === "game") return gameInfo(c).league ?? "";
@@ -125,7 +131,7 @@ export function buildExplorer(markets: MarketContract[], now = Date.now()): Expl
     events.push(ev);
   }
   events.sort((a, b) => (b.venues.length - a.venues.length) || a.date.localeCompare(b.date) || a.title.localeCompare(b.title));
-  const places = [...new Set(events.filter((e) => e.group === "heat" || e.group === "rain").map((e) => e.place).filter(Boolean))]
+  const places = [...new Set(events.filter((e) => LOCAL_GROUPS.includes(e.group)).map((e) => e.place).filter((p) => p && p !== "US"))]
     .sort((a, b) => (a === "Austin" ? -1 : b === "Austin" ? 1 : a.localeCompare(b)));
   return { asOf: new Date(now).toISOString(), total: counts.gemini + counts.kalshi + counts.polymarket, counts, events, places };
 }
@@ -136,11 +142,12 @@ const TTL = 60_000;
 /** Cached explorer data (60s, stale-on-error). */
 export async function getExplorerData(): Promise<ExplorerData> {
   if (cache && Date.now() - cache.t < TTL) return cache.v;
-  if (cache?.p) return cache.p;
+  const staleOk = !!cache && cache.v.total > 0 && Date.now() - cache.t < 5 * 60_000; // serve stale while refreshing
+  if (cache?.p) return staleOk ? cache.v : cache.p;
   const prev = cache;
   const p = listMarkets({ venues: ["gemini", "kalshi", "polymarket"] })
     .then((ms) => { const v = buildExplorer(ms); cache = { t: Date.now(), v }; return v; })
     .catch((e) => { if (prev) { cache = { t: prev.t, v: prev.v }; return prev.v; } cache = null; throw e; });
   cache = { t: prev?.t ?? 0, v: prev?.v ?? { asOf: "", total: 0, counts: { gemini: 0, kalshi: 0, polymarket: 0 }, events: [], places: [] }, p };
-  return p;
+  return staleOk ? prev!.v : p;
 }

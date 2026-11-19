@@ -1,6 +1,12 @@
 // SHARED CONTRACT for all Hedgehog v2 modules. Change only with care; every module imports from here.
 
-export type Peril = "heat" | "cold" | "rain" | "game" | "oil" | "gas" | "fed" | "cpi" | "crypto" | "other";
+export type Peril = "heat" | "cold" | "rain" | "game" | "oil" | "gas" | "fed" | "cpi" | "crypto" | "other"
+  // winter / disaster / climate perils (Kalshi via DFlow; Polymarket reference). "gas" also covers diesel (fuel).
+  | "snow" | "power" | "water" | "quake" | "storm"
+  // commodity inputs that used to be "other": natural gas (Gemini NGAS), metals (Gemini XAU/XAG/COPPER)
+  | "natgas" | "metals";
+/** Every peril, in display order (append-only: on-chain peril codes follow lib/solana/policyClient.ts PERIL_CODES). */
+export const ALL_PERILS = ["heat", "cold", "rain", "game", "oil", "gas", "fed", "cpi", "crypto", "other", "snow", "power", "water", "quake", "storm", "natgas", "metals"] as const satisfies readonly Peril[];
 export type VenueId = "gemini" | "kalshi" | "polymarket";
 
 /** Business profile from the intake (chat sentence + form). */

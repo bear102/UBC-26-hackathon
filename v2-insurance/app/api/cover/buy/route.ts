@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { PublicKey } from "@solana/web3.js";
 import { store } from "@/lib/store";
+import { ALL_PERILS } from "@/lib/types";
 import { coverClient, loadKeypair } from "@/lib/solana/policyClient";
 import { defaultGetContract, VenueError } from "@/lib/venue";
 import { errorResponse } from "@/lib/venue/http";
@@ -26,7 +27,7 @@ const RESOLUTION_BUFFER_H = () => Number(process.env.COVER_RESOLUTION_BUFFER_H) 
 const Body = z.object({
   owner: z.string().min(32).max(44),
   businessId: z.string().min(1).max(100).optional(),
-  peril: z.enum(["heat", "cold", "rain", "game", "oil", "gas", "fed", "cpi", "crypto", "other"]).optional(),
+  peril: z.enum(ALL_PERILS).optional(),
   marketRef: z.string().min(1).refine((s) => Buffer.byteLength(s, "utf8") <= 64, "marketRef must be <= 64 bytes"),
   trigger: z.string().min(1).max(500),
   side: z.enum(["yes", "no"]).default("yes"), // which outcome of marketRef pays the policy

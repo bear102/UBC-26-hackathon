@@ -26,6 +26,7 @@ export const USDC_DECIMALS = 6;
 /** Peril <-> on-chain u8 code. */
 export const PERIL_CODES: Record<Peril, number> = {
   other: 0, heat: 1, cold: 2, rain: 3, game: 4, oil: 5, gas: 6, fed: 7, cpi: 8, crypto: 9,
+  snow: 10, power: 11, water: 12, quake: 13, storm: 14, natgas: 15, metals: 16,
 };
 export const perilFromCode = (c: number): Peril =>
   (Object.entries(PERIL_CODES).find(([, v]) => v === c)?.[0] as Peril) ?? "other";

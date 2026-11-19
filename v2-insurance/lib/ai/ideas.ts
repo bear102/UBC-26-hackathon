@@ -4,9 +4,9 @@ import { z } from "zod/v4";
 import type { BusinessProfile, HedgeLeg, MarketContract, NaturalHedge, Peril, Quote, QuoteLine, QuotePackage, Risk } from "../types";
 import { rescaleQuote, type Coverage } from "../client/quote";
 
-const PERILS = ["heat", "cold", "rain", "game", "oil", "gas", "fed", "cpi", "crypto", "other"] as const satisfies readonly Peril[];
+const PERILS = ["heat", "cold", "rain", "game", "oil", "gas", "fed", "cpi", "crypto", "other", "snow", "power", "water", "quake", "storm", "natgas", "metals"] as const satisfies readonly Peril[];
 const TZ = "America/Chicago";
-const WEATHER: Peril[] = ["heat", "cold", "rain"];
+const WEATHER: Peril[] = ["heat", "cold", "rain", "snow"];
 const TX_CITIES = ["austin", "dallas", "houston", "san antonio"];
 
 // ---------- market catalog (compact view of the whole live universe) ----------
@@ -133,7 +133,7 @@ export function brainstormPrompt(profileBlock: string, today: string, catalog: C
     profileBlock,
     seeds.length ? `\nINDUSTRY PLAYBOOK (researched hedges for businesses like this; already included, so propose DIFFERENT ideas):\n${seeds.slice(0, 6).map((x) => `- ${x.risk.title} (${x.risk.peril}, ${x.risk.correlation ?? "medium"}): ${x.risk.causalStory ?? ""}`).join("\n")}` : "",
     `\nToday is ${today}.`,
-    catalog.length ? `\nLIVE MARKET CATALOG (key | peril | series | venue | closes | details):\n${catalog.map((c) => c.line).join("\n")}` : "\nLIVE MARKET CATALOG: unavailable; use perils oil, gas, other (commodities), fed, cpi, crypto, game, heat, cold, rain and set catalogKey to \"\".",
+    catalog.length ? `\nLIVE MARKET CATALOG (key | peril | series | venue | closes | details):\n${catalog.map((c) => c.line).join("\n")}` : "\nLIVE MARKET CATALOG: unavailable; use perils oil, gas (incl. diesel), natgas, metals, power, water, snow, fed, cpi, crypto, game, heat, cold, rain, other and set catalogKey to \"\".",
     `\nReturn {"ideas":[...],"naturalHedges":[...]}.`,
   ].join("\n");
 }
@@ -207,7 +207,7 @@ const PRESET_IDEAS: Record<string, { ideas: FallbackIdea[]; natural: NaturalHedg
       { kind: "proxy", peril: "cold", title: "Cold front empties the patio", trigger: "Austin daily high at or below the low end of this week's range", location: "Austin", window: "next 7 days",
         lossUsd: 900, lossReasoning: "80% outdoor seats; a 50s-high night cuts a ~$6,000 weekend night ~15% (~$900).", confidence: 0.45, hint: "Highest temperature in Austin",
         correlation: "medium", causalStory: "Late-November fronts drop Austin highs 20°F overnight; heaters only save part of an outdoor bar's crowd.", worthIt: "Cheap when the market thinks a front is unlikely; skip it if heaters are already booked." },
-      { kind: "proxy", peril: "game", title: "Texas A&M beats TCU (rival game pulls the crowd)", trigger: "Texas A&M wins Saturday's game vs TCU", location: "Texas", window: "this weekend",
+      { kind: "proxy", peril: "game", title: "Texas A&M wins (rival game pulls the crowd)", trigger: "Texas A&M wins its next game", location: "Texas", window: "next 7 days",
         lossUsd: 400, lossReasoning: "Big Saturday college games keep fans at watch parties elsewhere; ~6% of a $6,500 Saturday (~$400).", confidence: 0.3, hint: "Texas A&M",
         correlation: "weak", causalStory: "Rainey St crowds thin when big Texas college games run long or celebrations move to campus bars.", worthIt: "Coin-flip price, weak link: only for owners who see Saturday game-day swings." },
       { kind: "proxy", peril: "gas", title: "Pump prices squeeze bar tabs", trigger: "US average gas price above this week's top strike", location: "US", window: "this week",
@@ -221,7 +221,7 @@ const PRESET_IDEAS: Record<string, { ideas: FallbackIdea[]; natural: NaturalHedg
   },
   "east-austin-food-truck": {
     ideas: [
-      { kind: "proxy", peril: "other", title: "Propane/natural gas cost spike", trigger: "Natural gas closes above the top of this week's range", location: "US", window: "Nov 30",
+      { kind: "proxy", peril: "natgas", title: "Propane/natural gas cost spike", trigger: "Natural gas closes above the top of this week's range", location: "US", window: "Nov 30",
         lossUsd: 120, lossReasoning: "Griddles + consomé pots burn ~$600/month of propane; a 20% spike adds ~$120/month.", confidence: 0.4, hint: "Natural Gas price",
         correlation: "medium", causalStory: "Propane and natural gas move together through winter heating demand; the truck's burners run all day.", worthIt: "Small, cheap tail cover; worth it only if propane is a top-3 cost." },
       { kind: "proxy", peril: "gas", title: "Gas prices cut the lunch crowd's spending", trigger: "US average gas price above this week's top strike", location: "US", window: "this week",
@@ -241,7 +241,7 @@ const PRESET_IDEAS: Record<string, { ideas: FallbackIdea[]; natural: NaturalHedg
       { kind: "proxy", peril: "oil", title: "Diesel spike via Brent crude", trigger: "Brent crude at or above the month-end strike near today's price", location: "US", window: "Nov 30",
         lossUsd: 260, lossReasoning: "~1,300 gal/month; a $5/bbl Brent jump adds ~$0.15-0.20/gal diesel: ~$200-260/month.", confidence: 0.5, hint: "Oil (Brent)",
         correlation: "strong", causalStory: "US diesel and jet fuel price off Brent more than WTI; the vans' fuel bill moves with it inside 2 weeks.", worthIt: "Strong link and a fixed-price book: the best proxy hedge for this business." },
-      { kind: "proxy", peril: "other", title: "Natural gas lifts kitchen energy bills", trigger: "Natural gas closes above this month's upper strike", location: "US", window: "Nov 30",
+      { kind: "proxy", peril: "natgas", title: "Natural gas lifts kitchen energy bills", trigger: "Natural gas closes above this month's upper strike", location: "US", window: "Nov 30",
         lossUsd: 150, lossReasoning: "Commercial ranges/ovens ~$1,000/month of gas; a 15% spike adds ~$150.", confidence: 0.4, hint: "Natural Gas price",
         correlation: "medium", causalStory: "Commercial kitchen gas tariffs reset with Henry Hub prices, with a 1-2 month lag.", worthIt: "Worth a small tail position going into winter." },
       { kind: "proxy", peril: "fed", title: "Fed hikes and the credit line costs more", trigger: "The Fed hikes 25bps at the next meeting", location: "US", window: "next FOMC meeting",
@@ -261,10 +261,10 @@ const KEYWORD_IDEAS: { re: RegExp; idea: (p: BusinessProfile) => FallbackIdea }[
   { re: /crypto|bitcoin|btc|solana|\bsol\b|web3/i, idea: (p) => ({ kind: "proxy", peril: "crypto", title: "Crypto drawdown cuts crypto-paid sales", trigger: "BTC below this month's lower strikes on Nov 30", location: "US", window: "Nov 30",
       lossUsd: Math.max(20, Math.round(p.avgDailyRevenueUsd * 0.2 / 10) * 10), lossReasoning: "Assumes ~20% of a day's sales come from crypto-rich customers who pull back after a drop.", confidence: 0.3, hint: "BTC price",
       correlation: "medium", causalStory: "Crypto-paying customers spend from crypto wealth; a drawdown hits both demand and coins held as revenue.", worthIt: "Only if a real share of revenue is paid or held in crypto." }) },
-  { re: /jewel|silver|gold|metal|electric|wire|plumb|contractor/i, idea: (p) => ({ kind: "proxy", peril: "other", title: "Metal input costs spike", trigger: "Silver closes above this month's upper strike", location: "US", window: "Nov 30",
+  { re: /jewel|silver|gold|metal|electric|wire|plumb|contractor/i, idea: (p) => ({ kind: "proxy", peril: "metals", title: "Metal input costs spike", trigger: `${/silver/i.test(p.description) ? "Silver" : /gold|jewel/i.test(p.description) ? "Gold" : "Copper"} closes above this month's upper strike`, location: "US", window: "Nov 30",
       lossUsd: Math.max(20, Math.round(p.avgDailyRevenueUsd * 0.1 / 10) * 10), lossReasoning: "Assumes metal is ~10% of a day's cost base.", confidence: 0.35, hint: /silver/i.test(p.description) ? "Silver price" : /gold|jewel/i.test(p.description) ? "Gold price" : "Copper price",
       correlation: "strong", causalStory: "Raw metal is priced off the same futures the market settles on.", worthIt: "Worth it when quotes to customers are fixed before you buy metal." }) },
-  { re: /loan|credit|debt|mortgage|financ|lease/i, idea: () => ({ kind: "proxy", peril: "fed", title: "Rate hike on a variable loan", trigger: "The Fed hikes 25bps at the next meeting", location: "US", window: "next FOMC meeting",
+  { re: /\bloans?\b|credit line|line of credit|\bdebt|mortgage|financ|\blease/i, idea: () => ({ kind: "proxy", peril: "fed", title: "Rate hike on a variable loan", trigger: "The Fed hikes 25bps at the next meeting", location: "US", window: "next FOMC meeting",
       lossUsd: 50, lossReasoning: "A 0.25% move on a ~$100k variable balance is ~$21/month.", confidence: 0.35, hint: "Fed decision", labelRe: /hike 25/i,
       correlation: "strong", causalStory: "Variable loans reprice off prime, which moves with the Fed.", worthIt: "Small dollars; worth it on large balances." }) },
   { re: /patio|outdoor|park|trail|tour|boat|lake|garden|nursery|yoga|market/i, idea: (p) => ({ kind: "proxy", peril: "cold", title: "Cold front keeps customers home", trigger: "Austin daily high at or below the low end of this week's range", location: "Austin", window: "next 7 days",
@@ -300,7 +300,7 @@ export function sameExposure(a: Risk, b: Risk, teamWords: (t: string) => string[
     return ta.length > 0 && ta.some((t) => tb.includes(t));
   }
   if (WEATHER.includes(a.peril)) return loc(a) === loc(b);
-  if (a.peril === "other" || a.peril === "crypto" || a.peril === "oil") {
+  if (a.peril === "other" || a.peril === "crypto" || a.peril === "oil" || a.peril === "metals") {
     const w = (r: Risk): string[] => [...(`${r.title} ${r.trigger}`.toLowerCase().match(/copper|silver|gold|natural gas|btc|bitcoin|eth|sol\b|xrp|wti|brent/g) ?? [])];
     const wa = w(a), wb = w(b);
     return wa.length > 0 && wa.some((x) => wb.includes(x));
@@ -321,7 +321,9 @@ export function filterIdeaCandidates(idea: Idea, cands: MarketContract[], univer
     const ids = new Set(idea.ids ?? []);
     const extra = universe.filter((c) => ok(c) && (ids.size ? ids.has(c.id) : true) && match(c) && !out.some((o) => o.id === c.id));
     // useful insurance prices first, nearest expiry next
-    extra.sort((a, b) => insurancePrice(a) - insurancePrice(b) || Date.parse(a.expiry) - Date.parse(b.expiry));
+    // within ~60 days first (a Fed idea for "the next meeting" must not land on a meeting 5 months out), then insurance price
+    const far = (c: MarketContract) => (Date.parse(c.expiry) - now > 60 * 86_400_000 ? 1 : 0);
+    extra.sort((a, b) => far(a) - far(b) || insurancePrice(a) - insurancePrice(b) || Date.parse(a.expiry) - Date.parse(b.expiry));
     out = [...out, ...extra].slice(0, 12);
   }
   return out;

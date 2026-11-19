@@ -50,14 +50,25 @@ const PERIL_EVENT: Record<Peril, string> = {
   cpi: "inflation runs hot",
   crypto: "crypto prices swing",
   other: "it happens",
+  snow: "the snow piles up",
+  power: "power prices spike",
+  water: "the water level drops",
+  quake: "a big earthquake hits",
+  storm: "severe storms hit",
+  natgas: "natural gas prices spike",
+  metals: "metal prices jump",
 };
 const PERIL_EVENT_PAST: Record<Peril, string> = {
   rain: "it rained", heat: "the heat wave hit", cold: "the cold snap hit", game: "the game went the wrong way",
   oil: "oil prices spiked", gas: "gas prices climbed", fed: "rates moved", cpi: "inflation ran hot", crypto: "crypto prices swung", other: "it happened",
+  snow: "the snow came", power: "power prices spiked", water: "the water level dropped", quake: "the earthquake hit", storm: "the storms hit",
+  natgas: "natural gas prices spiked", metals: "metal prices jumped",
 };
 const PERIL_NOUN: Record<Peril, string> = {
   rain: "rain", heat: "the heat", cold: "the cold snap", game: "the game result", oil: "an oil-price spike", gas: "a gas-price jump",
   fed: "a rate move", cpi: "hot inflation", crypto: "a crypto swing", other: "this event",
+  snow: "heavy snow", power: "a power-price spike", water: "low water", quake: "an earthquake", storm: "severe storms",
+  natgas: "a natural-gas price spike", metals: "a metal-price jump",
 };
 
 /** " on Sat Nov 21" / " through Dec 31" / "" */
@@ -89,6 +100,14 @@ export const perilNoun = (peril?: Peril | string) => PERIL_NOUN[(peril ?? "other
 
 /** Best-effort peril guess for positions we have no context for (ticker text). */
 export function guessPeril(text: string): Peril {
+  if (/SNOW/i.test(text)) return "snow";
+  if (/ERCOT|PJM|MISO/i.test(text)) return "power";
+  if (/MEAD|POWELL|MISSISSIPPI|SALT-LAKE/i.test(text)) return "water";
+  if (/QUAKE/i.test(text)) return "quake";
+  if (/TORNADO|HURRIC/i.test(text)) return "storm";
+  if (/NGAS|NATURAL.?GAS/i.test(text)) return "natgas";
+  if (/XAU|XAG|COPPER|GOLD|SILVER/i.test(text)) return "metals";
+  if (/DIESEL/i.test(text)) return "gas";
   if (/RAIN/i.test(text)) return "rain";
   if (/GAME|NBA|NFL|NCAA|MLB|NHL/i.test(text)) return "game";
   if (/WTI|BRENT|OIL/i.test(text)) return "oil";
@@ -333,7 +352,11 @@ function negatePast(peril: Peril, what: string): string {
     case "heat": return "the heat wave didn't come";
     case "cold": return "the cold snap didn't come";
     case "game": return "the game went your way";
-    case "oil": case "gas": return "prices stayed calm";
+    case "oil": case "gas": case "power": case "natgas": case "metals": return "prices stayed calm";
+    case "snow": return "the snow stayed light";
+    case "water": return "the water held up";
+    case "quake": return "no big quake hit";
+    case "storm": return "the storms stayed away";
     default: return `${lowerFirst(what)} didn't happen`;
   }
 }

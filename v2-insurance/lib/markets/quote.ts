@@ -20,6 +20,8 @@ export function sameContract(a: MarketContract, b: MarketContract): boolean {
   const lowSeries = (c: MarketContract) => /lowest|minimum|\blow\b/i.test(c.eventTitle);
   if ((a.peril === "heat" || a.peril === "cold") && lowSeries(a) !== lowSeries(b)) return false; // daily high ≠ daily low
   const ka = boundsKey(contractMeta(a.id)?.bounds), kb = boundsKey(contractMeta(b.id)?.bounds);
+  // outcome-named ladders (Fed: "Hike 25bps" / "Fed maintains rate") match on the label
+  if (ka === null && kb === null && a.peril === "fed") return a.label.trim().toLowerCase() === b.label.trim().toLowerCase();
   return ka !== null && ka === kb;
 }
 

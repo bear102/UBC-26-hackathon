@@ -10,8 +10,9 @@ import s from "./markets.module.css";
 
 const GROUPS: { id: RiskGroup | "all"; label: string; icon: string }[] = [
   { id: "all", label: "All", icon: "" }, { id: "heat", label: "Heat & cold", icon: "☀" }, { id: "rain", label: "Rain", icon: "☂" },
-  { id: "games", label: "Games", icon: "🏀" }, { id: "energy", label: "Oil & gas", icon: "🛢" }, { id: "rates", label: "Rates & inflation", icon: "🏦" },
-  { id: "crypto", label: "Crypto", icon: "◎" }, { id: "other", label: "Other", icon: "•" },
+  { id: "snow", label: "Snow & winter", icon: "❄" }, { id: "power", label: "Power & grid", icon: "⚡" }, { id: "disaster", label: "Water, quakes & storms", icon: "🌊" },
+  { id: "games", label: "Games", icon: "🏀" }, { id: "energy", label: "Fuel & oil", icon: "🛢" }, { id: "commodities", label: "Natural gas & metals", icon: "🔥" },
+  { id: "rates", label: "Rates & inflation", icon: "🏦" }, { id: "crypto", label: "Crypto", icon: "◎" }, { id: "other", label: "Other", icon: "•" },
 ];
 const PAGE = 30;
 
@@ -41,7 +42,7 @@ export function MarketExplorer({ data, initial }: { data: ExplorerData; initial:
     setShown(PAGE);
   }, [group, city, venues, q, cross]);
 
-  const cityApplies = group === "all" || group === "heat" || group === "rain";
+  const cityApplies = group === "all" || group === "heat" || group === "rain" || group === "snow" || group === "power" || group === "disaster";
   const cityLc = city.toLowerCase();
   const needle = q.trim().toLowerCase();
   const filtered = useMemo(() => data.events.filter((e) =>
@@ -58,6 +59,10 @@ export function MarketExplorer({ data, initial }: { data: ExplorerData; initial:
 
   return (
     <>
+      <p className="small" style={{ margin: "0 0 10px", color: "var(--ink-2)" }}>
+        <b>Gemini first</b> · Kalshi on Solana (via DFlow) where Gemini lists nothing · Polymarket as reference only (it isn't available to US desks).{" "}
+        Wildfire, flood, hail and air quality aren't hedgeable on any venue today. Hurricanes are out of season (the Atlantic season ends Nov 30).
+      </p>
       <div className={s.stat}>
         <span><b>{data.total.toLocaleString()}</b> live contracts</span>
         {VENUE_ORDER.map((v) => <span key={v}>{venueName(v)} <b>{data.counts[v].toLocaleString()}</b></span>)}
@@ -94,7 +99,7 @@ export function MarketExplorer({ data, initial }: { data: ExplorerData; initial:
             {data.places.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
           {city !== "Austin" && data.places.includes("Austin") && cityApplies && <button type="button" className="chip" onClick={() => setCity("Austin")}>Austin</button>}
-          <input className={s.input} type="search" placeholder="Search: Spurs, Brent, CPI…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search markets" style={{ flex: "1 1 220px" }} />
+          <input className={s.input} type="search" placeholder="Search: Spurs, Brent, snow, ERCOT, Lake Mead…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search markets" style={{ flex: "1 1 220px" }} />
         </div>
       </div>
 

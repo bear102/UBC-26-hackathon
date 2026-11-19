@@ -56,6 +56,27 @@ An idea is kept only if all seven checks pass:
 
 Most liquid hero examples: Kalshi Fed decision (Jan 2027 "Hike 25bps" YES @0.59, ~3,100 contracts at ask; Dec "Hike >25bps" YES @0.07 as the cheap tail), Kalshi AAA weekly gas (YES "Above 3.64" @0.37, ~2,000 deep), Gemini copper/gold/silver month-end (@0.22-0.27, 250 deep), Kalshi Austin weekend rain (YES @0.35, 100 deep).
 
+## Venue expansion run (2026-11-19 ~09:15 UTC): winter, power, water and diesel
+Kalshi winter/power/water/diesel series are now indexed (Kalshi via DFlow on Solana, devnet mock-buyable), and the peril list gained `snow`, `power`, `water`, `quake`, `storm`, `natgas` and `metals`. `scripts/validate-playbook.ts` passed **42/43** (the one failure is `jeweler-silver`, whose Gemini book was empty again). Regional ideas carry `marketQuery.cities` and are validated as a business in their first city (Chicago, Park City, Las Vegas, Cincinnati, Napa, Austin for ERCOT).
+
+| Industry | Idea (side) | Live market (2026-11-19) | Strength | Notes |
+|---|---|---|---|---|
+| Delivery & trucking | **Diesel spike on a fixed-rate route** (YES "Above $X") | `kalshi:KXDIESELW-26NOV23-T5.84` @ 0.21, ~2,000 deep | strong | Replaces the Brent stand-in for fleets. Basis: US average vs your fuel card. |
+| Farms & nurseries | **Diesel for tractors and pumps** (YES) | same @ 0.21 | medium | Off-road diesel trades below on-highway by the road tax. |
+| Bars & restaurants (Texas) | **ERCOT power-price spike** (YES "Above $X/MWh") | `kalshi:KXERCOTNORTHM-01NOV26-T35` @ 0.72, 41 deep | weak | Only near-the-money November strikes today; real Uri-style tail cover needs the Dec/Jan listings. Fixed-rate plans have no exposure. |
+| Laundromats (Texas) | **ERCOT spike on dryer-heavy bills** (YES) | same @ 0.72 | weak | Same caveat. |
+| Bars & restaurants (snow cities) | **Snowy December keeps diners home** (YES "Above N inches") | `kalshi:KXCHISNOWM-26DEC-8` @ 0.30, 70 deep | medium | 12 cities (CHI, NYC, BOS, DEN, PHIL, DET, MSP, DC, SEA, MKE, PIT, Trenton). Monthly inches, not storm days. |
+| Retail (snow cities) | **Snowed-out holiday shopping days** (YES) | same @ 0.30 | weak | Natural hedge: winter stock sells better when it snows. |
+| Ski towns (new industry) | **Thin snow year empties the ski town** (NO "Above N inches") | `kalshi:KXPARKCSNOW-24DEC26-GT30` NO @ 0.57, 36 deep | strong | Park City / Mammoth season-to-date by Dec 24, Big Sky December. |
+| Tourism (Lake Mead marinas) | **Lake Mead drops and closes ramps** (NO "Above X ft") | `kalshi:KXMEAD-26DEC-A1035` NO @ 0.46, 125 deep | strong | Month-end elevation; Polymarket "How low will Lake Mead drop?" is shown as a reference line. |
+| Propane & heating oil (new industry) | **Mild early winter cuts gallons** (YES "Below N HDD") | `kalshi:KXHDDCVG-...-T1250` @ 0.50, 5 deep | strong | Cincinnati only (Ohio Valley dealers). |
+| HVAC | **Mild early winter, fewer no-heat calls** (YES "Below N HDD") | same @ 0.50 | medium | Never buy cold cover: cold snaps are the busy season. |
+| Vineyards (Napa) | **Dry winter** (NO "Above N inches", Nov-Mar season) | `kalshi:KXRAINNAPAM-01NOV26-31MAR27-T10` NO @ 0.23, 235 deep | medium | One gauge for the whole season. |
+
+Also: `landscape-wet-month` / `roofer-wet-month` now resolve in 32 cities (Kalshi `KXRAIN<city>M`), the cold/warm daily-high ideas in 24 Kalshi cities plus Gemini's 62, and the Fed ideas look at Gemini `FED` first (Kalshi `KXFEDDECISION` second). Natural gas and metals ideas now use the `natgas` / `metals` perils.
+
+**Not hedgeable on any venue today:** wildfire, flood, hail, air quality. Hurricanes: out of season (Atlantic season ends Nov 30); re-list in June.
+
 ## Natural hedges (tell the owner, don't sell the hedge)
 | Industry | Peril | Note |
 |---|---|---|
@@ -95,17 +116,13 @@ Most liquid hero examples: Kalshi Fed decision (Jan 2027 "Hike 25bps" YES @0.59,
 | Ground beef hits $7+ (Polymarket) | Bars & restaurants (patio / dine-in) | invalid | Read-only venue and YES ask 86¢ (> 85¢). | - |
 | Egg prices spike for bakeries | Coffee shops, bakeries & cafes | future-source | Only Polymarket 'Dozen eggs price in November' (read-only, month nearly over). Kalshi KXEGGS (monthly egg CPI) is live but not indexed. | Index Kalshi KXEGGS / KXEGGPRICEM (peril cpi) |
 | Coffee bean price spike | Coffee shops, bakeries & cafes | future-source | Kalshi KXCOFFEEM/KXCOFFEEH exist but have no open markets today; Gemini has no coffee. | When Kalshi reopens coffee monthly markets |
-| Diesel price (weekly EIA) for fleets | Delivery, couriers, rideshare & trucking | future-source | Kalshi KXDIESELW is live (24 priced strikes, ~78k volume) and is a near-perfect hedge for diesel fleets, but Hedgehog doesn't index it yet. Brent is the stand-in. | Add { series: 'KXDIESELW', peril: 'gas' } to lib/markets/dflow.ts SERIES |
-| ERCOT power price spike (Texas electric bills) | Bars & restaurants (patio / dine-in) | future-source | Kalshi KXERCOTNORTHM/W exist but are thin (1-2 priced strikes). | Index KXERCOTNORTHM when depth improves |
-| Low snowfall for ski / snow businesses | Tourism, hotels, short-term rentals & tours | future-source | No snow series indexed. Kalshi KXDENSNOWM / KXCHISNOWM (Dec snowfall, ~10k volume) and KXSNOWDAYS are live. | Index monthly snow series (new peril or 'other') |
 | Weak travel week (TSA throughput) | Tourism, hotels, short-term rentals & tours | future-source | Kalshi KXTSAW (weekly TSA screenings) is live but not indexed; a direct demand proxy for airport-area hotels and rentals. | Index KXTSAW |
 | Weak new-home sales print | Real estate agents & mortgage brokers | future-source | Kalshi KXNHSALES (new home sales, ~12k volume) is live but not indexed; a closer proxy than the Fed for agents. | Index KXNHSALES |
 | Restaurant traffic index (McDonald's foot traffic / fast-food spend) | Bars & restaurants (patio / dine-in) | future-source | Kalshi KXMCDFT / KXFASTARRAY are live but thin; industry-wide demand proxies. | Index if depth improves |
-| Weather hedges outside Austin/Dallas/Houston/NYC/CHI/MIA/LA/DEN | Bars & restaurants (patio / dine-in) | future-source | Gemini WXHIGH covers ~60 cities already; Kalshi daily highs for ATL, SEA, PHX, LV, MIN, BOS, SATX, NOLA, PHIL (KXHIGHT*) and monthly rain for Houston/Dallas/NYC (KXRAINHOUM/DALM/NYCM) are live but not indexed. | Append those series to SERIES in lib/markets/dflow.ts |
 
 
 ## New categories worth indexing (found live on Kalshi's public API, 2026-11-19)
-Most of these are a **trivial extension**: one line appended to `SERIES` in `lib/markets/dflow.ts`.
+Most of these are a **trivial extension**: one line appended to `SERIES` in `lib/markets/dflow.ts`. **Indexed since the venue expansion (2026-11-19):** `KXDIESELW`, `KXHIGHT*`/`KXLOWT*` (24 cities), `KXRAIN<city>M` (32 cities), `KXBRENTW/D`, city `*SNOWM`, `KXSNOWDAYS`, ski resorts, `KXERCOTNORTHM/W`, `KXTXERCOTPEAK`.
 | Series | What | Live depth | Who it helps |
 |---|---|---|---|
 | `KXDIESELW` | EIA weekly diesel price | 24 priced strikes, ~78k volume | delivery fleets, trucking, farms, construction. A near-perfect hedge, better than Brent |
