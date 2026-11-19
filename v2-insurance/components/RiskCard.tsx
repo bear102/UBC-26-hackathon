@@ -3,6 +3,7 @@ import type { BusinessProfile, QuoteLine, Risk } from "@/lib/types";
 import { WhyThisHedge } from "./explain/WhyThisHedge";
 import { cents, explorerTx, pct, PERIL_ICON, PERIL_LABEL, shortDate, usd, VENUE_LABEL, VENUE_ROLE } from "@/lib/client/format";
 import type { CheckoutResult } from "./CheckoutDialog";
+import { RiskInsights } from "./plan/CreativeHedges";
 import s from "./RiskCard.module.css";
 
 export function VenueBadge({ venue }: { venue: string }) {
@@ -37,6 +38,7 @@ export function RiskCard({ risk, lines, bought, onBuy, onCover, profile }: {
         </div>
         <p className="small" style={{ color: "var(--ink-2)" }}>{risk.lossReasoning}</p>
         <div className="row xs muted" style={{ gap: 8 }}>AI confidence <Confidence value={risk.confidence} /> <span className="num">{pct(risk.confidence)}</span></div>
+        <RiskInsights risk={risk} />
       </div>
 
       <div className={s.hedges}>
@@ -48,7 +50,7 @@ export function RiskCard({ risk, lines, bought, onBuy, onCover, profile }: {
           return (
             <div key={l.contractId} className={s.hedge}>
               <div className="row between" style={{ gap: 8 }}>
-                <span className="eyebrow">Matched market</span>
+                <span className="eyebrow">Matched market{l.tier ? <> · <span style={{ color: "var(--brand)" }}>{l.tier}</span></> : null}</span>
                 <VenueBadge venue={c.venue} />
               </div>
               <p className={s.event}>{c.eventTitle}</p>

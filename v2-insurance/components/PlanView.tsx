@@ -11,6 +11,8 @@ import { usd } from "@/lib/client/format";
 import { AdviseProgress } from "./AdviseProgress";
 import { RiskCard } from "./RiskCard";
 import { PlanExplainer } from "./explain/PlanExplainer";
+import { PlanChoices } from "./plan/PlanChoices";
+import { CreativeHedges } from "./plan/CreativeHedges";
 import { QuoteTable } from "./QuoteTable";
 import { CheckoutDialog, type CheckoutKind, type CheckoutResult } from "./CheckoutDialog";
 import s from "./PlanView.module.css";
@@ -109,7 +111,11 @@ export function PlanView() {
   const used = quote.totalPremiumUsd;
   const budgetPct = budget > 0 ? Math.min(100, (used / budget) * 100) : 0;
   const coveredRisks = quote.risks.filter((r) => linesByRisk.has(r.id));
-  const uncoveredIds = new Set(quote.uncovered.map((u) => u.riskId));
+  // creative (proxy) ideas live in their own section, never under "Not coverable"
+  const proxyIds = new Set(quote.risks.filter((r) => r.kind === "proxy").map((r) => r.id));
+  const notCoverable = quote.uncovered.filter((u) => !proxyIds.has(u.riskId));
+  const uncoveredIds = new Set([...quote.uncovered.map((u) => u.riskId), ...proxyIds]);
+  const applyChoice = (q: Quote) => { setQuote(q); setLocal(true); };
   const totalLoss = coveredRisks.reduce((a, r) => a + r.lossUsd, 0);
 
   return (
@@ -164,6 +170,8 @@ export function PlanView() {
 
       <PlanExplainer quote={quote} profile={profile} />
 
+      <PlanChoices quote={quote} coverage={cov} onChange={applyChoice} />
+
       <section className="section" style={{ paddingTop: 8 }}>
         <div className="row between" style={{ marginBottom: 14 }}>
           <h2 style={{ margin: 0 }}>Your risks, matched to markets</h2>
@@ -177,17 +185,19 @@ export function PlanView() {
         </div>
       </section>
 
+      <CreativeHedges quote={quote} coverage={cov} onChange={applyChoice} />
+
       <section className="section" style={{ paddingTop: 0 }}>
         <h2>Quote</h2>
         <QuoteTable quote={quote} />
       </section>
 
-      {(quote.uncovered.length > 0 || quote.risks.some((r) => !linesByRisk.has(r.id) && !uncoveredIds.has(r.id))) && (
+      {(notCoverable.length > 0 || quote.risks.some((r) => !linesByRisk.has(r.id) && !uncoveredIds.has(r.id))) && (
         <section className="section" style={{ paddingTop: 0 }}>
           <h2>Not coverable (yet)</h2>
           <p className="muted small">We&apos;d rather tell you than sell you a hedge that doesn&apos;t fit.</p>
           <div className="grid grid-2">
-            {[...quote.uncovered, ...quote.risks.filter((r) => !linesByRisk.has(r.id) && !uncoveredIds.has(r.id))
+            {[...notCoverable, ...quote.risks.filter((r) => !linesByRisk.has(r.id) && !uncoveredIds.has(r.id))
               .map((r) => ({ riskId: r.id, reason: "No live market matched this risk closely enough to hedge it." }))].map((u) => {
               const r = risksById.get(u.riskId);
               return (

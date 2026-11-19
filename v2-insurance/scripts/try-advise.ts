@@ -59,7 +59,7 @@ const real = await realDeps();
 const deps = real ?? (await stubDeps());
 console.log(`markets: ${real ? "lib/markets (real)" : "local stub"}; coverage ${coveragePct}%\n`);
 
-const pauseMs = Number(process.env.TRY_PAUSE_MS ?? 40_000); // free-tier Gemini is ~10 req/min; one advise() is up to 7 calls
+const pauseMs = Number(process.env.TRY_PAUSE_MS ?? 40_000); // free-tier Gemini is ~10 req/min; one advise() is at most 4 calls
 let first = true;
 for (const p of PRESETS.filter((x) => !only || x.id === only)) {
   if (!first && pauseMs) await new Promise((r) => setTimeout(r, pauseMs));
@@ -70,6 +70,11 @@ for (const p of PRESETS.filter((x) => !only || x.id === only)) {
   console.log(`=== ${p.name}  (${((Date.now() - t) / 1000).toFixed(1)}s, ${q.model})`);
   for (const r of q.risks) console.log(`  ${r.id} [${r.peril}] ${r.title} | ${r.trigger} | ${r.window} | loss $${r.lossUsd} (conf ${r.confidence})\n      ${r.lossReasoning}`);
   for (const l of q.lines) console.log(`  HEDGE ${l.riskId}: ${l.side.toUpperCase()} ${l.contractId} "${l.contract.label}" x${l.contracts} @ ${l.pricePerContract} = $${l.premiumUsd} -> pays $${l.payoutUsd} [${l.action}]\n      why: ${l.rationale}\n      basis: ${l.basisRisk}`);
+  for (const r of q.risks) if (r.kind === "proxy" || r.evidence) console.log(`  INSIGHT ${r.id} [${r.kind}/${r.correlation ?? "-"}] story: ${r.causalStory ?? "-"} | worth it: ${r.worthIt ?? "-"} | evidence: ${r.evidence ?? "-"}`);
+  for (const l of q.lines) if (l.tier) console.log(`  TIER ${l.riskId}: ${l.tier}`);
+  for (const o of q.options ?? []) console.log(`  OPTIONS ${o.riskId}: ${o.choices.map((c) => `${c.tier}: ${c.side.toUpperCase()} "${c.contract.label}" (${c.contract.eventTitle}) @${c.pricePerContract}`).join(" | ")}`);
+  for (const p of q.packages ?? []) console.log(`  PACKAGE ${p.name}: $${p.totalPremiumUsd} premium -> $${p.totalPayoutUsd} payout (${p.picks.map((x) => x.riskId).join(",")})`);
+  for (const n of q.naturalHedges ?? []) console.log(`  NATURAL [${n.advice}] ${n.title}: ${n.explanation}`);
   for (const u of q.uncovered) console.log(`  UNCOVERED ${u.riskId}: ${u.reason}`);
   console.log(`  TOTAL premium $${q.totalPremiumUsd} / budget $${q.budgetUsd}, payout $${q.totalPayoutUsd}\n  SUMMARY: ${q.summary}\n`);
 }

@@ -1,13 +1,18 @@
-// AI decision loop (DESIGN §4): risk map (LLM pro) -> candidates (code) -> match (LLM fast,
-// candidate-id enforced) -> sizing (code) -> summary. Server-only.
+// AI decision loop (DESIGN §4): risk map (LLM pro) || creative brainstorm (LLM pro) -> candidates (code)
+// -> ONE batched match with tiered choices (LLM fast, candidate-id enforced) + strike ladders (code)
+// -> sizing + packages (code) -> summary. At most 4 LLM calls per advise(). Server-only.
 import { z } from "zod/v4";
-import type { BusinessProfile, HedgeLeg, MarketContract, Peril, Quote, QuoteLine, Risk } from "../types";
+import type { BusinessProfile, HedgeLeg, MarketContract, NaturalHedge, Peril, Quote, QuoteLine, Risk } from "../types";
 import { generateJson as defaultLlm, type GenerateJson } from "./llm";
 import { getPreset } from "./presets";
+import {
+  BRAINSTORM_SYSTEM, TIER_LABEL, brainstormPrompt, brainstormSchema, buildCatalog, buildPackages, directionalPick, evidenceText,
+  fallbackIdeas, filterIdeaCandidates, ideasFromBrainstorm, ideasFromPlaybook, labelBound, ladderChoices, sameExposure, type Idea, type PlaybookSeed, type TieredLeg,
+} from "./ideas";
 
 // ---------- injectable dependencies ----------
 export type SizeQuoteFn = (a: {
-  legs: HedgeLeg[]; risks: Risk[]; contracts: Map<string, MarketContract>; coveragePct: number; budgetUsd: number;
+  legs: HedgeLeg[]; risks: Risk[]; contracts: Map<string, MarketContract>; coveragePct: number; budgetUsd: number; crossCheck?: boolean;
 }) => Promise<{ lines: QuoteLine[]; uncovered: { riskId: string; reason: string }[]; totalPremiumUsd: number; totalPayoutUsd: number }>;
 
 export interface AdvisorDeps {
@@ -16,6 +21,10 @@ export interface AdvisorDeps {
   sizeQuote: SizeQuoteFn;
   /** Optional: live market universe, used to steer the risk map toward hedgeable risks. */
   listMarkets?: (opts?: any) => Promise<MarketContract[]>;
+  /** Optional: settled-history backtest (lib/markets hitRate) for weather evidence. */
+  /** Optional: industry playbook seeds (lib/ai/playbook playbookIdeas). Each seed carries real candidate contracts. */
+  playbookIdeas?: (profile: BusinessProfile, markets: MarketContract[]) => PlaybookSeed[] | Promise<PlaybookSeed[]>;
+  hitRate?: (peril: Peril, location?: string, days?: number, opts?: { threshold?: number }) => Promise<{ settled: number; yesCount: number; threshold?: number; source: string } | null>;
   now?: () => Date;
 }
 
@@ -29,6 +38,7 @@ async function resolveDeps(d: Partial<AdvisorDeps> = {}): Promise<AdvisorDeps> {
     findCandidates: markets.findCandidates,
     sizeQuote: quote.sizeQuote,
     listMarkets: markets.listMarkets as AdvisorDeps["listMarkets"],
+    hitRate: markets.hitRate,
     ...d,
   };
 }
@@ -59,6 +69,21 @@ export const matchSchema = z.object({
     basisRisk: z.string().describe("one honest sentence on mismatch"),
   })).max(2),
   noMatchReason: z.string().optional().describe("required when picks is empty"),
+});
+
+/** One call for every risk: 1-3 tiered picks each. */
+export const batchMatchSchema = z.object({
+  matches: z.array(z.object({
+    riskId: z.string().describe("the RISK id, e.g. 'r1'"),
+    picks: z.array(z.object({
+      contractId: z.string().describe("copied exactly from this risk's CANDIDATES"),
+      side: z.enum(["yes", "no"]).describe("the side that PAYS when the bad thing happens"),
+      tier: z.enum(["recommended", "cheap-tail", "broad", "other-date", "other-side"]).optional(),
+      rationale: z.string(),
+      basisRisk: z.string().describe("one honest sentence on mismatch"),
+    })).max(3),
+    noMatchReason: z.string().optional().describe("required when picks is empty"),
+  })),
 });
 
 const summarySchema = z.object({ summary: z.string().min(20) });
@@ -143,9 +168,12 @@ export function enforceCandidates(riskId: string, picks: z.infer<typeof matchSch
   const byId = new Map(candidates.map((c) => [c.id, c]));
   const legs: HedgeLeg[] = []; const dropped: string[] = []; const seen = new Set<string>();
   for (const p of picks) {
-    const id = p.contractId.trim();
+    const raw = p.contractId.trim();
+    // models sometimes drop the "venue:" prefix; resolve a bare symbol only if exactly one candidate has it
+    const bare = byId.has(raw) ? [] : candidates.filter((x) => x.id.slice(x.id.indexOf(":") + 1) === raw);
+    const id = byId.has(raw) ? raw : bare.length === 1 ? bare[0].id : raw;
     const c = byId.get(id);
-    if (!c || c.status !== "open" || seen.has(id)) { dropped.push(id); continue; }
+    if (!c || c.status !== "open" || seen.has(id)) { dropped.push(raw); continue; }
     seen.add(id);
     legs.push({ riskId, contractId: id, side: p.side, rationale: p.rationale.trim(), basisRisk: p.basisRisk.trim() });
   }
@@ -210,158 +238,346 @@ Rules:
 - Align triggers and windows with the LIVE MARKETS (same dates, thresholds and games), but write them in your own plain English: a trigger a live market settles beats a more precise one nobody trades. E.g. if a market asks where it will rain this weekend, write "Rain in Austin this weekend (Nov 21-22)", not ">= 0.25 in on Saturday". Use absolute price thresholds from the market labels, not "+$0.50". Daily weather markets often exist only for today/tomorrow; if the risky day has no market, still list the risk.
 - Prefer risks the LIVE MARKETS can hedge, but still include a material risk if no market is listed.`;
 
-const MATCH_SYSTEM = `You pick prediction-market contracts that hedge ONE business risk. Each contract is binary: a YES share pays $1 if the label resolves true, a NO share pays $1 if it resolves false.
+const MATCH_SYSTEM = `You pick prediction-market contracts that hedge business risks (several risks at once, each with its own CANDIDATES list). Each contract is binary: a YES share pays $1 if the label resolves true, a NO share pays $1 if it resolves false.
 Rules:
-1. contractId MUST be copied exactly from CANDIDATES. Never invent or edit an id.
-2. side = the side that PAYS when the bad thing in the risk happens.
+1. contractId MUST be copied exactly from THAT risk's CANDIDATES. Never invent or edit an id, never use another risk's candidates.
+2. side = the side that PAYS when the bad thing in the risk happens (for a proxy risk: when the driver moves against the business, e.g. crude rises above X).
    - "Team X loses": teams are often listed by city ("San Antonio" = Spurs, "Houston" = Texans/Rockets). NO on the "Team X" contract, or YES on the opponent's contract (pick the cheaper ask).
    - "high >= T": YES on a threshold contract like "T°F or above" near T. Avoid narrow range buckets ("88-89°F") unless nothing else exists.
    - "cold / high below T": YES on "below T" contracts, or NO on "T or above".
-   - Price rising above X: YES on "above X".
-3. Prefer: date inside the risk window, threshold closest to the trigger, ask between 0.05 and 0.85, buyable venues when otherwise equal.
+   - Price rising above X: YES on "above X" / "X or above". Falling below X: NO on "above X", or YES on "below X".
+3. Prefer: date inside the risk window, threshold closest to the trigger, ask between 0.05 and 0.85. Prefer gemini contracts when they are otherwise equal or close in price (Gemini = our primary venue; kalshi only when Gemini lacks the market). Polymarket candidates are context-only (never buyable): pick them only when nothing else fits.
 4. Imperfect is OK: if a contract pays in most of the scenarios where the loss happens (e.g. "rain this weekend" for "rain Saturday", a nearby threshold, the same team's next game), pick it and explain the gap in basisRisk.
-5. Usually return exactly 1 pick; add a 2nd only if it covers a different game or date inside the window (never two strikes of the same event). Return at most 2. Return picks: [] with a short noMatchReason only if no candidate pays in the loss scenario (wrong direction, wrong team, or dates that do not overlap at all).
-6. basisRisk: one honest sentence about the mismatch (measured at the airport not the patio, threshold differs from trigger, a loss does not always empty the bar, etc.).
-7. rationale: one plain-English sentence a bar owner understands.`;
+5. Give the owner CHOICES. For each risk return 1 to 3 picks:
+   - picks[0] tier "recommended": the best hedge.
+   - optional tier "cheap-tail": same event, more extreme threshold (cheaper, pays only in the bad tail).
+   - optional tier "broad": same event, less extreme threshold (pricier, pays more often).
+   - optional tier "other-date" (same kind of market on another date) or "other-side" (games: the opponent's YES instead of your team's NO).
+   Return picks: [] with a short noMatchReason only if no candidate pays in the loss scenario (wrong direction, wrong team, or dates that do not overlap at all).
+6. basisRisk: one honest sentence about the mismatch (measured at the airport not the patio, threshold differs from trigger, a loss does not always empty the bar, a proxy only loosely tracks costs, etc.).
+7. rationale: one plain-English sentence a small-business owner understands, saying why this pick (and this strike) fits.
+8. Return one entry in "matches" per RISK id given.`;
 
 // ---------- main ----------
+const timeout = <T,>(p: Promise<T>, ms: number) => Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
+
+/**
+ * The analysis chain (at most 4 LLM calls, typically 4):
+ *  0. live market universe (code) -> compact summary + catalog of every series
+ *  1. risk map (LLM pro)  ||  2. creative brainstorm over the catalog (LLM pro): proxies + natural hedges   [parallel]
+ *  3. candidates per risk (code), then ONE batched matcher call (LLM fast) returning 1-3 tiered picks per risk
+ *     (+ deterministic strike-ladder / other-date / other-side choices), backtest evidence (hitRate)
+ *  4. sizing (code): every choice, then the default plan inside the budget; 3 packages (code)
+ *  5. summary (LLM fast, skipped near the route's time limit)
+ */
 export async function advise(profile: BusinessProfile, opts: AdviseOpts = {}): Promise<Quote> {
   const deps = await resolveDeps(opts.deps);
   const coveragePct = opts.coveragePct ?? 50;
   const now = deps.now?.() ?? new Date();
+  const t0 = Date.now();
   const models = new Set<string>();
 
-  // (1) risk map
-  let universe = "";
+  // (0) market universe
+  let all: MarketContract[] = [];
   if (deps.listMarkets) {
-    try {
-      const all = await Promise.race([deps.listMarkets(), new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), 8000))]);
-      universe = marketUniverse(all, profile);
-    } catch { /* optional context */ }
+    try { all = await timeout(deps.listMarkets(), 8000); } catch { /* optional context */ }
   }
-  let risks: Risk[];
-  try {
-    const { data, model } = await deps.llm({
+  const universe = all.length ? marketUniverse(all, profile) : "";
+  const catalog = all.length ? buildCatalog(all, profile, teamWords(profile.description)) : [];
+  const today = todayLabel(now);
+  // optional industry playbook seeds (deterministic, validated against live markets); never breaks advise()
+  let playbook: { ideas: Idea[]; naturalHedges: NaturalHedge[] } = { ideas: [], naturalHedges: [] };
+  if (deps.playbookIdeas) {
+    try { playbook = ideasFromPlaybook(await timeout(Promise.resolve(deps.playbookIdeas(profile, all)), 4000), profile); }
+    catch (e) { console.warn(`[advise] playbook failed: ${(e as Error).message.slice(0, 120)}`); }
+  }
+
+  // (1) risk map || (2) brainstorm
+  const [riskRes, ideaRes] = await Promise.allSettled([
+    deps.llm({
       tier: "pro",
       system: RISK_SYSTEM,
       schema: riskMapSchema,
       prompt: [
         profileBlock(profile),
-        `\nToday is ${todayLabel(now)}. Next 7 days: ${nextDays(now).join(", ")}.`,
+        `\nToday is ${today}. Next 7 days: ${nextDays(now).join(", ")}.`,
         universe ? `\nLIVE MARKETS (what can be hedged right now):\n${universe}` : "",
         `\nReturn {"risks":[...]}.`,
       ].join("\n"),
-    });
-    risks = sanitizeRisks(data.risks, profile);
-    models.add(model);
-  } catch (e) {
-    console.warn(`[advise] risk map LLM failed, using fallback risks: ${(e as Error).message.slice(0, 200)}`);
+    }),
+    deps.llm({ tier: "pro", system: BRAINSTORM_SYSTEM, schema: brainstormSchema, prompt: brainstormPrompt(profileBlock(profile), `${today}. Next 7 days: ${nextDays(now).join(", ")}`, catalog, playbook.ideas) }),
+  ]);
+  let risks: Risk[];
+  if (riskRes.status === "fulfilled") {
+    risks = sanitizeRisks(riskRes.value.data.risks, profile);
+    models.add(riskRes.value.model);
+  } else {
+    console.warn(`[advise] risk map LLM failed, using fallback risks: ${String((riskRes.reason as Error)?.message).slice(0, 200)}`);
     risks = fallbackRisks(profile);
     models.add("fallback-risk-map");
   }
+  risks = risks.map((r) => ({ ...r, kind: r.kind ?? "direct" }));
 
-  // (2) candidates + (3) match, per risk in parallel
+  let ideas: Idea[] = [];
+  let naturalHedges: NaturalHedge[] = [];
+  if (ideaRes.status === "fulfilled") {
+    ideas = ideasFromBrainstorm(ideaRes.value.data, catalog, profile);
+    naturalHedges = ideaRes.value.data.naturalHedges.map((n) => ({ ...n, title: n.title.trim(), explanation: n.explanation.trim() }));
+    models.add(ideaRes.value.model);
+  } else {
+    console.warn(`[advise] brainstorm LLM failed, using fallback ideas: ${String((ideaRes.reason as Error)?.message).slice(0, 200)}`);
+  }
+  const fb = fallbackIdeas(profile);
+  naturalHedges = [...naturalHedges, ...playbook.naturalHedges].slice(0, 4);
+  if (!naturalHedges.length) naturalHedges = fb.naturalHedges;
+  // de-duplicate against the direct risks and each other
+  const kept: Idea[] = [];
+  const addIdeas = (xs: Idea[]) => {
+    for (const idea of xs) {
+      const dup = [...risks, ...kept.map((k) => k.risk)].find((r) => sameExposure(idea.risk, r, teamWords));
+      if (dup) { console.warn(`[advise] idea "${idea.risk.title}" dropped: same exposure as "${dup.title}"`); continue; }
+      kept.push(idea);
+    }
+  };
+  addIdeas([...ideas, ...playbook.ideas]);
+  // top up with the hand-written ideas when too few survive or none has a strong link
+  if (kept.length < 2 || !kept.some((i) => i.risk.correlation === "strong")) addIdeas(fb.ideas);
+  const rank = { strong: 0, medium: 1, weak: 2 } as const;
+  kept.splice(0, kept.length, ...kept.map((idea, i) => ({ idea, i })).sort((a, b) => rank[a.idea.risk.correlation ?? "medium"] - rank[b.idea.risk.correlation ?? "medium"] || a.i - b.i).map((x) => x.idea).slice(0, 5));
+  kept.forEach((k, i) => { k.risk.id = `idea${i + 1}`; }); // final ids (r<n>) once market-less ideas are dropped
+
+  // (3a) candidates (code)
   const contracts = new Map<string, MarketContract>();
   const uncovered: { riskId: string; reason: string }[] = [];
-  const legsPerRisk = await Promise.all(risks.map(async (risk): Promise<HedgeLeg[]> => {
+  const candsByRisk = new Map<string, MarketContract[]>();
+  await Promise.all(risks.map(async (risk) => {
     let cands: MarketContract[] = [];
     try {
-      cands = (await deps.findCandidates(risk, profile, 15)).filter((c) => c.status === "open");
+      cands = (await deps.findCandidates(risk, profile, 12)).filter((c) => c.status === "open");
     } catch (e) {
       uncovered.push({ riskId: risk.id, reason: `Market search failed: ${(e as Error).message.slice(0, 120)}` });
-      return [];
+      return;
     }
     if (!cands.length) {
       uncovered.push({ riskId: risk.id, reason: `No live market for ${risk.peril}${risk.location ? ` in ${risk.location}` : ""} ${risk.window ? `(${risk.window})` : "this week"}.` });
-      return [];
+      return;
     }
-    for (const c of cands) contracts.set(c.id, c);
+    candsByRisk.set(risk.id, cands);
+  }));
+  const ideaCands = await Promise.all(kept.map(async (idea) => {
+    let base: MarketContract[] = [];
+    if (idea.fixed) return idea.fixed.filter((c) => c.status === "open" && (c.yesAsk !== null || c.noAsk !== null)).slice(0, 10);
+    try { base = await deps.findCandidates(idea.risk, profile, 12); } catch { /* fall back to the catalog */ }
+    return filterIdeaCandidates(idea, base, all).slice(0, 10);
+  }));
+  const anyIdeaMarket = ideaCands.some((c) => c.length);
+  const ideaRisks: Risk[] = [];
+  kept.forEach((idea, i) => {
+    if (ideaCands[i].length && ideaRisks.length >= 4) return; // max 4 creative ideas with markets
+    if (ideaCands[i].length) { candsByRisk.set(idea.risk.id, ideaCands[i]); ideaRisks.push(idea.risk); return; }
+    if (anyIdeaMarket) return; // drop market-less ideas when others have markets
+    ideaRisks.push(idea.risk);
+    uncovered.push({ riskId: idea.risk.id, reason: "No live market for this idea right now; we'll keep watching." });
+  });
+  ideaRisks.forEach((r, i) => {
+    const id = `r${risks.length + i + 1}`;
+    const cs = candsByRisk.get(r.id);
+    if (cs) { candsByRisk.delete(r.id); candsByRisk.set(id, cs); }
+    for (const u of uncovered) if (u.riskId === r.id) u.riskId = id;
+    r.id = id;
+  });
+  risks = [...risks, ...ideaRisks];
+  for (const cs of candsByRisk.values()) for (const c of cs) contracts.set(c.id, c);
+
+  // (3b) one batched matcher call
+  const matchable = risks.filter((r) => candsByRisk.has(r.id));
+  const choicesByRisk = new Map<string, TieredLeg[]>();
+  const heuristic = (risk: Risk): TieredLeg | null => {
+    const cands = candsByRisk.get(risk.id)!;
+    const leg = risk.kind === "proxy" && risk.peril !== "game" ? directionalPick(risk, cands) : heuristicPick(risk, cands) ?? (risk.peril !== "game" ? directionalPick(risk, cands) : null);
+    return leg ? { ...leg, tier: "recommended" } : null;
+  };
+  if (matchable.length) {
+    let matched: z.infer<typeof batchMatchSchema>["matches"] | null = null;
     try {
       const { data, model } = await deps.llm({
         tier: "fast",
         system: MATCH_SYSTEM,
-        schema: matchSchema,
+        schema: batchMatchSchema,
+        timeoutMs: 30_000,
         prompt: [
           `Business: ${profile.name} (${profile.city}). Busy days: ${profile.busyDays.join(", ")}.`,
-          `Today is ${todayLabel(now)}.`,
-          `RISK ${risk.id}: ${risk.title}`,
-          `Trigger: ${risk.trigger}`,
-          `Where: ${risk.location ?? "-"} | When: ${risk.window ?? "next 7 days"} | Loss if it happens: ${usd(risk.lossUsd)}`,
-          `\nCANDIDATES (id | venue | event | label | asks | expiry):\n${candidateLines(cands)}`,
-          `\nReturn {"picks":[...],"noMatchReason"?:string}.`,
+          `Today is ${today}.`,
+          ...matchable.map((risk) => [
+            `\nRISK ${risk.id}${risk.kind === "proxy" ? ` [creative proxy, ${risk.correlation ?? "medium"} link: ${risk.causalStory ?? ""}]` : ""}: ${risk.title}`,
+            `Trigger: ${risk.trigger}`,
+            `Where: ${risk.location ?? "-"} | When: ${risk.window ?? "next 7 days"} | Loss if it happens: ${usd(risk.lossUsd)}`,
+            `CANDIDATES for ${risk.id} (id | venue | event | label | asks | expiry):\n${candidateLines(candsByRisk.get(risk.id)!)}`,
+          ].join("\n")),
+          `\nReturn {"matches":[{"riskId":"r1","picks":[...],"noMatchReason"?:string}, ...]} with one entry per risk.`,
         ].join("\n"),
       });
       models.add(model);
-      const { legs, dropped } = enforceCandidates(risk.id, data.picks, cands);
-      if (dropped.length) console.warn(`[advise] ${risk.id}: dropped non-candidate picks ${dropped.join(", ")}`);
-      if (!legs.length) {
-        uncovered.push({ riskId: risk.id, reason: data.noMatchReason?.trim() || "None of the live markets pays out when this loss happens." });
-      }
-      return legs;
+      matched = data.matches;
     } catch (e) {
-      console.warn(`[advise] ${risk.id}: matcher failed, using heuristic: ${(e as Error).message.slice(0, 200)}`);
-      const leg = heuristicPick(risk, cands);
-      if (!leg) uncovered.push({ riskId: risk.id, reason: "AI matcher unavailable and no obvious contract found." });
-      return leg ? [leg] : [];
+      console.warn(`[advise] matcher failed, using heuristics: ${(e as Error).message.slice(0, 200)}`);
     }
-  }));
-  const legs = legsPerRisk.flat();
+    for (const risk of matchable) {
+      const cands = candsByRisk.get(risk.id)!;
+      const m = matched?.find((x) => x.riskId.trim() === risk.id);
+      let legs: TieredLeg[] = [];
+      if (m) {
+        const { legs: ok, dropped } = enforceCandidates(risk.id, m.picks, cands);
+        if (dropped.length) console.warn(`[advise] ${risk.id}: dropped non-candidate picks ${dropped.join(", ")}`);
+        legs = ok.map((l, i) => ({ ...l, tier: i === 0 ? "recommended" : m.picks.find((p) => p.contractId.trim() === l.contractId)?.tier ?? "broad" }));
+        if (!legs.length) {
+          uncovered.push({ riskId: risk.id, reason: m.noMatchReason?.trim() || "None of the live markets pays out when this loss happens." });
+          continue;
+        }
+      } else {
+        const h = heuristic(risk);
+        if (!h) { uncovered.push({ riskId: risk.id, reason: matched ? "The AI matcher skipped this risk and no obvious contract fits." : "AI matcher unavailable and no obvious contract found." }); continue; }
+        legs = [h];
+      }
+      choicesByRisk.set(risk.id, ladderChoices(legs[0], cands, legs, 3));
+    }
+  }
 
-  // (4) sizing (code)
-  const sized = legs.length
-    ? await deps.sizeQuote({ legs, risks, contracts, coveragePct, budgetUsd: profile.monthlyBudgetUsd })
+  // (4) sizing (code): all choices (no budget) -> default plan inside the budget
+  const allLegs = [...choicesByRisk.values()].flat();
+  const evidenceP = attachEvidence(risks, choicesByRisk, contracts, deps);
+  const optSized = allLegs.length
+    ? await deps.sizeQuote({ legs: allLegs.map(stripTier), risks, contracts, coveragePct, budgetUsd: Number.MAX_SAFE_INTEGER, crossCheck: false })
     : { lines: [], uncovered: [], totalPremiumUsd: 0, totalPayoutUsd: 0 };
-  const coveredIds = new Set(sized.lines.map((l) => l.riskId));
+  const tierOf = new Map(allLegs.map((l) => [`${l.riskId}|${l.contractId}`, l.tier]));
+  const options: NonNullable<Quote["options"]> = [];
+  for (const risk of risks) {
+    const legs = choicesByRisk.get(risk.id);
+    if (!legs) continue;
+    const hasLadder = legs.some((l) => l.tier === "cheap-tail" || l.tier === "broad");
+    const choices = legs
+      .map((l) => optSized.lines.find((x) => x.riskId === risk.id && x.contractId === l.contractId))
+      .filter((x): x is QuoteLine => !!x)
+      .map((x) => { const t = tierOf.get(`${x.riskId}|${x.contractId}`) ?? "recommended"; return { ...x, tier: TIER_LABEL[t === "recommended" && hasLadder ? "balanced" : t] ?? t }; });
+    if (choices.length) options.push({ riskId: risk.id, choices });
+  }
+  // default plan = direct risks + creative hedges with a strong/medium link; first choice that sized
+  const inDefault = (r: Risk | undefined) => !!r && (r.kind !== "proxy" || r.correlation !== "weak");
+  const defaultLegs: HedgeLeg[] = [];
+  const usedBy = new Map<string, string>(); // one contract can't hedge two risks in the default plan (no double buying)
+  const byLoss = [...options].sort((a, b) => (risks.find((r) => r.id === b.riskId)?.lossUsd ?? 0) - (risks.find((r) => r.id === a.riskId)?.lossUsd ?? 0));
+  for (const o of byLoss) {
+    if (!inDefault(risks.find((r) => r.id === o.riskId))) continue;
+    const c = o.choices.find((x) => !usedBy.has(x.contractId));
+    if (!c) {
+      uncovered.push({ riskId: o.riskId, reason: `Same market as ${risks.find((r) => r.id === usedBy.get(o.choices[0].contractId))?.title ?? "another risk"}; that hedge already pays in this scenario.` });
+      continue;
+    }
+    usedBy.set(c.contractId, c.riskId);
+    defaultLegs.push({ riskId: c.riskId, contractId: c.contractId, side: c.side, rationale: c.rationale, basisRisk: c.basisRisk });
+  }
+  for (const [rid, legs] of choicesByRisk) {
+    if (!options.some((o) => o.riskId === rid) && inDefault(risks.find((r) => r.id === rid))) defaultLegs.push(stripTier(legs[0])); // unsized: let sizing explain why
+  }
+  const riskIdx = new Map(risks.map((r, i) => [r.id, i]));
+  defaultLegs.sort((a, b) => (riskIdx.get(a.riskId) ?? 99) - (riskIdx.get(b.riskId) ?? 99));
+  const sized = defaultLegs.length
+    ? await deps.sizeQuote({ legs: defaultLegs, risks, contracts, coveragePct, budgetUsd: profile.monthlyBudgetUsd })
+    : { lines: [], uncovered: [], totalPremiumUsd: 0, totalPayoutUsd: 0 };
+  const optionTier = new Map(options.flatMap((o) => o.choices.map((c) => [`${c.riskId}|${c.contractId}`, c.tier] as const)));
+  const lines = sized.lines.map((l) => ({ ...l, tier: optionTier.get(`${l.riskId}|${l.contractId}`) }));
+  const coveredIds = new Set(lines.map((l) => l.riskId));
   for (const u of sized.uncovered) {
     if (!coveredIds.has(u.riskId) && !uncovered.some((x) => x.riskId === u.riskId)) uncovered.push(u);
   }
   uncovered.sort((a, b) => a.riskId.localeCompare(b.riskId, undefined, { numeric: true }));
+  await evidenceP;
 
   const quote: Quote = {
     businessId: profile.id,
     createdAt: now.toISOString(),
     risks,
-    lines: sized.lines,
+    lines,
     uncovered,
     totalPremiumUsd: round2(sized.totalPremiumUsd),
     totalPayoutUsd: round2(sized.totalPayoutUsd),
     budgetUsd: profile.monthlyBudgetUsd,
     summary: "",
     model: "",
+    options,
+    naturalHedges,
   };
+  quote.packages = buildPackages(quote, coveragePct);
 
   // (5) summary
   quote.summary = templateSummary(profile, quote);
-  try {
-    const { data, model } = await deps.llm({
-      tier: "fast",
-      system: "You write a 2-3 sentence plain-English summary of a hedge quote for a small-business owner. Use the exact numbers given. Be honest about what is not covered and about basis risk. No hype, no bullet points.",
-      schema: summarySchema,
-      prompt: `${profileBlock(profile)}\n\nQUOTE FACTS:\n${quoteFacts(quote)}\n\nReturn {"summary":"..."}.`,
-      timeoutMs: 15_000,
-    });
-    quote.summary = data.summary.trim();
-    models.add(model);
-  } catch { /* keep template */ }
+  if (Date.now() - t0 < 42_000) {
+    try {
+      const { data, model } = await deps.llm({
+        tier: "fast",
+        system: "You write a 2-3 sentence plain-English summary of a hedge quote for a small-business owner. Use the exact numbers given. Mention one creative hedge they might not have thought of ONLY if one is listed in the facts (never invent business advice or hedges that are not in the facts), and any natural hedge. Be honest about what is not covered and about basis risk. No hype, no bullet points.",
+        schema: summarySchema,
+        prompt: `${profileBlock(profile)}\n\nQUOTE FACTS:\n${quoteFacts(quote)}\n\nReturn {"summary":"..."}.`,
+        timeoutMs: 15_000,
+      });
+      quote.summary = data.summary.trim();
+      models.add(model);
+    } catch { /* keep template */ }
+  }
 
   quote.model = [...models].join(" + ");
   return quote;
+}
+
+const stripTier = ({ tier: _t, ...l }: TieredLeg): HedgeLeg => l;
+
+/** Backtest the recommended strike for weather risks with hitRate() (best effort, ~5 s cap). */
+async function attachEvidence(risks: Risk[], choices: Map<string, TieredLeg[]>, contracts: Map<string, MarketContract>, deps: AdvisorDeps): Promise<void> {
+  if (!deps.hitRate) return;
+  const jobs = risks.filter((r) => r.peril === "heat" || r.peril === "cold" || r.peril === "rain").map(async (risk) => {
+    const leg = choices.get(risk.id)?.[0];
+    const c = leg ? contracts.get(leg.contractId) : undefined;
+    let peril: Peril = risk.peril, threshold: number | undefined;
+    if (risk.peril !== "rain") {
+      const b = c && /°F/.test(c.label) ? labelBound(c.label) : null;
+      if (!b || b.v === null || b.dir === "range" || !leg) return;
+      const paysUp = (b.dir === "up") === (leg.side === "yes");
+      peril = paysUp ? "heat" : "cold";
+      threshold = paysUp ? (b.dir === "up" ? b.v : b.v + 1) : (b.dir === "down" ? b.v : b.v - 1);
+    }
+    try {
+      const h = await timeout(deps.hitRate!(peril, risk.location ?? "Austin", 30, threshold !== undefined ? { threshold } : {}), 5000);
+      const ev = evidenceText({ ...risk, peril }, h);
+      if (ev) risk.evidence = ev;
+    } catch { /* no evidence */ }
+  });
+  await Promise.all(jobs);
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 function quoteFacts(q: Quote): string {
   const risk = (id: string) => q.risks.find((r) => r.id === id);
-  const lines = q.lines.map((l) => `- ${risk(l.riskId)?.title}: pay ${usd(l.premiumUsd)} premium for ${usd(l.payoutUsd)} payout (${l.side.toUpperCase()} "${l.contract.label}" on ${l.contract.venue}; est. loss ${usd(risk(l.riskId)?.lossUsd ?? 0)}). Basis risk: ${l.basisRisk}`);
-  const unc = q.uncovered.map((u) => `- NOT covered: ${risk(u.riskId)?.title} (${u.reason})`);
-  return [...lines, ...unc, `Total premium ${usd(q.totalPremiumUsd)} of ${usd(q.budgetUsd)} monthly budget; total payout if all trigger ${usd(q.totalPayoutUsd)}.`].join("\n");
+  const lines = q.lines.map((l) => {
+    const r = risk(l.riskId);
+    return `- ${r?.title}${r?.kind === "proxy" ? ` (CREATIVE hedge, ${r.correlation} link: ${r.causalStory})` : ""}: pay ${usd(l.premiumUsd)} premium for ${usd(l.payoutUsd)} payout (${l.side.toUpperCase()} "${l.contract.label}" on ${l.contract.venue}; est. loss ${usd(r?.lossUsd ?? 0)}). Basis risk: ${l.basisRisk}`;
+  });
+  const extra = q.risks.filter((r) => r.kind === "proxy" && !q.lines.some((l) => l.riskId === r.id)).map((r) => `- Optional creative hedge (not in plan): ${r.title} (${r.correlation} link)`);
+  const unc = q.uncovered.filter((u) => risk(u.riskId)?.kind !== "proxy").map((u) => `- NOT covered: ${risk(u.riskId)?.title} (${u.reason})`);
+  const nat = (q.naturalHedges ?? []).map((n) => `- Natural hedge (${n.advice}): ${n.title}: ${n.explanation}`);
+  const pk = q.packages?.length ? [`Packages: ${q.packages.map((p) => `${p.name} ${usd(p.totalPremiumUsd)} premium / ${usd(p.totalPayoutUsd)} payout`).join("; ")}.`] : [];
+  return [...lines, ...extra, ...unc, ...nat, ...pk, `Total premium ${usd(q.totalPremiumUsd)} of ${usd(q.budgetUsd)} monthly budget; total payout if all trigger ${usd(q.totalPayoutUsd)}.`].join("\n");
 }
 
 export function templateSummary(profile: BusinessProfile, q: Quote): string {
-  const top = [...q.risks].sort((a, b) => b.lossUsd - a.lossUsd)[0];
-  const parts = [`We found ${q.risks.length} risks for ${profile.name}${top ? `; the biggest is "${top.title}" (about ${usd(top.lossUsd)} per occurrence)` : ""}.`];
+  const direct = q.risks.filter((r) => r.kind !== "proxy");
+  const creative = q.risks.filter((r) => r.kind === "proxy");
+  const top = [...direct].sort((a, b) => b.lossUsd - a.lossUsd)[0];
+  const parts = [`We found ${direct.length} risks for ${profile.name}${top ? `; the biggest is "${top.title}" (about ${usd(top.lossUsd)} per occurrence)` : ""}.`];
   if (q.lines.length) parts.push(`${q.lines.length} hedge${q.lines.length > 1 ? "s" : ""} cost ${usd(q.totalPremiumUsd)} of your ${usd(q.budgetUsd)} monthly budget and pay ${usd(q.totalPayoutUsd)} if every trigger hits.`);
   else parts.push("No live market can hedge these risks right now.");
-  if (q.uncovered.length) parts.push(`${q.uncovered.length} risk${q.uncovered.length > 1 ? "s are" : " is"} not covered; see the reasons below. Payouts follow the market's official data, which may not match your exact loss.`);
+  if (creative.length) parts.push(`We also found ${creative.length} creative hedge${creative.length > 1 ? "s" : ""} you might not have thought of, like "${creative[0].title}".`);
+  const uncDirect = q.uncovered.filter((u) => direct.some((r) => r.id === u.riskId));
+  if (uncDirect.length) parts.push(`${uncDirect.length} risk${uncDirect.length > 1 ? "s are" : " is"} not covered; see the reasons below. Payouts follow the market's official data, which may not match your exact loss.`);
   return parts.join(" ");
 }
