@@ -35,6 +35,7 @@ export interface Risk {
   location?: string;          // "Austin"
   window?: string;            // "next 7 days" / ISO date
   lossUsd: number;            // estimated $ lost per occurrence
+  lossUsdAi?: number;         // the AI's original estimate when the owner edited lossUsd
   lossReasoning: string;
   confidence: number;         // 0..1
   /** direct = the obvious exposure; proxy = second-order / creative link (fuel, commodities, rates, rival games...). */

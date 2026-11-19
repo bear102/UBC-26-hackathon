@@ -33,7 +33,6 @@ const STATUS: Record<Position["status"], { label: string; cls: string }> = {
 };
 const policyStamp = (status: string) => (/paid/i.test(status) ? "stamp-settled" : /open|active/i.test(status) ? "stamp-inforce" : "stamp-void");
 /** Serial printed on a stub, derived from the real id (never invented). */
-const serial = (id: string) => `No. ${id.replace(/^[a-z]+_/i, "").slice(-10).toUpperCase()}`;
 const IconPlus = ({ size = 15 }: { size?: number }) => <svg viewBox="0 0 16 16" width={size} height={size} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" aria-hidden="true"><path d="M8 3v10M3 8h10" /></svg>;
 const Ext = () => <IconExternal size={11} className={s.ext} />;
 
@@ -131,18 +130,12 @@ export function Dashboard() {
         <header className={`page-head ${s.pageHead}`}>
           <Rosette className={s.headRosette} density={10} steps={240} />
           <div>
-            <span className="eyebrow">Coverage dashboard</span>
             <h1>My <em>cover</em></h1>
           </div>
-          <span className={s.headMeta}>Solana devnet · no wallet connected</span>
         </header>
         <section className={s.cols}>
           <div className={s.connect}>
             <div className={`card ${s.connectDoc}`}>
-              <div className="doc-head">
-                <span className="caps-title">Policy register</span>
-                <span className="meta">Awaiting holder</span>
-              </div>
               <div className={s.connectBody}>
                 <Seal className={s.connectSeal} />
                 <div>
@@ -154,10 +147,6 @@ export function Dashboard() {
                   </div>
                 </div>
               </div>
-            </div>
-            <div className={`card-dashed ${s.blankStub}`} aria-hidden="true">
-              <span className={s.blankLeft} />
-              <span className={s.blankBody}><i /><i /><i /></span>
             </div>
           </div>
           <FeedPanel feed={feed} />
@@ -175,7 +164,6 @@ export function Dashboard() {
       <header className={`page-head ${s.pageHead}`}>
         <Rosette className={s.headRosette} density={10} steps={240} />
         <div>
-          <span className="eyebrow">Coverage dashboard</span>
           <h1>My <em>cover</em></h1>
           <p className={s.wallet}>Wallet <span className="mono">{shortAddr(owner, 6)}</span> · Solana devnet · updates live</p>
         </div>
@@ -201,7 +189,7 @@ export function Dashboard() {
                   <div className="cert-kicker">Your bad day, covered</div>
                   <div className="cert-title">Paid out</div>
                 </div>
-                <span className="serial">{serial(stats.hero.id)}<br /><small>settled {stats.hero.settledAt ? shortDate(stats.hero.settledAt) : ""}</small></span>
+                {stats.hero.settledAt && <span className="serial"><small>settled {shortDate(stats.hero.settledAt)}</small></span>}
               </div>
               <h3>{heroLabel?.title}</h3>
               <p className="insured">{heroLabel?.sub}{heroLabel?.m ? ` · ${VENUE_LABEL[heroLabel.m.venue] ?? heroLabel.m.venue}` : ""}</p>
@@ -231,14 +219,13 @@ export function Dashboard() {
               return (
                 <article key={p.id} className={`stub ${s.stub}`}>
                   <div className="stub-left">
-                    <span className="pn">{serial(p.id)}</span>
                     <Seal withText={false} className="seal-sm" fill="var(--bg-2)" />
                   </div>
                   <div className="stub-body">
                     <span className={`stamp ${STATUS[p.status]?.cls ?? "stamp-void"} ${s.stamp}`}>{STATUS[p.status]?.label ?? p.status}</span>
                     <div className={s.kick}>{p.status === "open" && <span className="dot live" />}Hedge · {p.side.toUpperCase()} · {timeAgo(p.createdAt)}</div>
                     <h4>{lb.title}</h4>
-                    <p>{p.side.toUpperCase()} · {lb.sub || p.contractId}{lb.m?.expiry ? <> · closes <When iso={lb.m.expiry} /></> : ""}</p>
+                    <p>{lb.sub || p.contractId}{lb.m?.expiry ? <> · closes <When iso={lb.m.expiry} /></> : ""}</p>
                     <div className={s.story}><PositionStory position={p} risk={ctx.get(p.contractId)?.risk} contract={lb.m ?? null} mark={mark} /></div>
                     <div className={`stub-grid ${s.grid4}`}>
                       <div><span>Contracts</span><b>{p.contracts.toLocaleString()}</b></div>
@@ -253,7 +240,6 @@ export function Dashboard() {
                       {p.txSig && <a href={explorerTx(p.txSig, p.network)} target="_blank" rel="noreferrer">Buy tx <Ext /></a>}
                       {p.redeemTxSig && <a href={explorerTx(p.redeemTxSig, p.network)} target="_blank" rel="noreferrer">Redeem tx <Ext /></a>}
                       {p.mint && <span className="muted">Mint <span className="mono">{shortAddr(p.mint)}</span></span>}
-                      <span className="badge badge-neutral">{p.network}</span>
                     </div>
                   </div>
                 </article>
@@ -268,7 +254,6 @@ export function Dashboard() {
             : policies.map((x) => (
               <article key={x.policyId + (x.policyPda ?? "")} className={`stub ${s.stub}`}>
                 <div className="stub-left">
-                  <span className="pn">Policy #{x.policyId}</span>
                   <Seal withText={false} className="seal-sm" fill="var(--bg-2)" />
                 </div>
                 <div className="stub-body">
@@ -324,7 +309,7 @@ function FeedPanel({ feed }: { feed: FeedEvent[] }) {
     <aside className={`card ${s.feed}`} aria-label="Live event feed">
       <div className={`doc-head ${s.feedHead}`}>
         <span className="caps-title">Live feed</span>
-        <span className="badge badge-good"><span className="dot live" /> Live · 5s</span>
+        <span className="badge badge-good"><span className="dot live" /> Live</span>
       </div>
       <p className={s.feedIntro}>Onchain events via QuickNode Streams.</p>
       {feed.length === 0 ? <div className="empty small">Waiting for events…</div> : (

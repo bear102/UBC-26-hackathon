@@ -134,7 +134,7 @@ export function PlanView() {
 
   if (missing) return (
     <section className="section"><div className="container narrow">
-      <div className="card card-dashed stack"><span className="eyebrow">Step 3 · Your hedge plan</span><h2 style={{ margin: 0 }}>No business <em>selected</em></h2><p className="muted" style={{ margin: 0 }}>Pick a preset or describe your business to get a hedge plan.</p><div><Link className="btn btn-primary" href="/">Start <IconArrowRight size={16} /></Link></div></div>
+      <div className="card card-dashed stack"><span className="eyebrow">Step 3</span><h2 style={{ margin: 0 }}>No business <em>selected</em></h2><p className="muted" style={{ margin: 0 }}>Pick a preset or describe your business to get a hedge plan.</p><div><Link className="btn btn-primary" href="/">Start <IconArrowRight size={16} /></Link></div></div>
     </div></section>
   );
   if (profile && asking) return (
@@ -165,6 +165,13 @@ export function PlanView() {
   const notCoverable = quote.uncovered.filter((u) => !proxyIds.has(u.riskId));
   const uncoveredIds = new Set([...quote.uncovered.map((u) => u.riskId), ...proxyIds]);
   const applyChoice = (q: Quote) => { setQuote(q); setLocal(true); };
+  // Owner corrects the AI's loss estimate: re-size that hedge (and the budget fit) instantly, no AI call.
+  const editLoss = (riskId: string, usdValue: number) => {
+    if (!quote) return;
+    const risks = quote.risks.map((r) => (r.id === riskId ? { ...r, lossUsdAi: r.lossUsdAi ?? r.lossUsd, lossUsd: usdValue } : r));
+    const q = rescaleQuote({ ...quote, risks }, cov);
+    saveQuote(q, cov); setQuote(q); setLocal(true);
+  };
   const totalLoss = coveredRisks.reduce((a, r) => a + r.lossUsd, 0);
   const items = coverItems(quote.lines, risksById, (l) => !!bought[`cover:${l.contractId}`], profile);
   const doneCount = items.filter((i) => i.done).length;
@@ -174,7 +181,7 @@ export function PlanView() {
     <div className="container">
       <section className="page-head">
         <div>
-          <span className="eyebrow">Step 3 · Your hedge plan</span>
+          <span className="eyebrow">Step 3</span>
           <h1 className={s.title}>{profile.name}</h1>
         </div>
         <p className={s.meta}>{profile.city}{profile.zip ? ` · ${profile.zip}` : ""} · {usd(profile.avgDailyRevenueUsd)}/day · busy {profile.busyDays.join(", ") || "—"}
@@ -189,28 +196,22 @@ export function PlanView() {
           <div className={`card ${s.ai}`}>
             <div className="doc-head">
               <span className="caps-title">Underwriter&apos;s note</span>
-              <span className="meta" title="Model that produced this plan">AI RISK ADVISOR · {quote.model}</span>
             </div>
             <p className={s.summary}>{quote.summary}</p>
             <ClarifyRecap answers={quote.clarifications ?? loadClarify(profile)?.answers} asked={!!loadClarify(profile)?.questions.length} onEdit={editAnswers} busy={loading} />
             <p className={`xs ${s.venues}`}>
               <span className="badge badge-gemini">Priced live: Gemini · Kalshi · Polymarket</span>
               <span className="badge badge-kalshi">Settled on Solana</span>
-              <span className="muted">Each line uses the cheapest venue for that contract. <Link href="/how-it-works">How</Link></span>
             </p>
           </div>
 
           <QuoteTable quote={quote} />
-
-          <div className="fine">
-            <b>Basis risk.</b> Each line pays on the market&apos;s official result, not on your actual loss.
-          </div>
         </div>
 
         <aside ref={bindRef} className={`bind ${s.bind}`} aria-label="Your quote">
           <div className="bind-inner">
             <div className={s.bindTop}>
-              <span className="bind-k">Your quote · binding summary</span>
+              <span className="bind-k">Your quote</span>
               <div className="seg" role="group" aria-label="Coverage level">
                 {COVS.map((c) => <button key={c} aria-pressed={cov === c} onClick={() => changeCoverage(c)}>{c}%</button>)}
               </div>
@@ -229,9 +230,7 @@ export function PlanView() {
               {local && <> Resized at current prices. <button className={s.linkBtn} onClick={() => runAdvise(profile, cov)} disabled={loading}>{loading ? "Re-running…" : "Re-run AI"}</button></>}
             </p>
             <CoverChecklist items={items} onCover={startCover} onCoverAll={() => setCoverAll(items.filter((i) => !i.done))} />
-            <div className="signline"><span className="x">x</span><span className="l" /><span>Your wallet signs</span></div>
             <ul className="assure">
-              <li><IconCheck size={14} />You see the exact cost before you sign.</li>
               <li><IconCheck size={14} />Pays to your wallet when the market settles. No claim forms.</li>
               <li><IconCheck size={14} />Your policy and its vault are public on Solana.</li>
             </ul>
@@ -245,13 +244,13 @@ export function PlanView() {
 
       <section className={`section ${s.risks}`} id="risks">
         <div className="sec-head">
-          <div><span className="eyebrow">Each risk in detail · buy here</span><h2>Your risks, <em>matched to markets</em></h2></div>
+          <div><span className="eyebrow">Each risk in detail</span><h2>Your risks, <em>matched to markets</em></h2></div>
           <span className={`muted small ${s.quoted}`}>{loading ? <><span className="spinner" /> refreshing…</> : `Quoted ${new Date(quote.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`}</span>
         </div>
         <div className="stack">
           {coveredRisks.map((r, i) => (
             <RiskCard key={r.id} index={i + 1} total={coveredRisks.length} risk={r} lines={linesByRisk.get(r.id) ?? []} bought={bought} profile={profile}
-              onBuy={(line) => setCheckout({ kind: "hedge", line })} onCover={(line) => setCheckout({ kind: "cover", line })} />
+              onBuy={(line) => setCheckout({ kind: "hedge", line })} onCover={(line) => setCheckout({ kind: "cover", line })} onLossChange={editLoss} />
           ))}
         </div>
       </section>
@@ -262,7 +261,6 @@ export function PlanView() {
         <section className="section" style={{ paddingTop: 0 }}>
           <div className="sec-head">
             <div><span className="eyebrow">Exclusions</span><h2>Not coverable <em>(yet)</em></h2></div>
-            <span className="muted small">We&apos;d rather tell you than sell you a hedge that doesn&apos;t fit.</span>
           </div>
           <div className="grid grid-2">
             {[...notCoverable, ...quote.risks.filter((r) => !linesByRisk.has(r.id) && !uncoveredIds.has(r.id))
@@ -270,7 +268,6 @@ export function PlanView() {
               const r = risksById.get(u.riskId);
               return (
                 <div key={u.riskId} className={`card card-dashed ${s.excl}`}>
-                  <span className={`stamp stamp-void ${s.exclStamp}`}>Excluded</span>
                   <div className="row between" style={{ alignItems: "baseline" }}><h3 style={{ margin: 0 }}>{r?.title ?? u.riskId}</h3>{r && <span className="num bad small">~{usd(r.lossUsd)} at risk</span>}</div>
                   {r?.trigger && <p className="small muted" style={{ margin: "4px 0 8px" }}>{r.trigger}</p>}
                   <p className="small" style={{ margin: 0 }}>{u.reason}</p>
