@@ -106,7 +106,7 @@ export default function Receipt({ params }: { params: Promise<{ code: string }> 
             ) : (
               <>
                 <p className="big">{promiseLine(p.card.sentence, refund)}</p>
-                <p className="small">Receipt #{d?.receipt?.index} · {p.merchantName} already locked {usd(oc ? (oc.cap * refund) : p.cap * refund)} for {p.cap} customers in a vault it can’t touch · Hedged on Gemini ✓</p>
+                <p className="small">Receipt #{d?.receipt?.index} · {p.merchantName} already locked {usd(oc ? (oc.cap * refund) : p.cap * refund)} for {p.cap} customers in a vault it can’t touch · {p.mode === "paper" ? "Hedge simulated on Gemini’s live book (paper)" : "Hedged on Gemini ✓"}</p>
                 {cutoffAtt.length > 0 && (oc && oc.heldBpsMin >= 10000 ? <p className="ok small">Hedge held at sales close ✓</p> : <p className="small"><b>Hedge reduced: your {usd(refund)} is still in the vault.</b></p>)}
               </>
             )}
@@ -142,5 +142,5 @@ export default function Receipt({ params }: { params: Promise<{ code: string }> 
 
 function promiseLine(sentence: string, refund: number) {
   const cond = sentence.split("→")[0].trim().replace(/\s+$/, "");
-  return `If ${cond.charAt(0).toLowerCase()}${cond.slice(1)}, ${usd(refund)} comes back to you.`;
+  return `If ${cond.replace(/\btonight\b/i, "tonight")}, ${usd(refund)} comes back to you.`;
 }
