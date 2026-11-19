@@ -14,12 +14,11 @@
 /* three lines: "Insure any / business against / anything"; sized so "business against" fits the column */
 .h1 { margin: 22px 0 34px; font-size: clamp(42px, 4.6vw, 66px); line-height: .98; }
 .br { display: inline; }
-/* "any": red, circled by hand like a word ringed on a form */
-.any { position: relative; display: inline-block; color: var(--red); padding: 0 .06em; margin: 0 .08em 0 .2em; }
-.any::after { content: ""; position: absolute; inset: -.02em -.16em .02em -.18em; border: 3px solid var(--red); border-radius: 50% 46% 52% 48% / 58% 52% 48% 44%; transform: rotate(-5deg); pointer-events: none; }
+/* "any": plain red */
+.any { color: var(--red); }
 .hedge { display: inline-block; position: relative; margin-top: 8px; }
-/* "anything" as a red rubber stamp, matching the seal */
-.stamp { display: inline-block; font-style: normal; color: var(--red); border: 4px solid var(--red); padding: 0 .14em .06em; margin-top: .14em; transform: rotate(-3deg); box-shadow: inset 0 0 0 2px var(--bg), inset 0 0 0 3.5px var(--red); }
+/* "anything": cream on a solid red block (option D from the style lab) */
+.stamp { display: inline-block; font-style: normal; background: var(--red); color: var(--surface); padding: 0 .16em .08em; margin-top: .1em; }
 .lede { margin: 0 0 30px; max-width: 540px; }
 .cta { display: flex; gap: 12px; flex-wrap: wrap; }
 .priced { margin-top: 34px; display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-3); font-family: var(--sans); letter-spacing: .06em; text-transform: uppercase; }
