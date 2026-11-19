@@ -35,7 +35,7 @@ export function RiskCard({ risk, lines, bought, onBuy, onCover, profile, index, 
         </div>
         <h3 className={s.title}>{risk.title}</h3>
         <p className={s.trigger}><span className={s.tlab}>Trigger</span>{risk.trigger}</p>
-        <div className={s.loss}>
+        <div className={s.loss} data-tour="loss">
           <span className="label">Estimated loss</span>
           {onLossChange
             ? <EditableLoss value={risk.lossUsd} original={risk.lossUsdAi} onChange={(v) => onLossChange(risk.id, v)} />

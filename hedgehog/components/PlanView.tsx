@@ -18,6 +18,11 @@ import { QuoteTable } from "./QuoteTable";
 import { CheckoutDialog, type CheckoutKind, type CheckoutResult } from "./CheckoutDialog";
 import { CoverChecklist, CoverSteps, NextStepBar, coverItems, type CoverItem } from "./plan/CoverChecklist";
 import { CoverAllDialog } from "./plan/CoverAllDialog";
+import { QuoteReveal } from "./plan/QuoteReveal";
+import { PlanTour, tourDone } from "./plan/PlanTour";
+
+/** Reveal + tour are for people. Off under browser automation (navigator.webdriver) unless the URL has ?fx=1. */
+const fxAllowed = () => typeof window !== "undefined" && (!navigator.webdriver || new URLSearchParams(window.location.search).get("fx") === "1");
 import { HeadsUp } from "./plan/HeadsUp";
 import { IconArrowRight, IconCheck } from "./Icons";
 import s from "./PlanView.module.css";
@@ -41,6 +46,10 @@ export function PlanView() {
   const [coverAll, setCoverAll] = useState<CoverItem[] | null>(null); // frozen at open, so the receipt keeps its lines
   const reqId = useRef(0);
   const bindRef = useRef<HTMLElement>(null);
+  // "Quote ready" reveal: only when the AI just built the first quote on this visit (never for a cached quote).
+  const [reveal, setReveal] = useState(false);
+  const [touring, setTouring] = useState(false);
+  const hadQuote = useRef(false);
   // Quick questions before the quote (null = not asking). `edit` = re-answering on an existing plan.
   const [asking, setAsking] = useState<{ questions: ClarifyQuestion[]; previous: ClarifyAnswer[]; edit: boolean } | null>(null);
   const [rebuilding, setRebuilding] = useState(false);
@@ -65,6 +74,7 @@ export function PlanView() {
       const q = await advise(p, c, answers ?? loadClarify(p)?.answers);
       if (my !== reqId.current) return;
       saveQuote(q, c); setQuote(q); setLocal(false);
+      if (!hadQuote.current && fxAllowed()) setReveal(true);
     } catch (e) {
       if (my === reqId.current) setError(e instanceof Error ? e.message : String(e));
     } finally { if (my === reqId.current) setLoading(false); }
@@ -125,6 +135,14 @@ export function PlanView() {
     setQuote(rescaleQuote(quote, c)); setLocal(true);
   }
 
+  useEffect(() => { if (quote && !reveal) hadQuote.current = true; }, [quote, reveal]);
+  // First visit: walk through the finished plan once the reveal (if any) is over.
+  useEffect(() => {
+    if (!quote || reveal || loading || asking || touring || tourDone() || !fxAllowed()) return;
+    const t = setTimeout(() => setTouring(true), 700);
+    return () => clearTimeout(t);
+  }, [quote, reveal, loading, asking, touring]);
+
   const risksById = useMemo(() => new Map<string, Risk>((quote?.risks ?? []).map((r) => [r.id, r])), [quote]);
   const linesByRisk = useMemo(() => {
     const m = new Map<string, QuoteLine[]>();
@@ -184,7 +202,7 @@ export function PlanView() {
           <span className="eyebrow">Step 3</span>
           <h1 className={s.title}>{profile.name}</h1>
         </div>
-        <p className={s.meta}>{profile.city}{profile.zip ? ` · ${profile.zip}` : ""} · {usd(profile.avgDailyRevenueUsd)}/day · busy {profile.busyDays.join(", ") || "—"}
+        <p className={s.meta}><button type="button" className={s.tourLink} onClick={() => setTouring(true)}>Show me around</button>{" · "}{profile.city}{profile.zip ? ` · ${profile.zip}` : ""} · {usd(profile.avgDailyRevenueUsd)}/day · busy {profile.busyDays.join(", ") || "—"}
           {" · "}<Link href={`/intake?preset=${encodeURIComponent(profile.id)}`}>Edit</Link></p>
       </section>
 
@@ -193,7 +211,7 @@ export function PlanView() {
 
       <section className={s.schedGrid}>
         <div className={s.left}>
-          <div className={`card ${s.ai}`}>
+          <div className={`card ${s.ai}`} data-tour="note">
             <div className="doc-head">
               <span className="caps-title">Underwriter&apos;s note</span>
             </div>
@@ -205,14 +223,14 @@ export function PlanView() {
             </p>
           </div>
 
-          <QuoteTable quote={quote} />
+          <div data-tour="schedule"><QuoteTable quote={quote} /></div>
         </div>
 
         <aside ref={bindRef} className={`bind ${s.bind}`} aria-label="Your quote">
           <div className="bind-inner">
             <div className={s.bindTop}>
               <span className="bind-k">Your quote</span>
-              <div className="seg" role="group" aria-label="Coverage level">
+              <div className="seg" role="group" aria-label="Coverage level" data-tour="coverage">
                 {COVS.map((c) => <button key={c} aria-pressed={cov === c} onClick={() => changeCoverage(c)}>{c}%</button>)}
               </div>
             </div>
@@ -277,6 +295,12 @@ export function PlanView() {
           </div>
         </section>
       )}
+
+      {reveal && (
+        <QuoteReveal name={profile.name} payoutUsd={quote.totalPayoutUsd} premiumUsd={quote.totalPremiumUsd} risks={items.length}
+          onDone={() => { setReveal(false); window.scrollTo({ top: 0 }); }} />
+      )}
+      {touring && !reveal && <PlanTour onClose={() => setTouring(false)} />}
 
       <NextStepBar items={items} onCover={startCover} onCoverAll={() => setCoverAll(items.filter((i) => !i.done))} watch={bindRef} />
       <div className={s.barSpace} aria-hidden="true" />

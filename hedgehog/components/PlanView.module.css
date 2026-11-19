@@ -33,3 +33,5 @@
   .summary { font-size: 1rem; }
   .bind :global(.bind-big) > b { font-size: 40px; }
 }
+
+.tourLink { font: inherit; background: none; border: 0; padding: 0; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
