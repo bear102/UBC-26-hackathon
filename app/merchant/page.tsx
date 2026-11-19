@@ -4,7 +4,7 @@ import Link from "next/link";
 import { getJSON, post, usd } from "@/lib/hh/client";
 
 type Quote = { costPerReceipt: number | null; fair: number | null; spread: number | null; maxReceipts: number; hedgeable: boolean; reason?: string };
-type QCard = { event_ticker: string; event_title: string; strip: string[]; sentence: string; why: string; applies_to: string; rules_text?: string; quote: Quote; scale?: { contracts: number; cost: number; fillable: boolean } | null; salesClose: number; kind: string };
+type QCard = { venue?: { mode: string; trade: string; data: string; why?: string }; event_ticker: string; event_title: string; strip: string[]; sentence: string; why: string; applies_to: string; rules_text?: string; quote: Quote; scale?: { contracts: number; cost: number; fillable: boolean } | null; salesClose: number; kind: string };
 type PRow = { id: string; card: { sentence: string; event_ticker: string }; status: string; cap: number; premium: number; createdAt: number; testLabel?: string; salesCloseTs: number };
 
 export default function Merchant() {
@@ -14,9 +14,9 @@ export default function Merchant() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [list, setList] = useState<PRow[]>([]);
-  const [cfg, setCfg] = useState<{ hedgeMode: string; merchant: string } | null>(null);
+  const [cfg, setCfg] = useState<{ hedgeMode: string; merchant: string; tradeHost: string; dataHost: string } | null>(null);
   const refresh = () => getJSON<{ promises: PRow[] }>("/api/promises").then((r) => setList(r.promises)).catch(() => {});
-  useEffect(() => { refresh(); getJSON<{ hedgeMode: string; merchant: string }>("/api/config").then(setCfg); const t = setInterval(refresh, 5000); return () => clearInterval(t); }, []);
+  useEffect(() => { refresh(); getJSON<{ hedgeMode: string; merchant: string; tradeHost: string; dataHost: string }>("/api/config").then(setCfg); const t = setInterval(refresh, 5000); return () => clearInterval(t); }, []);
 
   async function find() {
     setBusy(true); setMsg(""); setCards([]);
@@ -29,7 +29,7 @@ export default function Merchant() {
 
   return (
     <main>
-      <div className="row spread"><h1>Hedgehog · merchant</h1>{cfg && <span className={`pill ${cfg.hedgeMode === "live" ? "good" : "warn"}`}>{cfg.hedgeMode === "live" ? "LIVE Gemini hedges" : "PAPER hedges (no Gemini keys yet)"}</span>}</div>
+      <div className="row spread"><h1>Hedgehog · merchant</h1>{cfg && <span className={`pill ${cfg.hedgeMode === "live" ? "good" : "warn"}`}>{cfg.hedgeMode === "live" ? `LIVE on ${cfg.tradeHost} where listed · others PAPER on ${cfg.dataHost} odds` : "PAPER hedges (no Gemini keys yet)"}</span>}</div>
       <div className="card">
         <h3>Describe your business in one sentence</h3>
         <textarea value={text} onChange={(e) => setText(e.target.value)} maxLength={300} />
@@ -71,7 +71,7 @@ function PromoCard({ c, onCreated }: { c: QCard; onCreated: (id: string) => void
   }
   return (
     <div className="card">
-      <div className="big">{c.sentence}</div>
+      <div className="row spread"><div className="big">{c.sentence}</div>{c.venue && <span className={`pill ${c.venue.mode === "live" ? "good" : "warn"}`}>{c.venue.mode === "live" ? `LIVE · ${c.venue.trade.replace(/^https?:\/\//, "")}` : "PAPER"}</span>}</div>
       <div className="muted small">{c.event_title} · applies to {c.applies_to}</div>
       <p className="small">{c.why}</p>
       {c.rules_text && <details className="small"><summary>Gemini rules (the customer’s terms)</summary><p>{c.rules_text}</p></details>}

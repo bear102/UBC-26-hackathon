@@ -5,7 +5,7 @@ import { createTransferCheckedInstruction, createAssociatedTokenAccountIdempoten
 import bs58 from "bs58";
 import { canonicalResolution, sha256Hex } from "./canon";
 
-export type Config = { programId: string; usdcMint: string; rpc: string; publicUrl: string; merchant: string; hedgeMode: "live" | "paper"; cluster: string };
+export type Config = { programId: string; usdcMint: string; rpc: string; publicUrl: string; merchant: string; hedgeMode: "live" | "paper"; tradeHost: string; dataHost: string; cluster: string };
 
 export async function getJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const r = await fetch(url, { cache: "no-store", ...init });
@@ -54,11 +54,12 @@ export type VerifyTick = { label: string; ok: boolean | null; detail?: string };
 type Ev = { ticker: string; status: string; resolvedAt?: string | null; contracts: { instrumentSymbol: string; label?: string; resolutionSide?: string | null }[] };
 
 /** Re-derive the outcome in the browser (§6.5): fetch Gemini, hash, compare to onchain fields. */
-export async function verify(p: { id: string; card: { event_ticker: string; strip: string[] }; onchain: { status: string; outcomeHash: string; winningSymbol: string; strip: string[]; refunded: number } | null }): Promise<{ ticks: VerifyTick[]; source: string }> {
-  let ev: Ev | null = null; let source = "Gemini (live, from your browser)";
+export async function verify(p: { id: string; resolveBase?: string; card: { event_ticker: string; strip: string[] }; onchain: { status: string; outcomeHash: string; winningSymbol: string; strip: string[]; refunded: number } | null }): Promise<{ ticks: VerifyTick[]; source: string }> {
+  const base = p.resolveBase || "https://api.gemini.com";
+  let ev: Ev | null = null; let source = `Gemini${/sandbox/.test(base) ? " sandbox" : ""} (live, from your browser)`;
   for (let i = 0; i < 3 && !ev; i++) {
     try {
-      const r = await fetch(`https://api.gemini.com/v1/prediction-markets/events/${encodeURIComponent(p.card.event_ticker)}`, { cache: "no-store" });
+      const r = await fetch(`${base}/v1/prediction-markets/events/${encodeURIComponent(p.card.event_ticker)}`, { cache: "no-store" });
       if (r.ok) ev = await r.json();
     } catch { /* retry */ }
   }

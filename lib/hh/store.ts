@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import type { Terms } from "./canon";
+import type { Venue } from "./venue";
 
 export type Card = {
   event_ticker: string; event_title: string; strip: string[]; sentence: string; why: string; applies_to: string;
@@ -29,6 +30,7 @@ export type PromiseRec = {
   eventSnapshot?: unknown;         // Gemini event JSON at settlement (Verify fallback)
   eventSnapshotAt?: number;
   testLabel?: string;
+  venue?: Venue;                   // where it is hedged / settles (absent on early records: inferred)
 };
 export type CodeRec = { code: string; promiseId: string; session: string; createdAt: number; usedAt?: number; holder?: string; receiptIndex?: number; sig?: string; reserved?: boolean };
 export type OrderRec = { promiseId: string; orderId: string; symbol: string; side: "buy" | "sell"; qty: number; price: number; filled: number; avgPx?: number; status: string; ts: number; raw?: unknown };

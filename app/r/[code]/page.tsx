@@ -106,7 +106,7 @@ export default function Receipt({ params }: { params: Promise<{ code: string }> 
             ) : (
               <>
                 <p className="big">{promiseLine(p.card.sentence, refund)}</p>
-                <p className="small">Receipt #{d?.receipt?.index} · {p.merchantName} already locked {usd(oc ? (oc.cap * refund) : p.cap * refund)} for {p.cap} customers in a vault it can’t touch · {p.mode === "paper" ? "Hedge simulated on Gemini’s live book (paper)" : "Hedged on Gemini ✓"}</p>
+                <p className="small">Receipt #{d?.receipt?.index} · {p.merchantName} already locked {usd(oc ? (oc.cap * refund) : p.cap * refund)} for {p.cap} customers in a vault it can’t touch · {p.mode === "paper" ? "Hedge simulated on Gemini’s live book (paper)" : p.venue.sandbox ? "Hedged on Gemini (sandbox) ✓" : "Hedged on Gemini ✓"}</p>
                 {cutoffAtt.length > 0 && (oc && oc.heldBpsMin >= 10000 ? <p className="ok small">Hedge held at sales close ✓</p> : <p className="small"><b>Hedge reduced: your {usd(refund)} is still in the vault.</b></p>)}
               </>
             )}
@@ -115,7 +115,7 @@ export default function Receipt({ params }: { params: Promise<{ code: string }> 
 
           {(settledYes || settledNo) && (
             <div className="card">
-              <button className="secondary" onClick={async () => setTicks(await verify({ id: p.id, card: p.card, onchain: oc ? { status: oc.status, outcomeHash: oc.outcomeHash, winningSymbol: oc.winningSymbol, strip: oc.strip, refunded: oc.refunded } : null }))}>Verify with Gemini</button>
+              <button className="secondary" onClick={async () => setTicks(await verify({ id: p.id, resolveBase: p.venue.resolve, card: p.card, onchain: oc ? { status: oc.status, outcomeHash: oc.outcomeHash, winningSymbol: oc.winningSymbol, strip: oc.strip, refunded: oc.refunded } : null }))}>Verify with Gemini</button>
               {ticks && <div style={{ marginTop: 8 }}>{ticks.ticks.map((t, i) => <div className="tick" key={i}><span className={t.ok ? "ok" : t.ok === false ? "err" : "muted"}>{t.ok ? "✓" : t.ok === false ? "✗" : "…"}</span><span>{t.label}{t.ok === false && " · Does not match: report"}</span></div>)}<p className="small muted">{ticks.source}</p></div>}
             </div>
           )}
@@ -135,7 +135,7 @@ export default function Receipt({ params }: { params: Promise<{ code: string }> 
           </details>
         </>
       )}
-      <p className="footer">Demo: test dollars (devnet USDC). Hedges are {p?.mode === "paper" ? "simulated against Gemini’s live book (paper mode)" : "real Gemini contracts"}.</p>
+      <p className="footer">Demo: test dollars (devnet USDC). Hedges are {p?.mode === "paper" ? "simulated against Gemini’s live book (paper mode)" : p?.venue.sandbox ? "real orders on Gemini’s sandbox exchange" : "real Gemini contracts"}.</p>
     </main>
   );
 }

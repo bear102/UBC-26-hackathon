@@ -4,6 +4,7 @@ import { load } from "./store";
 import { readPromise, readMerchant, tokenBalance, key, explorer } from "./chain";
 import * as P from "./program";
 import { hedgeMode } from "./engine";
+import { venueOf, hostOf, isSandbox } from "./venue";
 import { env } from "./env";
 
 export async function promiseView(id: string, opts: { admin?: boolean } = {}) {
@@ -23,7 +24,8 @@ export async function promiseView(id: string, opts: { admin?: boolean } = {}) {
   return {
     ...pub,
     hasEventSnapshot: !!eventSnapshot,
-    mode: rec.id && orders.some((o) => o.orderId.startsWith("PAPER-")) ? "paper" : orders.length ? "live" : hedgeMode(),
+    mode: venueOf(rec, orders.map((o) => o.orderId)).mode,
+    venue: (() => { const v = venueOf(rec, orders.map((o) => o.orderId)); const b = v.mode === "live" ? v.trade : v.data; return { ...v, host: hostOf(b), sandbox: isSandbox(b), resolveHost: hostOf(v.resolve) }; })(),
     onchain: onchain ? { ...onchain, merchant: onchain.merchant.toBase58(), vault: onchain.vault.toBase58(), promiseId: onchain.promiseId.toString(), status: P.STATUS[onchain.status] } : null,
     vaultBalance: vaultBal,
     merchantRecord: merchantRec ? { ...merchantRec, authority: merchantRec.authority.toBase58() } : null,
@@ -36,6 +38,6 @@ export type PromiseView = NonNullable<Awaited<ReturnType<typeof promiseView>>>;
 export function config() {
   return {
     programId: P.PROGRAM_ID.toBase58(), usdcMint: P.USDC_MINT.toBase58(), rpc: env.rpc(), publicUrl: env.publicUrl(),
-    merchant: key("merchant").publicKey.toBase58(), hedgeMode: hedgeMode(), cluster: "devnet",
+    merchant: key("merchant").publicKey.toBase58(), hedgeMode: hedgeMode(), tradeHost: hostOf(env.geminiTrade()), dataHost: hostOf(env.geminiPublic()), cluster: "devnet",
   };
 }

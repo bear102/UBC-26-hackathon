@@ -30,8 +30,8 @@ export default function Console({ params }: { params: Promise<{ id: string }> })
   return (
     <main>
       <div className="row spread">
-        <div><a href="/merchant" className="small">← all promises</a><h1>{v.card.sentence}</h1><div className="muted small">{v.card.event_title} · {v.merchantName}</div></div>
-        <div className="row"><span className="pill">{STATUS_LABEL[v.status] ?? v.status}</span>{v.mode === "paper" && <span className="pill warn">PAPER HEDGE</span>}{v.testLabel && <span className="pill warn">{v.testLabel}</span>}</div>
+        <div><a href="/merchant" className="small">← all promises</a><h1>{v.card.sentence}</h1><div className="muted small">{v.card.event_title} · {v.merchantName} · {v.mode === "paper" ? `paper against ${v.venue.host}${v.venue.why ? ` (${v.venue.why})` : ""}` : `live orders on ${v.venue.host}`} · settles on {v.venue.resolveHost}</div></div>
+        <div className="row"><span className="pill">{STATUS_LABEL[v.status] ?? v.status}</span>{v.mode === "paper" ? <span className="pill warn">PAPER HEDGE</span> : <span className="pill good">LIVE · {v.venue.host}</span>}{v.testLabel && <span className="pill warn">{v.testLabel}</span>}</div>
       </div>
       {v.agentNote && <div className="banner" style={{ marginTop: 10 }}>Agent: {v.agentNote}</div>}
 

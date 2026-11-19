@@ -51,11 +51,11 @@ export async function activeEvents(max = 600): Promise<GEvent[]> {
 }
 
 /** Search active events (the paginated list is unstable and omits events; `search=` is reliable). */
-export async function searchEvents(queries: string[], extra: string[] = []): Promise<GEvent[]> {
+export async function searchEvents(queries: string[], extra: string[] = [], base = env.geminiPublic()): Promise<GEvent[]> {
   const seen = new Map<string, GEvent>();
   const urls = [
-    ...queries.map((q) => `${env.geminiPublic()}/v1/prediction-markets/events?status=active&limit=500&search=${encodeURIComponent(q)}`),
-    ...extra.map((q) => `${env.geminiPublic()}/v1/prediction-markets/events?status=active&limit=500&${q}`),
+    ...queries.map((q) => `${base}/v1/prediction-markets/events?status=active&limit=500&search=${encodeURIComponent(q)}`),
+    ...extra.map((q) => `${base}/v1/prediction-markets/events?status=active&limit=500&${q}`),
   ];
   for (const u of urls) {
     try {
@@ -66,13 +66,13 @@ export async function searchEvents(queries: string[], extra: string[] = []): Pro
   return [...seen.values()];
 }
 
-export async function eventByTicker(ticker: string, ttlMs = 0): Promise<GEvent> {
-  const r = await getJson<GEvent | { data: GEvent }>(`${env.geminiPublic()}/v1/prediction-markets/events/${encodeURIComponent(ticker)}`, ttlMs);
+export async function eventByTicker(ticker: string, ttlMs = 0, base = env.geminiPublic()): Promise<GEvent> {
+  const r = await getJson<GEvent | { data: GEvent }>(`${base}/v1/prediction-markets/events/${encodeURIComponent(ticker)}`, ttlMs);
   return "data" in r && !(r as unknown as GEvent).ticker ? (r as { data: GEvent }).data : (r as GEvent);
 }
 
-export async function book(symbol: string, ttlMs = 5_000): Promise<Book> {
-  return getJson<Book>(`${env.geminiPublic()}/v1/book/${encodeURIComponent(symbol)}`, ttlMs);
+export async function book(symbol: string, ttlMs = 5_000, base = env.geminiPublic()): Promise<Book> {
+  return getJson<Book>(`${base}/v1/book/${encodeURIComponent(symbol)}`, ttlMs);
 }
 
 /** Plain text of a Gemini rich-text description (SPEC §5.6 display rule). */
