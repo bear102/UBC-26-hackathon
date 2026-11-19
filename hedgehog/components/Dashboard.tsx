@@ -11,6 +11,7 @@ import { DEMO_OWNER, type CoverPolicy } from "@/lib/fixtures";
 import { cents, explorerTx, orderText, shortAddr, shortDate, timeAgo, usd, VENUE_LABEL } from "@/lib/client/format";
 import { PolicyStory, PositionStory } from "./explain/PositionStory";
 import { PastQuotes } from "./PastQuotes";
+import { TaxRecord } from "./TaxRecord";
 import { HeadsUp } from "./plan/HeadsUp";
 import { Provenance, venueOfId } from "./markets/Provenance";
 import { When } from "./markets/When";
@@ -279,6 +280,7 @@ export function Dashboard() {
               </article>
             ))}
           </div>
+          {owner && <TaxRecord owner={owner} />}
         </div>
         <FeedPanel feed={feed} />
       </section>

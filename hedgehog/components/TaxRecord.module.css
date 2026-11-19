@@ -1,0 +1,32 @@
+/* Dashboard "Tax record" ledger. Tokens only; IBM Plex Sans; mono only for tx ids. */
+.wrap { margin-top: 40px; display: grid; gap: 14px; }
+.head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid var(--ink); padding-bottom: 8px; }
+.head h2 { margin: 0; font-size: clamp(26px, 2.6vw, 34px); }
+.tools { display: flex; align-items: center; gap: 10px; }
+.year { font-family: var(--sans); font-size: 13px; font-weight: 600; color: var(--ink); background: var(--surface); border: 1px solid var(--ink); border-radius: var(--radius-sm); padding: 7px 10px; min-height: 36px; }
+.yearOne { font-family: var(--sans); font-size: 13px; font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+.totals { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); background: var(--surface); border: 1px solid var(--ink); border-bottom: 3px double var(--ink); }
+.totals > div { display: flex; flex-direction: column; gap: 8px; padding: 14px 18px; border-left: 1px solid var(--line-2); min-width: 0; }
+.totals > div:first-child { border-left: 0; }
+.totals b { font-size: clamp(24px, 2.4vw, 30px); }
+
+.table td, .table th { padding: 10px 12px; }
+.table td { font-size: 13.5px; }
+.r { text-align: right !important; white-space: nowrap; }
+.pol { color: var(--ink-2); word-break: break-word; }
+.table td:first-child { white-space: nowrap; }
+.pol span { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.mkt { font-style: normal; }
+.table a { font-size: 12px; white-space: nowrap; }
+.ext { vertical-align: -1px; margin-left: 3px; }
+.more { justify-self: start; }
+.note { margin: 0; font-family: var(--sans); font-size: 12px; color: var(--muted); }
+
+@media (max-width: 640px) {
+  .totals > div { padding: 10px 10px 12px; gap: 6px; }
+  .totals b { font-size: 19px; }
+  .totals :global(.label) { font-size: 10px; letter-spacing: .03em; }
+  .table td, .table th { padding: 9px 8px; }
+  .mkt { display: none; }
+}
