@@ -32,7 +32,9 @@ type Raw = GEvent & { venueHint?: "trade"; source?: unknown; sourceDetails?: { a
 const DAY = 86400_000;
 const CITIES = ["AUS", "SAT", "HOU", "DFW"];
 
-const DATA_QUERIES = ["Austin", "San Antonio", "Houston", "Dallas", "Spurs", "Rockets", "Mavericks", "Texas", "Longhorns", "Aggies"];
+// Same narrow queries as the promo catalog (shared HTTP cache). "Texas"/"Houston"/"Dallas" return 2-4 MB each and add
+// nothing the filter keeps (checked 2026-11-19: 15.7 MB → 5 MB, 26 → 29 kept events).
+const DATA_QUERIES = ["Spurs", "Rockets", "Mavericks", "Longhorns", "Aggies", "TCU", "Baylor", "SMU", "UTSA", "Austin", "San Antonio"];
 const DATA_EXTRA = ["category=Weather", "category=Crypto", "category=Commodities", "category=Economics"];
 const TRADE_EXTRA = ["category=Crypto", "category=Commodities"];
 const hasAsk = (e: GEvent) => e.contracts?.some((c) => c.prices?.bestAsk) ?? false;
@@ -42,7 +44,8 @@ const hasAsk = (e: GEvent) => e.contracts?.some((c) => c.prices?.bestAsk) ?? fal
  *  never waits on Gemini. */
 type CatCache = { t: number; v: Raw[]; inflight?: Promise<Raw[]> };
 const catCache = ((globalThis as any).__hhSuiteCat2 ??= { t: 0, v: [] as Raw[] }) as CatCache;
-const CAT_FRESH_MS = 60_000, CAT_STALE_MS = 15 * 60_000, CAT_QUERY_MS = Number(process.env.HH_CATALOG_QUERY_MS || 5_000);
+const CAT_FRESH_MS = 60_000, CAT_STALE_MS = 5 * 60_000, CAT_QUERY_MS = Number(process.env.HH_CATALOG_QUERY_MS || 6_000);
+let lastPartial = false; // some query timed out: keep the result only briefly so the next scan picks up the rest
 
 export async function suiteCatalog(): Promise<Raw[]> {
   const age = Date.now() - catCache.t;
@@ -54,7 +57,7 @@ export async function suiteCatalog(): Promise<Raw[]> {
 
 function refreshCatalog(): Promise<Raw[]> {
   return (catCache.inflight ??= suiteCatalogFresh()
-    .then((v) => { if (v.length) { catCache.t = Date.now(); catCache.v = v; } return v.length ? v : catCache.v; })
+    .then((v) => { if (v.length) { catCache.t = Date.now() - (lastPartial ? CAT_FRESH_MS - 10_000 : 0); catCache.v = v; } return v.length ? v : catCache.v; })
     .finally(() => { catCache.inflight = undefined; }));
 }
 
@@ -70,12 +73,19 @@ export function prewarmSuite(opts: { keepWarm?: boolean } = {}): Promise<number>
 
 async function suiteCatalogFresh(): Promise<Raw[]> {
   const now = Date.now();
-  const one = (q: string[], extra: string[], base?: string) => within(searchEvents(q, extra, base) as Promise<Raw[]>, CAT_QUERY_MS, [] as Raw[]);
+  let partial = false;
+  const TO = [] as Raw[];
+  const one = async (q: string[], extra: string[], base?: string) => {
+    const r = await within(searchEvents(q, extra, base) as Promise<Raw[]>, CAT_QUERY_MS, TO);
+    if (r === TO) partial = true;
+    return r;
+  };
   const tradeOn = liveCapable() && env.geminiTrade() !== env.geminiPublic();
   const [dataLists, tradeLists] = await Promise.all([
     Promise.all([...DATA_QUERIES.map((q) => one([q], [])), ...DATA_EXTRA.map((x) => one([], [x]))]),
     tradeOn ? Promise.all(TRADE_EXTRA.map((x) => one([], [x], env.geminiTrade()))) : Promise.resolve([] as Raw[][]),
   ]);
+  lastPartial = partial;
   return filterCatalog(dataLists.flat(), tradeLists.flat(), now);
 }
 
