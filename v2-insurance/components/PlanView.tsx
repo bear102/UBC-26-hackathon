@@ -10,6 +10,7 @@ import { FIXTURE_PRESETS } from "@/lib/fixtures";
 import { usd } from "@/lib/client/format";
 import { AdviseProgress } from "./AdviseProgress";
 import { RiskCard } from "./RiskCard";
+import { PlanExplainer } from "./explain/PlanExplainer";
 import { QuoteTable } from "./QuoteTable";
 import { CheckoutDialog, type CheckoutKind, type CheckoutResult } from "./CheckoutDialog";
 import s from "./PlanView.module.css";
@@ -130,6 +131,11 @@ export function PlanView() {
           </div>
           <p className={s.summary}>{quote.summary}</p>
           <p className="xs muted" style={{ margin: 0 }}>Every contract below is a real listing picked from live order books. Prices move; we re-quote at checkout.</p>
+          <p className="xs" style={{ margin: "8px 0 0", display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <span className="badge badge-gemini">Priced &amp; hedged on Gemini</span>
+            <span className="badge badge-kalshi">Settled on Solana</span>
+            <span className="muted">You buy Solana tokens or a Cover policy; Hedgehog backs Gemini-priced cover with the same contract on Gemini. <Link href="/how-it-works">How</Link></span>
+          </p>
         </div>
         <div className={`card ${s.totals}`}>
           <div className="row between">
@@ -156,6 +162,8 @@ export function PlanView() {
         </div>
       </section>
 
+      <PlanExplainer quote={quote} profile={profile} />
+
       <section className="section" style={{ paddingTop: 8 }}>
         <div className="row between" style={{ marginBottom: 14 }}>
           <h2 style={{ margin: 0 }}>Your risks, matched to markets</h2>
@@ -163,7 +171,7 @@ export function PlanView() {
         </div>
         <div className="stack">
           {coveredRisks.map((r) => (
-            <RiskCard key={r.id} risk={r} lines={linesByRisk.get(r.id) ?? []} bought={bought}
+            <RiskCard key={r.id} risk={r} lines={linesByRisk.get(r.id) ?? []} bought={bought} profile={profile}
               onBuy={(line) => setCheckout({ kind: "hedge", line })} onCover={(line) => setCheckout({ kind: "cover", line })} />
           ))}
         </div>

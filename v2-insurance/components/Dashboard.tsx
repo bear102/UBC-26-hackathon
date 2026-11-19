@@ -4,11 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import type { FeedEvent, MarketContract, Position, QuoteLine, Risk } from "@/lib/types";
-import { getFeed, getMarkets, getPolicies, getPositions } from "@/lib/client/api";
+import { getBacking, getFeed, getMarkets, getPolicies, getPositions, type DeskHedge } from "@/lib/client/api";
 import { isMock } from "@/lib/client/mode";
 import { allStoredQuotes, lastOwner, setLastOwner } from "@/lib/client/storage";
 import { DEMO_OWNER, type CoverPolicy } from "@/lib/fixtures";
-import { cents, explorerTx, shortAddr, shortDate, timeAgo, usd, VENUE_LABEL } from "@/lib/client/format";
+import { cents, explorerTx, orderText, shortAddr, shortDate, timeAgo, usd, VENUE_LABEL } from "@/lib/client/format";
+import { PolicyStory, PositionStory } from "./explain/PositionStory";
 import s from "./Dashboard.module.css";
 
 type RichPosition = Position & { markPrice?: number | null; contract?: Pick<MarketContract, "id" | "venue" | "eventTitle" | "label" | "expiry"> & Partial<MarketContract> | null };
@@ -34,6 +35,7 @@ export function Dashboard() {
   const [feed, setFeed] = useState<FeedEvent[]>([]);
   const [markets, setMarkets] = useState<Map<string, MarketContract>>(new Map());
   const [ctx, setCtx] = useState<Map<string, Ctx>>(new Map());
+  const [backing, setBacking] = useState<Map<string, DeskHedge>>(new Map());
   const [, tick] = useState(0);
   const since = useRef<string | undefined>(undefined);
 
@@ -59,6 +61,7 @@ export function Dashboard() {
     const load = () => {
       getPositions(owner).then((p) => live && setPositions(p)).catch(() => {});
       getPolicies(owner).then((p) => live && setPolicies(p)).catch(() => {});
+      getBacking(owner).then((b) => live && setBacking(new Map(b.hedges.map((h) => [h.refId, h])))).catch(() => {});
     };
     load();
     const i = setInterval(load, 10_000);
@@ -180,6 +183,7 @@ export function Dashboard() {
                   </div>
                   <h3 style={{ margin: "8px 0 2px", fontSize: "1.1rem" }}>{lb.title}</h3>
                   <p className="small muted" style={{ margin: "0 0 10px" }}>{p.side.toUpperCase()} · {lb.sub || p.contractId}{lb.m?.expiry ? ` · expires ${shortDate(lb.m.expiry)}` : ""}</p>
+                  <PositionStory position={p} risk={ctx.get(p.contractId)?.risk} contract={lb.m ?? null} mark={mark} />
                   <div className={s.posGrid}>
                     <div><span>Contracts</span><b className="num">{p.contracts.toLocaleString()}</b></div>
                     <div><span>Cost</span><b className="num cost">{usd(p.costUsd, 2)}</b></div>
@@ -187,6 +191,7 @@ export function Dashboard() {
                     <div><span>{p.status === "open" ? "Value / P&L" : "Net"}</span>
                       <b className={`num ${pnl != null && pnl >= 0 ? "pay" : "bad"}`}>{p.status === "open" ? `${usd(value)} ` : ""}{pnl != null ? `(${pnl >= 0 ? "+" : ""}${usd(pnl)})` : "—"}</b></div>
                   </div>
+                  <Backing h={backing.get(p.id)} />
                   <div className="row xs" style={{ marginTop: 10, gap: 14 }}>
                     {p.txSig && <a href={explorerTx(p.txSig, p.network)} target="_blank" rel="noreferrer">Buy tx ↗</a>}
                     {p.redeemTxSig && <a href={explorerTx(p.redeemTxSig, p.network)} target="_blank" rel="noreferrer">Redeem tx ↗</a>}
@@ -208,11 +213,13 @@ export function Dashboard() {
                 </div>
                 <h3 style={{ margin: "8px 0 2px", fontSize: "1.1rem" }}>{x.trigger ?? x.marketRef}</h3>
                 <p className="small muted" style={{ margin: "0 0 10px" }}>{x.marketRef}{x.expiry ? ` · expires ${shortDate(x.expiry)}` : ""}</p>
+                <PolicyStory status={x.status} payoutUsd={x.payoutUsd} premiumUsd={x.premiumUsd} trigger={x.trigger} expiry={x.expiry} />
                 <div className={s.posGrid}>
                   <div><span>Pays</span><b className="num pay">{usd(x.payoutUsd)}</b></div>
                   <div><span>Premium</span><b className="num cost">{usd(x.premiumUsd, 2)}</b></div>
                   <div><span>Account</span><b className="mono xs">{x.policyPda ? shortAddr(x.policyPda) : "—"}</b></div>
                 </div>
+                <Backing h={x.policyPda ? backing.get(x.policyPda) : undefined} />
                 <div className="row xs" style={{ marginTop: 10, gap: 14 }}>
                   {x.txSig && <a href={explorerTx(x.txSig)} target="_blank" rel="noreferrer">Buy tx ↗</a>}
                   {x.settleTxSig && <a href={explorerTx(x.settleTxSig)} target="_blank" rel="noreferrer">Settlement tx ↗</a>}
@@ -223,6 +230,24 @@ export function Dashboard() {
         </div>
         <FeedPanel feed={feed} />
       </section>
+    </div>
+  );
+}
+
+/** "Hedgehog's backing on Gemini": the desk's offsetting order for a Gemini-priced position/policy. */
+function Backing({ h }: { h?: DeskHedge }) {
+  if (!h) return null;
+  return (
+    <div className="card-soft xs" style={{ marginTop: 10, padding: "8px 10px" }}>
+      <div className="row between" style={{ gap: 8 }}>
+        <b>Hedgehog&apos;s backing on Gemini</b>
+        <span className={`badge ${h.status === "error" || h.status === "rejected" ? "badge-bad" : "badge-gemini"}`}>{h.mode === "live" ? h.status : h.status === "error" ? "not placed" : "dry-run"}</span>
+      </div>
+      <div className="mono" style={{ marginTop: 4, wordBreak: "break-all" }}>{h.limitPrice > 0 ? orderText(h) : `${h.outcome.toUpperCase()} ${h.symbol}`}</div>
+      <div className="muted" style={{ marginTop: 2 }}>
+        {h.error ? h.error : <>Desk spends ≤ {usd(h.notionalUsd, 2)}{h.soldForUsd != null ? ` vs ${usd(h.soldForUsd, 2)} received` : ""}; pays $1/contract exactly when you are owed $1.</>}
+        {h.url && <> · <a href={h.url} target="_blank" rel="noreferrer">Gemini market ↗</a></>}
+      </div>
     </div>
   );
 }
@@ -238,7 +263,7 @@ function FeedPanel({ feed }: { feed: FeedEvent[] }) {
       {feed.length === 0 ? <div className="empty small">Waiting for events…</div> : (
         <ol className={s.events}>
           {feed.map((e) => {
-            const src = SOURCE[e.source] ?? SOURCE.app;
+            const src = e.text.startsWith("Desk hedge on Gemini") ? { label: "Gemini desk", cls: "badge-gemini" } : SOURCE[e.source] ?? SOURCE.app;
             return (
               <li key={e.id}>
                 <div className="row between" style={{ gap: 6 }}>
