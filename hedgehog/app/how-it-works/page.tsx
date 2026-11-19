@@ -38,36 +38,41 @@ export default function HowItWorks() {
 
       <section className="card" style={{ padding: 12 }}>
         <div className={s.diagram}>
-          <svg viewBox="0 0 980 430" role="img" aria-labelledby="arch-t">
-            <title id="arch-t">Hedgehog architecture: business intake to AI advisor; cover priced on Gemini and Kalshi, sold as Solana devnet tokens and policies, backed by the desk on Gemini; QuickNode Streams feed.</title>
+          <svg viewBox="0 0 980 450" role="img" aria-labelledby="arch-t">
+            <title id="arch-t">Hedgehog architecture: the owner describes the business; the AI advisor maps risks and picks live markets on Kalshi, Gemini and Polymarket; the quote engine sizes cover; the owner signs in their wallet, buying outcome tokens from the desk or a Hedgehog Cover policy on Solana devnet; Hedgehog's desk backs each sale on Gemini and the crank settles from official results; QuickNode Streams pushes onchain events to the live dashboard.</title>
             <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--line-2)" /></marker></defs>
-            <text x="20" y="28" fill="var(--muted)" fontSize="11" letterSpacing="2" fontFamily="var(--sans)">OFFCHAIN · NEXT.JS APP</text>
-            <text x="20" y="300" fill="var(--muted)" fontSize="11" letterSpacing="2" fontFamily="var(--sans)">ONCHAIN · SOLANA DEVNET</text>
-            <line x1="20" y1="282" x2="960" y2="282" stroke="var(--line)" strokeDasharray="5 5" />
+            <text x="20" y="24" fill="var(--muted)" fontSize="11" letterSpacing="2" fontFamily="var(--sans)">OFFCHAIN · NEXT.JS APP + MARKETS</text>
+            <line x1="20" y1="286" x2="960" y2="286" stroke="var(--line)" strokeDasharray="5 5" />
+            <text x="20" y="278" fill="var(--muted)" fontSize="11" letterSpacing="2" fontFamily="var(--sans)">ONCHAIN · SOLANA DEVNET ↓</text>
 
-            <Box x={20} y={50} w={180} h={62} title="Business owner" sub="preset or one sentence" tone="var(--ink-2)" />
-            <Box x={260} y={50} w={210} h={62} title="AI risk advisor" sub="risk map → market match" />
-            <Box x={530} y={40} w={200} h={52} title="Gemini Prediction Markets" sub="prices cover · desk backs it here" tone="var(--gemini)" />
-            <Box x={530} y={108} w={200} h={52} title="Kalshi (DFlow) · Polymarket" sub="gaps Gemini can't fill · cross-check" tone="var(--kalshi)" />
-            <Box x={260} y={170} w={210} h={62} title="Quote engine" sub="size · walk book · fit budget" tone="var(--gold)" />
-            <Box x={790} y={70} w={170} h={62} title="Phantom wallet" sub="owner signs every buy" tone="var(--ink-2)" />
-            <Box x={530} y={196} w={200} h={52} title="Settlement crank" sub="reads official results" tone="var(--gold)" />
+            {/* row 1: intake → AI → markets */}
+            <Box x={20} y={60} w={170} h={60} title="Business owner" sub="preset or one sentence" tone="var(--ink-2)" />
+            <Box x={240} y={60} w={200} h={60} title="AI risk advisor" sub="risks → live market picks" />
+            <Box x={500} y={40} w={220} h={50} title="Kalshi · Polymarket" sub="gaps Gemini can't fill · cross-check" tone="var(--kalshi)" />
+            <Box x={500} y={106} w={220} h={50} title="Gemini Prediction Markets" sub="primary prices · desk backs here" tone="var(--gemini)" />
+            {/* row 2: quote, desk/crank, dashboard */}
+            <Box x={240} y={190} w={200} h={60} title="Quote engine" sub="size · walk book · fit budget" tone="var(--gold)" />
+            <Box x={500} y={190} w={220} h={60} title="Hedgehog desk + crank" sub="backs sales · settles from results" tone="var(--gold)" />
+            <Box x={780} y={190} w={180} h={60} title="Live dashboard" sub="positions, payouts, feed" tone="var(--ink-2)" />
+            {/* row 3: onchain */}
+            <Box x={20} y={330} w={180} h={64} title="Owner's wallet" sub="Phantom / MetaMask signs" tone="var(--ink-2)" />
+            <Box x={240} y={330} w={220} h={64} title="Outcome tokens" sub="YES/NO SPL mints · $1 if it happens" tone="var(--kalshi)" />
+            <Box x={500} y={330} w={220} h={64} title="hedgehog_policy (Anchor)" sub="USDC vault · budget · payout" />
+            <Box x={780} y={330} w={180} h={64} title="QuickNode Streams" sub="filters our txs → webhook" tone="var(--info)" />
 
-            <Box x={20} y={320} w={250} h={70} title="Outcome-token desk (devnet)" sub="YES/NO SPL mints at the live ask · $1" tone="var(--kalshi)" />
-            <Box x={320} y={320} w={260} h={70} title="hedgehog_policy (Anchor)" sub="USDC vault · budget · parametric payout" />
-            <Box x={630} y={320} w={330} h={70} title="QuickNode Streams → /api webhook" sub="fills, transfers, payouts → live dashboard" tone="var(--info)" />
-
-            <Arrow d="M200 81 L258 81" />
-            <Arrow d="M470 72 L528 66" label="prices" lx={500} ly={60} />
-            <Arrow d="M255 318 C 505 300, 505 130, 528 88" label="backing" lx={466} ly={268} />
-            <Arrow d="M470 92 L528 128" />
-            <Arrow d="M365 112 L365 168" label="picks (IDs only)" lx={420} ly={145} />
-            <Arrow d="M470 201 C 650 270, 760 200, 820 134" label="quote → buy tx" lx={690} ly={268} />
-            <Arrow d="M840 132 L 150 318" />
-            <Arrow d="M875 132 L 470 318" />
-            <Arrow d="M630 248 L 470 318" label="settle" lx={575} ly={300} />
-            <Arrow d="M270 355 L 318 355" />
-            <Arrow d="M580 355 L 628 355" />
+            <Arrow d="M190 90 H238" />
+            <Arrow d="M440 80 L498 66" label="prices" lx={469} ly={60} />
+            <Arrow d="M440 100 L498 128" />
+            <Arrow d="M340 120 V188" label="picks (IDs only)" lx={392} ly={160} />
+            <Arrow d="M580 188 V158" label="backing" lx={548} ly={177} />
+            <Arrow d="M640 158 V188" label="results" lx={676} ly={177} />
+            <Arrow d="M290 250 V300 H110 V328" label="quote → buy tx" lx={200} ly={314} />
+            <Arrow d="M200 362 H238" />
+            <Arrow d="M110 394 V424 H560 V396" label="signs policy" lx={335} ly={440} />
+            <Arrow d="M640 250 V328" label="settle" lx={668} ly={300} />
+            <Arrow d="M540 250 V300 H400 V328" label="payouts" lx={470} ly={318} />
+            <Arrow d="M720 362 H778" />
+            <Arrow d="M870 328 V252" label="webhook" lx={906} ly={300} />
           </svg>
         </div>
       </section>
