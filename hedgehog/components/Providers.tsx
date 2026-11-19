@@ -7,7 +7,8 @@ import "@solana/wallet-adapter-react-ui/styles.css";
 import { usePathname, useRouter } from "next/navigation";
 import { DEVNET_RPC } from "@/lib/client/tx";
 import { initMockFromUrl } from "@/lib/client/mode";
-import { DemoWalletAdapter } from "@/lib/client/demoWallet";
+import { DemoWalletAdapter, DemoWalletName } from "@/lib/client/demoWallet";
+import { devnetFaucet } from "@/lib/client/api";
 
 // Wallets are discovered via the Wallet Standard (Phantom, Solflare, Backpack, MetaMask's Solana support, ...),
 // so we register NO legacy adapters: a hard-coded PhantomWalletAdapter duplicated Phantom's own Standard wallet
@@ -34,6 +35,7 @@ export function Providers({ children }: { children: ReactNode }) {
       <WalletProvider wallets={wallets} autoConnect={shouldAutoConnect} onError={onError}>
         <WalletModalProvider>
           <RememberGoodWallet />
+          <FundDemoWallet />
           <ConnectOnSelect />
           {children}
         </WalletModalProvider>
@@ -77,5 +79,18 @@ function ConnectOnSelect() {
       if (pathname === "/") router.push("/intake");
     }
   }, [connected, pathname, router]);
+  return null;
+}
+
+/** A fresh demo wallet doesn't exist onchain until something is sent to it ("Account not found" on Explorer).
+ *  Fund it (test dollars + fee SOL) as soon as it connects, once per browser session. */
+function FundDemoWallet() {
+  const { connected, wallet, publicKey } = useWallet();
+  useEffect(() => {
+    if (!connected || !publicKey || wallet?.adapter.name !== DemoWalletName) return;
+    const key = `hh.demoFunded.${publicKey.toBase58()}`;
+    try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, "1"); } catch { /* ignore */ }
+    devnetFaucet(publicKey.toBase58()).catch(() => {});
+  }, [connected, wallet, publicKey]);
   return null;
 }

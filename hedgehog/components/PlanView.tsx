@@ -16,7 +16,8 @@ import { CreativeHedges } from "./plan/CreativeHedges";
 import { ClarifyQuestions, ClarifyRecap } from "./plan/ClarifyQuestions";
 import { QuoteTable } from "./QuoteTable";
 import { CheckoutDialog, type CheckoutKind, type CheckoutResult } from "./CheckoutDialog";
-import { CoverChecklist, CoverSteps, NextStepBar, coverItems } from "./plan/CoverChecklist";
+import { CoverChecklist, CoverSteps, NextStepBar, coverItems, type CoverItem } from "./plan/CoverChecklist";
+import { CoverAllDialog } from "./plan/CoverAllDialog";
 import { HeadsUp } from "./plan/HeadsUp";
 import { IconArrowRight, IconCheck } from "./Icons";
 import s from "./PlanView.module.css";
@@ -37,6 +38,7 @@ export function PlanView() {
   const [missing, setMissing] = useState(false);
   const [checkout, setCheckout] = useState<{ kind: CheckoutKind; line: QuoteLine } | null>(null);
   const [bought, setBought] = useState<Record<string, CheckoutResult>>({});
+  const [coverAll, setCoverAll] = useState<CoverItem[] | null>(null); // frozen at open, so the receipt keeps its lines
   const reqId = useRef(0);
   const bindRef = useRef<HTMLElement>(null);
   // Quick questions before the quote (null = not asking). `edit` = re-answering on an existing plan.
@@ -226,7 +228,7 @@ export function PlanView() {
               Covers {cov}% of ~{usd(totalLoss)} in estimated losses across {coveredRisks.length} risk{coveredRisks.length === 1 ? "" : "s"}.
               {local && <> Resized at current prices. <button className={s.linkBtn} onClick={() => runAdvise(profile, cov)} disabled={loading}>{loading ? "Re-running…" : "Re-run AI"}</button></>}
             </p>
-            <CoverChecklist items={items} onCover={startCover} />
+            <CoverChecklist items={items} onCover={startCover} onCoverAll={() => setCoverAll(items.filter((i) => !i.done))} />
             <div className="signline"><span className="x">x</span><span className="l" /><span>Your wallet signs</span></div>
             <ul className="assure">
               <li><IconCheck size={14} />You see the exact cost before you sign.</li>
@@ -279,8 +281,13 @@ export function PlanView() {
         </section>
       )}
 
-      <NextStepBar items={items} onCover={startCover} watch={bindRef} />
+      <NextStepBar items={items} onCover={startCover} onCoverAll={() => setCoverAll(items.filter((i) => !i.done))} watch={bindRef} />
       <div className={s.barSpace} aria-hidden="true" />
+
+      {coverAll && (
+        <CoverAllDialog items={coverAll} businessId={profile.id} budgetUsd={budget} onClose={() => setCoverAll(null)}
+          onDone={({ contractId, ...r }) => setBought((b) => ({ ...b, [`cover:${contractId}`]: r }))} />
+      )}
 
       {checkout && (
         <CheckoutDialog kind={checkout.kind} line={checkout.line} risk={risksById.get(checkout.line.riskId)} businessId={profile.id}

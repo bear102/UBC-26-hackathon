@@ -1,0 +1,8 @@
+.lines { list-style: none; margin: 0 0 16px; padding: 0; border-top: 1px solid var(--ink); }
+.lines > li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line-2); }
+.name { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 14.5px; color: var(--ink); min-width: 0; }
+.name svg { color: var(--pay); flex: none; }
+.nums { font-size: 13px; color: var(--ink-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.nums b { color: var(--ink); }
+.progress { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ink-2); margin: 4px 0 16px; }
+@media (max-width: 520px) { .lines > li { flex-direction: column; gap: 2px; } }

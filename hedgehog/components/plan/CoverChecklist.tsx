@@ -52,9 +52,11 @@ export function CoverSteps({ total, done }: { total: number; done: number }) {
 }
 
 /** Buy checklist for the navy binding panel. */
-export function CoverChecklist({ items, onCover }: { items: CoverItem[]; onCover: (l: QuoteLine) => void }) {
+export function CoverChecklist({ items, onCover, onCoverAll }: { items: CoverItem[]; onCover: (l: QuoteLine) => void; onCoverAll?: () => void }) {
   const next = items.find((i) => !i.done);
   const done = items.filter((i) => i.done).length;
+  const left = items.filter((i) => !i.done);
+  const leftCost = left.reduce((a, i) => a + i.line.premiumUsd, 0);
   if (!items.length) return <p className={s.none}>Nothing here can be bought right now.</p>;
   return (
     <div className={s.check}>
@@ -72,7 +74,9 @@ export function CoverChecklist({ items, onCover }: { items: CoverItem[]; onCover
           </li>
         ))}
       </ul>
-      {next
+      {left.length >= 2 && onCoverAll
+        ? <button type="button" className="btn btn-buy" onClick={onCoverAll}><IconShieldCheck size={20} />Cover all {left.length} · {usd(leftCost, 2)}</button>
+        : next
         ? <button type="button" className="btn btn-buy" onClick={() => onCover(next.line)}><IconShieldCheck size={20} />{done ? "Cover the next risk" : "Get covered"}</button>
         : <Link className="btn btn-buy" href="/dashboard"><IconCheck size={20} />All covered · view my cover</Link>}
     </div>
@@ -80,7 +84,7 @@ export function CoverChecklist({ items, onCover }: { items: CoverItem[]; onCover
 }
 
 /** Bottom bar that keeps the next action in reach once the binding panel is off screen. */
-export function NextStepBar({ items, onCover, watch }: { items: CoverItem[]; onCover: (l: QuoteLine) => void; watch: RefObject<HTMLElement | null> }) {
+export function NextStepBar({ items, onCover, onCoverAll, watch }: { items: CoverItem[]; onCover: (l: QuoteLine) => void; onCoverAll?: () => void; watch: RefObject<HTMLElement | null> }) {
   const [hidden, setHidden] = useState(true);
   useEffect(() => {
     const el = watch.current;
@@ -102,6 +106,9 @@ export function NextStepBar({ items, onCover, watch }: { items: CoverItem[]; onC
               <small>Next</small><b>{next.risk?.title ?? next.line.riskId}</b>
             </a>
             <span className={s.barPrice}>{usd(next.line.premiumUsd, 2)}</span>
+            {onCoverAll && items.filter((i) => !i.done).length >= 2 && (
+              <button type="button" className={`btn ${s.barAll}`} tabIndex={hidden ? -1 : 0} onClick={onCoverAll}>Cover all {items.filter((i) => !i.done).length}</button>
+            )}
             <button type="button" className="btn btn-primary" tabIndex={hidden ? -1 : 0} onClick={() => onCover(next.line)}>Get covered <IconArrowRight size={15} /></button>
           </>
         ) : (

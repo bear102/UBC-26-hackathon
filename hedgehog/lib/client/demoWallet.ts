@@ -34,9 +34,12 @@ export class DemoWalletAdapter extends BaseSignerWalletAdapter {
   get readyState() { return typeof window === "undefined" ? WalletReadyState.Unsupported : WalletReadyState.Loadable; }
 
   async connect(): Promise<void> {
-    if (this._kp) return;
-    this._kp = loadOrCreate();
-    this.emit("connect", this._kp.publicKey);
+    // Yield first: this wallet connects synchronously, and React runs child effects (our ConnectOnSelect) before
+    // WalletProvider's effect attaches its "connect" listener. Emitting immediately lost the event, the adapter
+    // then reported connected=true and every later connect() returned early, leaving the UI stuck on "Connect".
+    await new Promise((r) => setTimeout(r, 0));
+    if (!this._kp) this._kp = loadOrCreate();
+    this.emit("connect", this._kp.publicKey); // (re-)emit even if already connected, so the provider's state syncs
   }
   async disconnect(): Promise<void> {
     this._kp = null;
@@ -51,6 +54,12 @@ export class DemoWalletAdapter extends BaseSignerWalletAdapter {
       else (tx as Transaction).partialSign(kp);
       return tx;
     } catch (e) { throw new WalletSignTransactionError((e as Error)?.message, e); }
+  }
+  /** "Cover all": sign several txs in one go (what Phantom shows as a single approval). */
+  async signAllTransactions<T extends TransactionOrVersionedTransaction<this["supportedTransactionVersions"]>>(txs: T[]): Promise<T[]> {
+    const out: T[] = [];
+    for (const tx of txs) out.push(await this.signTransaction(tx));
+    return out;
   }
 
 }

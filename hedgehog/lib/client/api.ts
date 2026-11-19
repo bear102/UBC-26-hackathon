@@ -97,6 +97,10 @@ export const getBacking = (owner: string) =>
 export type CoverBuyReq = { owner: string; businessId: string; peril: string; marketRef: string; trigger: string; premiumUsd: number; payoutUsd: number; expiry: string; side?: "yes" | "no" };
 export type CoverBuyRes = { policyId: string; policyPda: string; txBase64: string };
 export const coverBuy = (b: CoverBuyReq) => call<CoverBuyRes>("/api/cover/buy", post(b));
+export type CoverPlanLine = { marketRef: string; side: "yes" | "no"; contracts: number; trigger: string; premiumUsd?: number; peril?: string };
+export type CoverPlanRes = { txs: string[]; policies: { index: number; policyId: number; policyPda: string; tx: number; marketRef: string; premiumUsd: number; payoutUsd: number }[]; warnings: string[]; quoteExpiresAt: string };
+/** "Cover all": priced + co-signed txs for every line (≤3 policies per tx); sign all at once, send in order. */
+export const coverBuyPlan = (b: { owner: string; businessId?: string; monthlyBudgetUsd?: number; lines: CoverPlanLine[] }) => call<CoverPlanRes>("/api/cover/buy-plan", post(b));
 export const coverConfirm = (policyPda: string, signature: string) => call<{ backing?: DeskHedge }>("/api/cover/confirm", post({ policyPda, signature }));
 
 /** Devnet demo faucet: tops the wallet up to $50 test dollars + fee SOL. Never throws (mainnet / real-USDC setups just skip). */

@@ -42,6 +42,32 @@ export async function signAndSend(
   return sig;
 }
 
+type SignAll = <T extends Transaction | VersionedTransaction>(txs: T[]) => Promise<T[]>;
+
+/** "Cover all": one wallet approval for several server-built txs (signAllTransactions when the wallet has it,
+ *  else one prompt each), then send them IN ORDER, waiting for each (later txs depend on accounts the first creates). */
+export async function signAllAndSend(
+  signAll: SignAll | undefined, signOne: Signer | undefined, txsBase64: string[], network: Network,
+  onStage?: (s: "signing" | "sending" | "confirming", i: number, n: number) => void,
+): Promise<string[]> {
+  if (!signAll && !signOne) throw new Error("This wallet can't sign transactions. Try Phantom.");
+  const txs = txsBase64.map(decodeTx);
+  onStage?.("signing", 0, txs.length);
+  const signed = signAll ? await signAll(txs) : await (async () => { const out = []; for (const t of txs) out.push(await signOne!(t)); return out; })();
+  const conn = connectionFor(network);
+  const sigs: string[] = [];
+  for (let i = 0; i < signed.length; i++) {
+    const t = signed[i];
+    onStage?.("sending", i, signed.length);
+    const raw = t instanceof VersionedTransaction ? t.serialize() : t.serialize({ requireAllSignatures: true, verifySignatures: false });
+    const sig = await conn.sendRawTransaction(raw, { skipPreflight: false, preflightCommitment: "confirmed", maxRetries: 3 });
+    onStage?.("confirming", i, signed.length);
+    await waitForConfirm(conn, sig);
+    sigs.push(sig);
+  }
+  return sigs;
+}
+
 async function waitForConfirm(conn: Connection, sig: string, timeoutMs = 60_000) {
   const t0 = Date.now();
   while (Date.now() - t0 < timeoutMs) {

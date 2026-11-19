@@ -22,7 +22,7 @@ export default function Landing() {
           <div className={s.copy}>
             <span className="eyebrow">Insurance for your worst business day</span>
             <h1 className={s.h1}>
-              Insure any <br className={s.br} />business against <br className={s.br} />
+              Insure <span className={s.any}>any</span> <br className={s.br} />business against <br className={s.br} />
               <em className={s.stamp}>anything</em>
             </h1>
             <p className={`lede ${s.lede}`}>
@@ -54,16 +54,14 @@ export default function Landing() {
                     <div className="term pay"><span className="lab">You get up to</span><span className="amt">$950</span></div>
                     <div className="term cost"><span className="lab">You pay</span><span className="amt">$202</span></div>
                   </div>
-                  <table className={s.swing}>
-                    <thead><tr><th>Saturday</th><th>Without cover</th><th>With cover</th></tr></thead>
-                    <tbody>
-                      <tr><th>Normal</th><td>$0</td><td>−$202</td></tr>
-                      <tr><th>Rainy</th><td className={s.bad}>−$1,100</td><td>−$752</td></tr>
-                      <tr><th>Cold</th><td className={s.bad}>−$800</td><td>−$602</td></tr>
-                      <tr className={s.worst}><th>Rainy and cold</th><td className={s.bad}>−$1,900</td><td>−$952</td></tr>
-                    </tbody>
-                  </table>
-                  <p className={s.swingNote}>A known <b>$202</b> cuts your worst Saturday in half: <b>$952</b> instead of <b>$1,900</b>.</p>
+                  <ul className={s.ifs}>
+                    <li><span>If it rains Saturday</span><b>we pay you $550</b></li>
+                    <li><span>If a cold snap hits</span><b>we pay you $400</b></li>
+                  </ul>
+                  <div className={s.worst}>
+                    <span className={s.worstLab}>Your worst Saturday</span>
+                    <span className={s.worstNums}><s>−$1,900</s><span aria-hidden="true">→</span><b>−$952</b></span>
+                  </div>
                 </div>
                 <GuillocheBand tone="red" />
               </div>

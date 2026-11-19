@@ -7,6 +7,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { AnchorProvider, BN, Program } from "@coral-xyz/anchor";
 import {
+  ComputeBudgetProgram,
   Connection,
   Keypair,
   PublicKey,
@@ -299,6 +300,89 @@ export class CoverClient {
     const txBase64 = tx.serialize({ requireAllSignatures: false, verifySignatures: false }).toString("base64");
     const quoteExpiresAt = new Date(Date.now() + 60_000).toISOString();
     return { policyId, policyPda: pol.toBase58(), businessPda: biz.toBase58(), txBase64, warnings, instructions: names, quoteExpiresAt };
+  }
+
+  /**
+   * "Cover all": build several buy_policy txs for one owner (fee payer = owner), at most `perTx` policies each, with
+   * consecutive policy ids (the program sets policy_count = max(id+1) on every buy, so ids count+0..n-1 are valid).
+   * The first tx carries register_business / set_budget. Every tx is co-signed by the quoter and shares one blockhash,
+   * so the wallet can approve them all at once (signAllTransactions); they must be SENT in order (tx 1 creates the
+   * business account the others use).
+   */
+  async buildBuyBatchTxs(p: {
+    owner: PublicKey;
+    items: { peril: Peril | number; marketRef: string; trigger: string; premiumUsd: number; payoutUsd: number; expiry: Date | number }[];
+    monthlyBudgetUsd?: number;
+    quoter: Keypair;
+    perTx?: number;
+  }): Promise<{ txs: string[]; policies: { index: number; policyId: number; policyPda: string; tx: number }[]; businessPda: string; warnings: string[]; quoteExpiresAt: string }> {
+    const perTx = Math.max(1, Math.min(3, p.perTx ?? 3));
+    if (!p.items.length) throw new Error("no policies to buy");
+    const now = Math.floor(Date.now() / 1000);
+    const warnings: string[] = [];
+    const u = await this.fetchUnderwriter();
+    if (!u) throw new Error("underwriter not initialized (run scripts/init-underwriter.ts)");
+    const biz = businessPda(p.owner, this.program.programId);
+    const existing = await this.program.account.business.fetchNullable(biz);
+    const ownerToken = getAssociatedTokenAddressSync(u.mint, p.owner, true, this.tokenProgram);
+    const totalPremium = p.items.reduce((a, i) => a + i.premiumUsd, 0);
+    const totalPayout = p.items.reduce((a, i) => a + i.payoutUsd, 0);
+
+    const setup: TransactionInstruction[] = [];
+    const budget = p.monthlyBudgetUsd ?? Math.max(500, totalPremium);
+    if (!existing) {
+      setup.push(await this.program.methods.registerBusiness(toUnits(Math.max(budget, totalPremium))).accountsPartial({ owner: p.owner, business: biz }).instruction());
+    } else if (p.monthlyBudgetUsd !== undefined && !toUnits(p.monthlyBudgetUsd).eq(existing.monthlyBudget)) {
+      setup.push(await this.program.methods.setBudget(toUnits(p.monthlyBudgetUsd)).accountsPartial({ owner: p.owner, business: biz }).instruction());
+    }
+    // Friendly pre-checks (the program enforces these too): wallet balance, budget left this period, vault capacity.
+    try {
+      const bal = await this.connection.getTokenAccountBalance(ownerToken);
+      if (Number(bal.value.amount) < toUnits(totalPremium).toNumber()) warnings.push(`owner has ${bal.value.uiAmountString} USDC, premiums total ${totalPremium.toFixed(2)}`);
+    } catch { warnings.push("owner has no USDC token account for the underwriter's mint"); }
+    try {
+      const vb = await this.connection.getTokenAccountBalance(u.vault);
+      const free = fromUnits(vb.value.amount) - fromUnits(u.totalExposure);
+      if (totalPayout > free) throw new Error(`vault free capacity is ${free.toFixed(2)} USDC < total payout ${totalPayout} (InsufficientCapacity)`);
+    } catch (e) { if (e instanceof Error && /InsufficientCapacity/.test(e.message)) throw e; }
+    if (existing) {
+      const fresh = now >= Number(existing.periodStart.toString()) + 30 * 86400;
+      const spent = fresh ? 0 : fromUnits(existing.spentThisPeriod);
+      const cap = p.monthlyBudgetUsd ?? fromUnits(existing.monthlyBudget);
+      if (spent + totalPremium > cap + 1e-6) throw new Error(`BudgetExceeded: ${spent.toFixed(2)} already spent this month + ${totalPremium.toFixed(2)} > ${cap.toFixed(2)} budget`);
+    }
+
+    const firstId = existing ? Number(existing.policyCount.toString()) : 0;
+    const policies: { index: number; policyId: number; policyPda: string; tx: number }[] = [];
+    const groups: TransactionInstruction[][] = [];
+    for (let i = 0; i < p.items.length; i++) {
+      const it = p.items[i];
+      if (Buffer.byteLength(it.marketRef, "utf8") > 64) throw new Error(`line ${i + 1}: marketRef must be <= 64 bytes`);
+      if (!(it.premiumUsd > 0 && it.payoutUsd >= it.premiumUsd)) throw new Error(`line ${i + 1}: need premium > 0 and payout >= premium`);
+      const expirySecs = typeof it.expiry === "number" ? Math.floor(it.expiry) : Math.floor(it.expiry.getTime() / 1000);
+      if (expirySecs <= now) throw new Error(`line ${i + 1}: expiry must be in the future`);
+      const policyId = firstId + i;
+      const pol = policyPda(this.uw, biz, policyId, this.program.programId);
+      const perilCode = typeof it.peril === "number" ? it.peril : PERIL_CODES[it.peril] ?? 0;
+      const ix = await this.program.methods
+        .buyPolicy(new BN(policyId), perilCode, it.marketRef, triggerHash(it.trigger), toUnits(it.premiumUsd), toUnits(it.payoutUsd), new BN(expirySecs))
+        .accountsPartial({ owner: p.owner, quoter: p.quoter.publicKey, underwriter: this.uw, business: biz, policy: pol, vault: u.vault, ownerToken, mint: u.mint, tokenProgram: this.tokenProgram })
+        .instruction();
+      const g = Math.floor(i / perTx);
+      (groups[g] ??= []).push(ix);
+      policies.push({ index: i, policyId, policyPda: pol.toBase58(), tx: g });
+    }
+
+    const { blockhash } = await this.connection.getLatestBlockhash("confirmed");
+    const txs = groups.map((ixs, g) => {
+      const all = [ComputeBudgetProgram.setComputeUnitLimit({ units: 120_000 + 110_000 * ixs.length }), ...(g === 0 ? setup : []), ...ixs];
+      const tx = new Transaction({ feePayer: p.owner, recentBlockhash: blockhash }).add(...all);
+      tx.partialSign(p.quoter);
+      const bytes = tx.serialize({ requireAllSignatures: false, verifySignatures: false });
+      if (bytes.length > 1232) throw new Error(`tx ${g + 1} is ${bytes.length} bytes (> 1232); buy fewer lines at once`);
+      return bytes.toString("base64");
+    });
+    return { txs, policies, businessPda: biz.toBase58(), warnings, quoteExpiresAt: new Date(Date.now() + 60_000).toISOString() };
   }
 
   // ------------------------------------------------ reads

@@ -1,6 +1,6 @@
 // POST { owner } -> { minted, usd, solSent, sigs } — DEVNET demo faucet. Works only when the settlement mint
 // (USDC_MINT) is a test dollar whose mint authority is the desk (e.g. the e2e test mint in .data/e2e-test-usdc.json).
-// Tops the wallet up to max($500, 1.2 × needUsd + $10) test USD and, if it has < 0.01 SOL, sends 0.02 devnet SOL for fees.
+// Tops the wallet up to max($500, 1.2 × needUsd + $10) test USD and, if it has < 0.006 SOL, sends 0.01 devnet SOL for fees (a first policy needs ~0.005 incl. rent).
 import { NextResponse } from "next/server";
 import { LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import { createAssociatedTokenAccountIdempotentInstruction, createMintToInstruction, getAccount, getAssociatedTokenAddressSync, getMint } from "@solana/spl-token";
@@ -36,8 +36,8 @@ export async function POST(req: Request) {
     const minted = have < target ? target - have : 0n;
     if (minted > 0n) tx.add(createAssociatedTokenAccountIdempotentInstruction(desk.publicKey, ata, owner, mint), createMintToInstruction(mint, ata, desk.publicKey, minted));
     const lamports = await conn.getBalance(owner);
-    const solSent = lamports < 0.01 * LAMPORTS_PER_SOL;
-    if (solSent) tx.add(SystemProgram.transfer({ fromPubkey: desk.publicKey, toPubkey: owner, lamports: 0.02 * LAMPORTS_PER_SOL }));
+    const solSent = lamports < 0.006 * LAMPORTS_PER_SOL;
+    if (solSent) tx.add(SystemProgram.transfer({ fromPubkey: desk.publicKey, toPubkey: owner, lamports: 0.01 * LAMPORTS_PER_SOL }));
     const sig = tx.instructions.length ? await sendAndPoll(conn, tx, [desk]) : null;
     return NextResponse.json({ minted: Number(minted) / 10 ** m.decimals, usd: TARGET_USD, solSent, sig });
   } catch (e) {
