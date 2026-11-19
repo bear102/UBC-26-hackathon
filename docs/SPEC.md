@@ -648,6 +648,23 @@ Human voiceover. Captions on. The honesty lines (§7.4 H1-H3) are spoken once.
 
 ---
 
+### 7.5 v3 pitch and video (Thu 2026-11-19; supersedes §7.1-§7.4 where they differ)
+
+**Venue reality:** trading keys are Gemini **sandbox**. So: BTC hourly promos and Hedge Desk BTC cover = real sandbox orders (test money); Spurs/weather = production odds, PAPER fills, real Gemini settlement; refunds = devnet USDC.
+
+**Fixed honesty line H1 (replaces §7.4 H1):** "Every order you see is a real Gemini API order on Gemini's sandbox exchange, with test money. The Spurs and weather promos are priced on Gemini's real production odds; their fills are simulated and labelled PAPER, and they settle on Gemini's real result. Refunds are devnet USDC. Switching venue is two environment variables."
+
+**5-minute finals (changes only):**
+| Time | Beat | Change |
+|---|---|---|
+| 1:20-2:00 | Risk Scan | B taps the **Coffee cart near UT** preset on `/suite`. Read two rows: "Thursday high under 74°F hurts iced drinks" (promo) and "BTC ≥ $X at 4 PM" (hedge/promo). Tap **Make it a promo** on the BTC row → pre-created BTC promo console. |
+| 2:00-2:50 | **HERO** | Same mechanics on the **BTC hourly sandbox promo** ("BTC $X or above at <time> CT → $1 back on any coffee"): cap 20, tranche 10, threshold -1, 8 pre-issued. Judge #3's phone gets `Unhedged`, the agent fills on the Gemini sandbox, the phone flips. Pick an event expiring 30-60 min after the slot, so the **payout can land during Q&A or right after**. |
+| 4:10-4:45 | Hedge Desk | `/suite/hedge` on the BTC row: "You pay $4 now; if BTC ≥ $X at 4 PM, Gemini pays you $10." Tap **Buy cover** (typed max) → sandbox order id → Solana memo link. Then the vision line. |
+
+**Video (§7.2) changes:** step 3 (merchant flow) starts on `/suite` with the coffee-cart preset (10 s) → Make it a promo. Add 10 s of the Hedge Desk buy (order id + memo link) before the economics slide. The payout beat can use a BTC hourly promo settled on Thursday (sandbox, ~1 h) in addition to the weather pair (PAPER, settles Fri ~5 AM).
+
+**Rehearsal checklist (Thu night):** one full BTC hourly loop on the user's PC: Risk Scan → promo → 2 phones → `Unhedged` on #11 → top-up → settle (~1 h) → "$X is yours" → Spend → Verify (4 ticks, sandbox venue) + one Hedge Desk buy. Record it as the fallback clip.
+
 ## 8. README must-haves
 
 **All targets:** what/why in 3 lines; architecture diagram (§2); program ID + Explorer links; live `/p/` links for the Thursday promises; setup (`anchor build/test/deploy`, `npm run worker`, env list); the honesty lines H1-H3; legal framing H5; trust table (§3.6); video link.
