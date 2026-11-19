@@ -1,0 +1,31 @@
+/* Quick questions card (before the quote) + the "Based on your answers" recap on the plan. Square, ink, Plex Sans. */
+.card { max-width: 580px; margin: 40px auto; padding: 20px 24px 22px; box-shadow: var(--shadow-lg); }
+.head { margin: -20px -24px 16px; padding: 12px 24px; }
+.title { margin: 0 0 4px; font-size: clamp(22px, 2.6vw, 28px); line-height: 1.2; overflow-wrap: anywhere; }
+.qs { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.q { border: 0; margin: 0; padding: 16px 0; min-width: 0; position: relative; }
+.qs > li + li .q { border-top: 1px solid var(--line); }
+.q[data-skipped="true"] .ask, .q[data-skipped="true"] .chips, .q[data-skipped="true"] .why { opacity: .45; }
+.ask { font-size: 16px; font-weight: 600; color: var(--ink); padding: 0 84px 0 0; margin: 0; display: block; float: none; width: 100%; }
+.why { display: block; font-size: 13px; color: var(--muted); margin: 2px 0 10px; }
+.skip { font: inherit; font-size: 13px; font-weight: 500; color: var(--ink-2); background: none; border: 0; padding: 2px 0; min-height: 28px; cursor: pointer; text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; white-space: nowrap; position: absolute; top: 14px; right: 0; }
+.skip:hover { color: var(--ink); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips :global(.chip) { min-height: 40px; }
+.chips :global(.chip:hover) { border-color: var(--ink); color: var(--ink); }
+.free { margin-top: 10px; max-width: 320px; }
+.free :global(.input) { padding: 8px 11px; font-size: 14px; }
+.foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding-top: 14px; border-top: 1px solid var(--line-2); }
+.foot :global(.btn) { flex: 0 1 auto; }
+@media (max-width: 480px) {
+  .card { margin: 20px auto; padding: 16px 16px 18px; }
+  .head { margin: -16px -16px 14px; padding: 12px 16px; }
+  .foot :global(.btn-primary) { flex: 1 1 auto; }
+}
+.headBtn { font: inherit; font-size: 13px; font-weight: 600; color: var(--ink-2); background: none; border: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; padding: 4px 0; }
+.headBtn:hover { color: var(--ink); }
+
+.recap { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 14px; color: var(--ink-2); margin: 0 0 14px; }
+.recap b { font-weight: 600; color: var(--ink); }
+.recapEdit { font: inherit; font-size: 13px; font-weight: 600; color: var(--ink); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
+.recapEdit:disabled { opacity: .5; cursor: not-allowed; }

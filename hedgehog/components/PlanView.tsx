@@ -2,10 +2,10 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { BusinessProfile, Quote, QuoteLine, Risk } from "@/lib/types";
-import { advise, getPresets } from "@/lib/client/api";
+import type { BusinessProfile, ClarifyAnswer, ClarifyQuestion, Quote, QuoteLine, Risk } from "@/lib/types";
+import { advise, adviseQuestions, getPresets } from "@/lib/client/api";
 import { rescaleQuote, type Coverage } from "@/lib/client/quote";
-import { lastBusiness, lastQuotePct, loadProfile, loadQuote, saveProfile, saveQuote, setLastBusiness } from "@/lib/client/storage";
+import { clearQuotes, lastBusiness, lastQuotePct, loadClarify, loadProfile, loadQuote, saveClarify, saveProfile, saveQuote, setLastBusiness } from "@/lib/client/storage";
 import { FIXTURE_PRESETS } from "@/lib/fixtures";
 import { usd } from "@/lib/client/format";
 import { AdviseProgress } from "./AdviseProgress";
@@ -13,6 +13,7 @@ import { RiskCard } from "./RiskCard";
 import { PlanExplainer } from "./explain/PlanExplainer";
 import { PlanChoices } from "./plan/PlanChoices";
 import { CreativeHedges } from "./plan/CreativeHedges";
+import { ClarifyQuestions, ClarifyRecap } from "./plan/ClarifyQuestions";
 import { QuoteTable } from "./QuoteTable";
 import { CheckoutDialog, type CheckoutKind, type CheckoutResult } from "./CheckoutDialog";
 import { IconArrowRight, IconCheck, IconShieldCheck } from "./Icons";
@@ -35,6 +36,9 @@ export function PlanView() {
   const [checkout, setCheckout] = useState<{ kind: CheckoutKind; line: QuoteLine } | null>(null);
   const [bought, setBought] = useState<Record<string, CheckoutResult>>({});
   const reqId = useRef(0);
+  // Quick questions before the quote (null = not asking). `edit` = re-answering on an existing plan.
+  const [asking, setAsking] = useState<{ questions: ClarifyQuestion[]; previous: ClarifyAnswer[]; edit: boolean } | null>(null);
+  const [rebuilding, setRebuilding] = useState(false);
 
   // Resolve the business profile (URL → storage → presets).
   useEffect(() => {
@@ -49,17 +53,49 @@ export function PlanView() {
     }).catch(() => (fx ? setProfile(fx) : setMissing(true)));
   }, [bizId]);
 
-  const runAdvise = useCallback(async (p: BusinessProfile, c: Coverage) => {
+  const runAdvise = useCallback(async (p: BusinessProfile, c: Coverage, answers?: ClarifyAnswer[]) => {
     const my = ++reqId.current;
     setLoading(true); setError(null);
     try {
-      const q = await advise(p, c);
+      const q = await advise(p, c, answers ?? loadClarify(p)?.answers);
       if (my !== reqId.current) return;
       saveQuote(q, c); setQuote(q); setLocal(false);
     } catch (e) {
       if (my === reqId.current) setError(e instanceof Error ? e.message : String(e));
     } finally { if (my === reqId.current) setLoading(false); }
   }, []);
+
+  // Before the first AI quote: ask 0-3 quick questions (answers cached per business, so a refresh doesn't re-ask).
+  const startQuote = useCallback(async (p: BusinessProfile, c: Coverage) => {
+    const stored = loadClarify(p);
+    if (stored) { runAdvise(p, c, stored.answers); return; }
+    const my = ++reqId.current;
+    setLoading(true); setError(null);
+    const questions = await adviseQuestions(p);
+    if (my !== reqId.current) return;
+    if (!questions.length) { saveClarify(p, [], []); runAdvise(p, c, []); return; }
+    setAsking({ questions, previous: [], edit: false });
+  }, [runAdvise]);
+
+  const submitAnswers = useCallback(async (answers: ClarifyAnswer[]) => {
+    if (!profile || !asking) return;
+    const { questions, edit } = asking;
+    saveClarify(profile, questions, answers);
+    setAsking(null);
+    if (!edit) { runAdvise(profile, cov, answers); return; }
+    clearQuotes(profile.id);
+    setRebuilding(true);
+    await runAdvise(profile, cov, answers);
+    setRebuilding(false);
+  }, [profile, asking, cov, runAdvise]);
+
+  const editAnswers = useCallback(async () => {
+    if (!profile) return;
+    const stored = loadClarify(profile);
+    const questions = stored?.questions.length ? stored.questions : await adviseQuestions(profile);
+    if (!questions.length) return;
+    setAsking({ questions, previous: stored?.answers ?? quote?.clarifications ?? [], edit: true });
+  }, [profile, quote]);
 
   // First quote: cached for this coverage, or rescale another cached one, or call the AI.
   useEffect(() => {
@@ -70,8 +106,8 @@ export function PlanView() {
     const lp = lastQuotePct(profile.id);
     const other = lp ? loadQuote(profile.id, lp) : null;
     if (other) { setQuote(rescaleQuote(other, cov)); setLocal(true); return; }
-    runAdvise(profile, cov);
-  }, [profile, quote, cov, runAdvise]);
+    startQuote(profile, cov);
+  }, [profile, quote, cov, startQuote]);
 
   function changeCoverage(c: Coverage) {
     if (c === cov) return;
@@ -96,7 +132,13 @@ export function PlanView() {
       <div className="card card-dashed stack"><span className="eyebrow">Step 3 · Your hedge plan</span><h2 style={{ margin: 0 }}>No business <em>selected</em></h2><p className="muted" style={{ margin: 0 }}>Pick a preset or describe your business to get a hedge plan.</p><div><Link className="btn btn-primary" href="/">Start <IconArrowRight size={16} /></Link></div></div>
     </div></section>
   );
-  if (!profile || (loading && !quote)) return <section className="section"><div className="container"><AdviseProgress name={profile?.name} /></div></section>;
+  if (profile && asking) return (
+    <section className="section"><div className="container">
+      <ClarifyQuestions questions={asking.questions} previous={asking.previous} name={profile.name}
+        onSubmit={submitAnswers} onCancel={asking.edit ? () => setAsking(null) : undefined} />
+    </div></section>
+  );
+  if (!profile || (loading && !quote) || rebuilding) return <section className="section"><div className="container"><AdviseProgress name={profile?.name} /></div></section>;
   if (error && !quote) return (
     <section className="section"><div className="container narrow">
       <div className="card stack">
@@ -139,6 +181,7 @@ export function PlanView() {
               <span className="meta" title="Model that produced this plan">AI RISK ADVISOR · {quote.model}</span>
             </div>
             <p className={s.summary}>{quote.summary}</p>
+            <ClarifyRecap answers={quote.clarifications ?? loadClarify(profile)?.answers} asked={!!loadClarify(profile)?.questions.length} onEdit={editAnswers} busy={loading} />
             <p className={`xs ${s.venues}`}>
               <span className="badge badge-gemini">Priced &amp; hedged on Gemini</span>
               <span className="badge badge-kalshi">Settled on Solana</span>

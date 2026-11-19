@@ -5,6 +5,8 @@ import { z } from "zod/v4";
 import type { BusinessProfile, HedgeLeg, MarketContract, NaturalHedge, Peril, Quote, QuoteLine, Risk } from "../types";
 import { generateJson as defaultLlm, type GenerateJson } from "./llm";
 import { getPreset } from "./presets";
+import { answersBlock, profileWithAnswers, suppressByAnswers } from "./clarifyRules";
+import type { ClarifyAnswer } from "../types";
 import {
   BRAINSTORM_SYSTEM, TIER_LABEL, brainstormPrompt, brainstormSchema, buildCatalog, buildPackages, directionalPick, evidenceText,
   fallbackIdeas, filterIdeaCandidates, ideasFromBrainstorm, ideasFromPlaybook, labelBound, ladderChoices, sameExposure, type Idea, type PlaybookSeed, type TieredLeg,
@@ -46,7 +48,12 @@ async function resolveDeps(d: Partial<AdvisorDeps> = {}): Promise<AdvisorDeps> {
   };
 }
 
-export interface AdviseOpts { coveragePct?: number; deps?: Partial<AdvisorDeps> }
+export interface AdviseOpts {
+  coveragePct?: number;
+  deps?: Partial<AdvisorDeps>;
+  /** Owner's answers to the clarifying questions (lib/ai/clarify.ts). Folded into the prompts; no extra LLM call. */
+  answers?: ClarifyAnswer[];
+}
 
 // ---------- schemas ----------
 export const PERILS = ["heat", "cold", "rain", "game", "oil", "gas", "fed", "cpi", "crypto", "other", "snow", "power", "water", "quake", "storm", "natgas", "metals"] as const satisfies readonly Peril[];
@@ -105,7 +112,8 @@ export function nextDays(now: Date, n = 7): string[] {
 const usd = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 const px = (n: number | null) => (n == null ? "-" : n.toFixed(2));
 
-function profileBlock(p: BusinessProfile) {
+function profileBlock(p: BusinessProfile, answers: ClarifyAnswer[] = []) {
+  const ans = answersBlock(answers);
   return [
     `Business: ${p.name}`,
     `Owner says: "${p.description}"`,
@@ -113,6 +121,7 @@ function profileBlock(p: BusinessProfile) {
     `Average daily revenue: ${usd(p.avgDailyRevenueUsd)}`,
     `Busy days: ${p.busyDays.join(", ") || "not given"}`,
     `Monthly hedge budget: ${usd(p.monthlyBudgetUsd)}`,
+    ...(ans ? [ans] : []),
   ].join("\n");
 }
 
@@ -351,7 +360,8 @@ Rules:
 - Align triggers and windows with the LIVE MARKETS (same dates, thresholds and games), but write them in your own plain English: a trigger a live market settles beats a more precise one nobody trades. E.g. if a market asks where it will rain this weekend, write "Rain in Austin this weekend (Nov 21-22)", not ">= 0.25 in on Saturday". Use absolute price thresholds from the market labels, not "+$0.50". Daily weather markets often exist only for today/tomorrow; if the risky day has no market, still list the risk.
 - Prefer risks the LIVE MARKETS can hedge, but still include a material risk if no market is listed.
 - Relevance beats coverage: every risk must follow from something the owner said or an obvious trait of the business (outdoor seats, vans, a loan, crypto revenue, game-night crowds). A market existing is NOT a reason to list a risk: no fuel/gas-price risk unless the business buys meaningful fuel (vehicles, generators, equipment); no Fed/CPI risk unless it carries variable-rate debt or its revenue moves with rates/prices.
-- Weather risks must land on the owner's BUSY DAYS (or the days it operates). A weekend weather market does not hedge a Monday-Friday business: pick a weekday market or list the risk without one.`;
+- Weather risks must land on the owner's BUSY DAYS (or the days it operates). A weekend weather market does not hedge a Monday-Friday business: pick a weekday market or list the risk without one.
+- If the owner answered quick questions, treat the answers as facts: use them to size losses (e.g. "mostly outdoor seating", "3 vans") and drop risks they rule out (no outdoor seating -> no patio-weather risk; no own vehicles -> no fuel risk; fixed-rate loan -> no Fed risk for the loan; game result doesn't matter -> no game risk).`;
 
 const MATCH_SYSTEM = `You pick prediction-market contracts that hedge business risks (several risks at once, each with its own CANDIDATES list). Each contract is binary: a YES share pays $1 if the label resolves true, a NO share pays $1 if it resolves false.
 Rules:
@@ -385,7 +395,11 @@ const timeout = <T,>(p: Promise<T>, ms: number) => Promise.race([p, new Promise<
  *  4. sizing (code): every choice, then the default plan inside the budget; 3 packages (code)
  *  5. summary (LLM fast, skipped near the route's time limit)
  */
-export async function advise(profile: BusinessProfile, opts: AdviseOpts = {}): Promise<Quote> {
+export async function advise(owner: BusinessProfile, opts: AdviseOpts = {}): Promise<Quote> {
+  const answers = cleanAnswers(opts.answers);
+  // `profile` carries the answers' facts (grounding hooks, busy days) for every code path; prompts quote the owner's own words + answers.
+  const profile = profileWithAnswers(owner, answers);
+  const pb = profileBlock({ ...owner, busyDays: profile.busyDays }, answers);
   const deps = await resolveDeps(opts.deps);
   const coveragePct = opts.coveragePct ?? 50;
   const now = deps.now?.() ?? new Date();
@@ -414,13 +428,13 @@ export async function advise(profile: BusinessProfile, opts: AdviseOpts = {}): P
       system: RISK_SYSTEM,
       schema: riskMapSchema,
       prompt: [
-        profileBlock(profile),
+        pb,
         `\nToday is ${today}. Next 7 days: ${nextDays(now).join(", ")}.`,
         universe ? `\nLIVE MARKETS (what can be hedged right now):\n${universe}` : "",
         `\nReturn {"risks":[...]}.`,
       ].join("\n"),
     }),
-    deps.llm({ tier: "pro", system: BRAINSTORM_SYSTEM, schema: brainstormSchema, prompt: brainstormPrompt(profileBlock(profile), `${today}. Next 7 days: ${nextDays(now).join(", ")}`, catalog, playbook.ideas) }),
+    deps.llm({ tier: "pro", system: BRAINSTORM_SYSTEM, schema: brainstormSchema, prompt: brainstormPrompt(pb, `${today}. Next 7 days: ${nextDays(now).join(", ")}`, catalog, playbook.ideas) }),
   ]);
   let risks: Risk[];
   if (riskRes.status === "fulfilled") {
@@ -430,6 +444,11 @@ export async function advise(profile: BusinessProfile, opts: AdviseOpts = {}): P
     console.warn(`[advise] risk map LLM failed, using fallback risks: ${String((riskRes.reason as Error)?.message).slice(0, 200)}`);
     risks = fallbackRisks(profile);
     models.add("fallback-risk-map");
+  }
+  if (answers.length) {
+    const kept0 = suppressByAnswers(risks, answers);
+    if (kept0.length < risks.length) console.warn(`[advise] answers ruled out: ${risks.filter((r) => !kept0.includes(r)).map((r) => r.title).join("; ")}`);
+    risks = (kept0.length ? kept0 : suppressByAnswers(fallbackRisks(profile), answers)).map((r, i) => ({ ...r, id: `r${i + 1}` }));
   }
   risks = risks.map((r) => ({ ...r, kind: r.kind ?? "direct" }));
 
@@ -454,9 +473,10 @@ export async function advise(profile: BusinessProfile, opts: AdviseOpts = {}): P
       kept.push(idea);
     }
   };
-  addIdeas([...ideas, ...playbook.ideas]);
+  const allowed = (xs: Idea[]) => (answers.length ? xs.filter((x) => suppressByAnswers([x.risk], answers).length) : xs);
+  addIdeas(allowed([...ideas, ...playbook.ideas]));
   // top up with the hand-written ideas when too few survive or none has a strong link
-  if (kept.length < 2 || !kept.some((i) => i.risk.correlation === "strong")) addIdeas(fb.ideas);
+  if (kept.length < 2 || !kept.some((i) => i.risk.correlation === "strong")) addIdeas(allowed(fb.ideas));
   const rank = { strong: 0, medium: 1, weak: 2 } as const;
   kept.splice(0, kept.length, ...kept.map((idea, i) => ({ idea, i })).sort((a, b) => rank[a.idea.risk.correlation ?? "medium"] - rank[b.idea.risk.correlation ?? "medium"] || a.i - b.i).map((x) => x.idea).slice(0, 5));
   kept.forEach((k, i) => { k.risk.id = `idea${i + 1}`; }); // final ids (r<n>) once market-less ideas are dropped
@@ -624,6 +644,7 @@ export async function advise(profile: BusinessProfile, opts: AdviseOpts = {}): P
     model: "",
     options,
     naturalHedges,
+    ...(opts.answers ? { clarifications: answers } : {}),
   };
   quote.packages = buildPackages(quote, coveragePct);
 
@@ -635,7 +656,7 @@ export async function advise(profile: BusinessProfile, opts: AdviseOpts = {}): P
         tier: "fast",
         system: "You write a 2-3 sentence plain-English summary of a hedge quote for a small-business owner. Use the exact numbers given. Mention one creative hedge they might not have thought of ONLY if one is listed in the facts (never invent business advice or hedges that are not in the facts), and any natural hedge. Be honest about what is not covered and about basis risk. No hype, no bullet points.",
         schema: summarySchema,
-        prompt: `${profileBlock(profile)}\n\nQUOTE FACTS:\n${quoteFacts(quote)}\n\nReturn {"summary":"..."}.`,
+        prompt: `${pb}\n\nQUOTE FACTS:\n${quoteFacts(quote)}\n\nReturn {"summary":"..."}.`,
         timeoutMs: 15_000,
       });
       quote.summary = data.summary.trim();
@@ -645,6 +666,16 @@ export async function advise(profile: BusinessProfile, opts: AdviseOpts = {}): P
 
   quote.model = [...models].join(" + ");
   return quote;
+}
+
+/** Trims and caps the owner's answers (max 5, short strings, empty answers dropped). */
+export function cleanAnswers(xs: ClarifyAnswer[] | undefined): ClarifyAnswer[] {
+  return (xs ?? []).map((a) => ({
+    questionId: String(a.questionId ?? "").trim().slice(0, 40),
+    question: String(a.question ?? "").trim().slice(0, 160),
+    answer: String(a.answer ?? "").trim().replace(/\s+/g, " ").slice(0, 120),
+    ...(a.label ? { label: String(a.label).trim().slice(0, 30) } : {}),
+  })).filter((a) => a.answer && a.question).slice(0, 5);
 }
 
 const stripTier = ({ tier: _t, ...l }: TieredLeg): HedgeLeg => l;

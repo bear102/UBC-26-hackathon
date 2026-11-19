@@ -1,5 +1,6 @@
 "use client";
-import type { BusinessProfile, Quote } from "@/lib/types";
+import type { BusinessProfile, ClarifyAnswer, ClarifyQuestion, Quote } from "@/lib/types";
+import { profileSig } from "@/lib/ai/clarifyRules";
 
 const get = <T,>(k: string): T | null => {
   try { const v = localStorage.getItem(k); return v ? (JSON.parse(v) as T) : null; } catch { return null; }
@@ -26,4 +27,22 @@ export function allStoredQuotes(): Quote[] {
     }
   } catch {}
   return out;
+}
+
+/** Clarifying questions + answers per business (so a refresh doesn't re-ask). Ignored once the profile text changes. */
+export type StoredClarify = { sig: string; questions: ClarifyQuestion[]; answers: ClarifyAnswer[]; at: string };
+export const saveClarify = (p: BusinessProfile, questions: ClarifyQuestion[], answers: ClarifyAnswer[]) =>
+  set(`hh.clarify.${p.id}`, { sig: profileSig(p), questions, answers, at: new Date().toISOString() } satisfies StoredClarify);
+export function loadClarify(p: BusinessProfile): StoredClarify | null {
+  const c = get<StoredClarify>(`hh.clarify.${p.id}`);
+  return c && c.sig === profileSig(p) ? c : null;
+}
+/** Drop cached quotes for a business (its answers changed, so every coverage level must be re-run). */
+export function clearQuotes(id: string) {
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k?.startsWith(`hh.quote.${id}.`)) localStorage.removeItem(k);
+    }
+  } catch {}
 }

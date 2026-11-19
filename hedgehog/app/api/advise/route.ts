@@ -1,8 +1,9 @@
-// POST { profile: BusinessProfile, coveragePct?: 25|50|100 } -> Quote & { id } (also stored in .data/quotes.json)
+// POST { profile: BusinessProfile, coveragePct?: 25|50|100, answers?: ClarifyAnswer[] } -> Quote & { id } (also stored in .data/quotes.json)
 import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 import { advise } from "@/lib/ai/advisor";
 import { store } from "@/lib/store";
+import { answersSchema } from "@/lib/ai/clarifySchemas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +23,7 @@ const profileSchema = z.object({
 const bodySchema = z.object({
   profile: profileSchema,
   coveragePct: z.coerce.number().min(1).max(100).optional(),
+  answers: answersSchema.optional(),
 });
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "biz";
@@ -33,10 +35,10 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "invalid input", issues: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) }, { status: 400 });
   }
-  const { profile: p, coveragePct } = parsed.data;
+  const { profile: p, coveragePct, answers } = parsed.data;
   const profile = { ...p, id: p.id || p.presetId || `${slug(p.name)}-${Math.random().toString(36).slice(2, 7)}` };
   try {
-    const quote = await advise(profile, { coveragePct });
+    const quote = await advise(profile, { coveragePct, answers });
     const id = `q-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
     const row = store.upsert("quotes", { ...quote, id });
     return NextResponse.json(row);

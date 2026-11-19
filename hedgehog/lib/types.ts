@@ -124,6 +124,26 @@ export interface Quote {
   options?: { riskId: string; choices: QuoteLine[] }[];
   packages?: QuotePackage[];
   naturalHedges?: NaturalHedge[];
+  /** The owner's answers to the AI's clarifying questions that this quote was built with. */
+  clarifications?: ClarifyAnswer[];
+}
+
+/** A short clarifying question the AI asks before quoting (lib/ai/clarify.ts). */
+export interface ClarifyQuestion {
+  id: string;                 // topic slug: "outdoor" | "vehicles" | "loan" | "busy-days" | "game" | "weather" | other
+  question: string;           // "How much of your seating is outdoors?"
+  why: string;                // few words shown under it: "so rain cover fits"
+  options: string[];          // tap-to-select chips (<= 5)
+  allowFreeText: boolean;
+  label?: string;             // 1-3 word topic for the plan recap: "Outdoor seating"
+}
+
+/** The owner's answer to one ClarifyQuestion. */
+export interface ClarifyAnswer {
+  questionId: string;
+  question: string;
+  answer: string;
+  label?: string;
 }
 
 /** A hedge position the owner bought (devnet mock venue or mainnet DFlow). */

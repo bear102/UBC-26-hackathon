@@ -1,6 +1,7 @@
 "use client";
 // Typed client for the Hedgehog API. Reads fall back to fixtures on failure (and always in mock mode).
-import type { BusinessProfile, FeedEvent, MarketContract, Position, Quote } from "@/lib/types";
+import type { BusinessProfile, ClarifyAnswer, ClarifyQuestion, FeedEvent, MarketContract, Position, Quote } from "@/lib/types";
+import { fallbackQuestions } from "@/lib/ai/clarifyRules";
 import {
   FIXTURE_MARKETS, FIXTURE_PRESETS, fixtureCoverInfo, fixtureFeed, fixturePolicies, fixturePositions, fixtureQuote,
   type CoverInfo, type CoverPolicy, type Preset,
@@ -38,8 +39,20 @@ export const getPresets = () =>
     return r;
   }, () => FIXTURE_PRESETS);
 
-export const advise = (profile: BusinessProfile, coveragePct: Coverage) =>
-  withFallback<Quote>("advise", () => call<Quote>("/api/advise", post({ profile, coveragePct })), () => fixtureQuote(profile, coveragePct));
+export const advise = (profile: BusinessProfile, coveragePct: Coverage, answers?: ClarifyAnswer[]) =>
+  withFallback<Quote>("advise", () => call<Quote>("/api/advise", post({ profile, coveragePct, ...(answers ? { answers } : {}) })),
+    () => ({ ...fixtureQuote(profile, coveragePct), ...(answers ? { clarifications: answers } : {}) }));
+
+/** The AI's 0-3 quick questions for this business. Never throws: any failure (or a 15 s wait) means "no questions". */
+export async function adviseQuestions(profile: BusinessProfile): Promise<ClarifyQuestion[]> {
+  if (isMock()) return fallbackQuestions(profile);
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 15_000);
+    const r = await call<{ questions?: ClarifyQuestion[] }>("/api/advise/questions", { ...post({ profile }), signal: ctl.signal }).finally(() => clearTimeout(t));
+    return Array.isArray(r?.questions) ? r.questions.slice(0, 3) : [];
+  } catch (e) { console.warn("questions skipped", e); return []; }
+}
 
 export const getMarkets = (peril?: string) =>
   withFallback<MarketContract[]>("markets", () => call<MarketContract[]>(`/api/markets${peril ? `?peril=${encodeURIComponent(peril)}` : ""}`),
