@@ -231,6 +231,7 @@ export function PlanView() {
             <ul className="assure">
               <li><IconCheck size={14} />You see the exact cost before you sign.</li>
               <li><IconCheck size={14} />Pays to your wallet when the market settles. No claim forms.</li>
+              <li><IconCheck size={14} />Your policy and its vault are public on Solana.</li>
             </ul>
           </div>
         </aside>

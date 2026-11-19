@@ -28,7 +28,7 @@ export default function Landing() {
             <p className={`lede ${s.lede}`}>
               Our AI finds the days that would hurt your business and builds cover from live prediction markets.
               <b> You see what it pays if the bad day happens, and what it costs if it doesn&apos;t.</b>
-              {" "}Your policy lives on Solana: the payout pool is public, and when the result comes in you&apos;re paid automatically.
+              {" "}Your policy lives on Solana, not in our database: the vault is public and the program pays your wallet.
             </p>
             <div className={s.cta}>
               <a href="#pick" className="btn btn-primary btn-lg">Get my quote <IconArrowRight size={16} /></a>
@@ -103,8 +103,8 @@ export default function Landing() {
             </li>
             <li className={s.clause}>
               <span className={s.cno}>§ 3</span>
-              <h3>One signature on Solana</h3>
-              <p>One signature buys a Hedgehog Cover policy on Solana, sold only if its vault can pay. Payouts land in your wallet.</p>
+              <h3>Your policy lives on Solana</h3>
+              <p>A Solana program holds the premium in a public vault, only sells cover the vault can pay, and pays your wallet. If no result ever arrives, anyone can trigger your refund onchain.</p>
             </li>
           </ol>
         </div>

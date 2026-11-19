@@ -747,6 +747,7 @@ export async function advise(owner: BusinessProfile, opts: AdviseOpts = {}): Pro
   }
   uncovered.sort((a, b) => a.riskId.localeCompare(b.riskId, undefined, { numeric: true }));
   await evidenceP;
+  marketWordedTriggers(risks, lines);
 
   const quote: Quote = {
     businessId: profile.id,
@@ -804,6 +805,8 @@ async function attachEvidence(risks: Risk[], choices: Map<string, TieredLeg[]>, 
   const jobs = risks.filter((r) => r.peril === "heat" || r.peril === "cold" || r.peril === "rain").map(async (risk) => {
     const leg = choices.get(risk.id)?.[0];
     const c = leg ? contracts.get(leg.contractId) : undefined;
+    // Daily-rain history says nothing about a monthly/seasonal rain TOTAL ("Above 5 inches in Nov"): skip it there.
+    if (risk.peril === "rain" && c && (/inch/i.test(c.label) || /\b(month|season|in (jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*)\b/i.test(c.eventTitle))) return;
     let peril: Peril = risk.peril, threshold: number | undefined;
     if (risk.peril !== "rain") {
       const b = c && /°F/.test(c.label) ? labelBound(c.label) : null;
@@ -822,6 +825,20 @@ async function attachEvidence(risks: Risk[], choices: Map<string, TieredLeg[]>, 
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Economic hedges: show the trigger in the market's own words ("CPI in November: Above 0.1%") so the period/strike
+ *  always match the contract (the LLM's paraphrase could name the settlement month instead of the data month). */
+const MARKET_WORDED: Peril[] = ["cpi", "fed", "gas", "oil", "natgas", "metals"];
+function marketWordedTriggers(risks: Risk[], lines: QuoteLine[]): void {
+  for (const r of risks) {
+    if (!MARKET_WORDED.includes(r.peril)) continue;
+    const l = lines.find((x) => x.riskId === r.id && x.contracts > 0) ?? lines.find((x) => x.riskId === r.id);
+    if (!l) continue;
+    const c = l.contract;
+    const what = l.side === "yes" ? c.label : `not ${c.label}`;
+    r.trigger = c.eventTitle && c.eventTitle !== c.label ? `${c.eventTitle}: ${what}` : what;
+  }
+}
 
 function quoteFacts(q: Quote): string {
   const risk = (id: string) => q.risks.find((r) => r.id === id);
