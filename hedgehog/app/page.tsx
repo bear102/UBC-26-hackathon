@@ -58,9 +58,10 @@ export default function Landing() {
                     <li><span>If it rains Saturday</span><b>we pay you $550</b></li>
                     <li><span>If a cold snap hits</span><b>we pay you $400</b></li>
                   </ul>
+                  {/* worst case (rain and cold): −$1,900 uncovered vs −$952 covered = 49.9% less */}
                   <div className={s.worst}>
-                    <span className={s.worstLab}>Your worst Saturday</span>
-                    <span className={s.worstNums}><s>−$1,900</s><span aria-hidden="true">→</span><b>−$952</b></span>
+                    <span className={s.worstLab}>Cuts your worst-Saturday losses by</span>
+                    <b className={s.worstPct}>50%</b>
                   </div>
                 </div>
                 <GuillocheBand tone="red" />

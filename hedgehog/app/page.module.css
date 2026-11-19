@@ -70,3 +70,4 @@
 .worstNums s { color: var(--red); font-size: 17px; font-weight: 600; text-decoration-thickness: 2px; }
 .worstNums > span { color: var(--ink-3); }
 .worstNums b { color: var(--pay); font-size: 22px; font-weight: 800; }
+.worstPct { color: var(--pay); font-family: var(--font-display), var(--sans); font-size: 30px; font-weight: 800; line-height: 1; }
