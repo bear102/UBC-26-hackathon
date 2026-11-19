@@ -20,6 +20,7 @@ Deadline: Fri Nov 20, 12:00 CST (submit target 10:00 CST). Finals Sat Nov 21, UT
 | LLM | Provider-agnostic: Claude (primary) → Gemini → OpenAI fallback |
 | Name | Keep "Hedgehog" |
 | Hosting | Decide later (build locally first) |
+| Network plan | **Devnet first, everything.** Mainnet (real DFlow buy) is the last, optional step, only with the user's approval |
 
 ## 2. How each prize is hit (put these in the README)
 - **Gemini PM bounty:** Gemini's live prediction-market book is the pricing engine. Every quote shows Gemini bid/ask, depth and implied probability. The Austin daily-high, Spurs/Texans games and WTI oil markets are the hero hedges. The settled-history endpoint backtests "how often would this hedge have paid?" Deep link to the Gemini market.
@@ -38,6 +39,13 @@ Deadline: Fri Nov 20, 12:00 CST (submit target 10:00 CST). Finals Sat Nov 21, UT
    - Gemini: **"Open on Gemini"** deep link with exact contract + qty (advice only).
    - **"Hedgehog Cover"** (devnet): pay the premium in test USDC into the policy program and get a parametric policy (see §6).
 7. **Coverage dashboard**: open hedges, live P&L, settlement status. QuickNode webhook events stream in. Settled ones show "paid $X vs lost $Y".
+
+## 3b. Devnet-first plan (user decision 2026-11-19)
+DFlow has no devnet: its "dev" API (`dev-quote-api.dflow.net`, `dev-prediction-markets-api.dflow.net/api/v1`) is a rate-limited, key-free test API that still builds **mainnet** txs. So:
+- **Venue adapter interface** `Venue { listMarkets(); quote(market, side, qty); buildBuyTx(owner, market, side, qty) -> base64 tx; redeem(owner, market) }`.
+- `MockDflowVenue` (devnet, default): real prices from Gemini + the DFlow metadata API (read-only). A desk keypair owns one YES/NO SPL mint pair per hedged market on devnet. `buildBuyTx` returns a tx partially signed by the desk (owner pays test USDC → desk; desk mints outcome tokens → owner) that the owner signs in Phantom. Settlement: the crank reads the real resolution; `redeem` burns winning tokens and pays 1 test USDC each.
+- `DflowVenue` (mainnet): the same interface against the real DFlow Trade API. It's switched on by `VENUE=dflow`, used only in the final real-buy step.
+- QuickNode: Streams on devnet if supported; else QuickNode Webhooks (devnet documented) until the mainnet switch.
 
 ## 4. Architecture
 ```
@@ -106,9 +114,9 @@ Attestor = our crank: reads the venue resolution (Gemini `resolutionSide` / DFlo
 | Thu 02:00–06:00 | Next.js app skeleton, market indexer (Gemini + DFlow), LLM loop + presets, quote engine | — |
 | Thu 06:00–08:00 | **Sleep** / user tasks (wallet, keys, QuickNode) | — |
 | Thu 08:00–12:00 | Anchor program + tests (LiteSVM/anchor test), deploy devnet; Cover checkout | **G2:** program deployed, buy+settle work on devnet |
-| Thu 12:00–15:00 | DFlow checkout with Phantom (first real $1 buy, needs user approval), dashboard | — |
+| Thu 12:00–15:00 | Hedge checkout via MockDflowVenue on devnet with Phantom, dashboard | — |
 | Thu 15:00–18:00 | QuickNode Stream + webhook → dashboard feed; settlement crank | **G3:** a real event arrives via Streams |
-| Thu 18:00–22:00 | Polish UI, free-text robustness, `/how-it-works`, README, hosting decision + deploy | — |
+| Thu 18:00–22:00 | Optional mainnet step: `DflowVenue` + one real $1–5 buy (user approval). Polish UI, free-text robustness, `/how-it-works`, README, hosting decision + deploy | — |
 | Fri 00:00–07:00 | Sleep; buy a hedge that settles overnight so the demo shows a real payout | — |
 | Fri 07:00–10:00 | Record 2–3 min video, Devpost form, make repo public (user says go) | **Submit by 10:00** |
 
@@ -116,7 +124,7 @@ Cut order if behind: Polymarket read → free-text input (presets only) → devn
 
 ## 10. User-only actions
 1. **Now:** put LLM keys in `v2-insurance/.env.local` (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY` (LLM), `OPENAI_API_KEY`).
-2. **Thu morning:** Phantom wallet on **mainnet** with ~$10 USDC + ~0.02 SOL (for DFlow buys); same or a separate wallet on **devnet** with test SOL (faucet.solana.com) + test USDC (faucet.circle.com).
+2. **Thu morning:** Phantom wallet on **devnet** with test SOL (faucet.solana.com) + test USDC (faucet.circle.com). Mainnet funds (~$10 USDC + ~0.02 SOL) only later, if we do the optional real-buy step.
 3. **Thu morning:** QuickNode account → Solana mainnet endpoint + Streams access; give me the API key.
 4. **Thu (optional):** DFlow production API key if dev endpoints rate-limit.
 5. **Thu evening:** hosting decision (domain to point at this server's Caddy, or Vercel login).
