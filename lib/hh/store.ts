@@ -50,6 +50,7 @@ export type State = {
   agent: { halted: boolean; haltReason?: string };
   cosigns: CosignRec[];
   log: LogRec[];
+  desk?: import("./hedgeDesk").DeskTicket[];   // M3 Hedge Desk tickets (suite, §14.4)
 };
 
 const DIR = path.resolve(process.cwd(), ".data");

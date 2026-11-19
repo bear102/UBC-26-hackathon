@@ -18,10 +18,13 @@ export default function Merchant() {
   const refresh = () => getJSON<{ promises: PRow[] }>("/api/promises").then((r) => setList(r.promises)).catch(() => {});
   useEffect(() => { refresh(); getJSON<{ hedgeMode: string; merchant: string; tradeHost: string; dataHost: string }>("/api/config").then(setCfg); const t = setInterval(refresh, 5000); return () => clearInterval(t); }, []);
 
-  async function find() {
+  // Suite hand-off: /merchant?q=<business sentence> (from the Risk Scan "Make it a promo" button) prefills and runs the scan.
+  useEffect(() => { const q = new URLSearchParams(location.search).get("q"); if (q) { setText(q); find(q); } }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function find(t: string = text) {
     setBusy(true); setMsg(""); setCards([]);
     try {
-      const r = await post<{ cards: QCard[]; source: string; note?: string; error?: string }>("/api/scan", { text });
+      const r = await post<{ cards: QCard[]; source: string; note?: string; error?: string }>("/api/scan", { text: t });
       if (r.error) throw new Error(r.error);
       setCards(r.cards); setSrc(r.source === "llm" ? "AI-picked from Gemini's live markets" : `Templates from Gemini's live markets${r.note ? ` (${r.note})` : ""}`);
     } catch (e) { setMsg(String((e as Error).message)); } finally { setBusy(false); }
@@ -29,12 +32,12 @@ export default function Merchant() {
 
   return (
     <main>
-      <div className="row spread"><h1>Hedgehog · merchant</h1>{cfg && <span className={`pill ${cfg.hedgeMode === "live" ? "good" : "warn"}`}>{cfg.hedgeMode === "live" ? `LIVE on ${cfg.tradeHost} where listed · others PAPER on ${cfg.dataHost} odds` : "PAPER hedges (no Gemini keys yet)"}</span>}</div>
+      <div className="row spread"><h1>Hedgehog · merchant <a href="/suite" className="small" style={{ fontWeight: 600 }}>Risk Scan & Hedge Desk →</a></h1>{cfg && <span className={`pill ${cfg.hedgeMode === "live" ? "good" : "warn"}`}>{cfg.hedgeMode === "live" ? `LIVE on ${cfg.tradeHost} where listed · others PAPER on ${cfg.dataHost} odds` : "PAPER hedges (no Gemini keys yet)"}</span>}</div>
       <div className="card">
         <h3>Describe your business in one sentence</h3>
         <textarea value={text} onChange={(e) => setText(e.target.value)} maxLength={300} />
         <div className="row" style={{ marginTop: 8 }}>
-          <button onClick={find} disabled={busy}>{busy ? <><span className="spin" /> Reading Gemini’s live markets…</> : "Find promos"}</button>
+          <button onClick={() => find()} disabled={busy}>{busy ? <><span className="spin" /> Reading Gemini’s live markets…</> : "Find promos"}</button>
           {src && <span className="muted small">{src}</span>}
           {msg && <span className="err">{msg}</span>}
         </div>

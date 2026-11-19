@@ -1,5 +1,5 @@
 // Card scan (SPEC §5.1): owner's sentence → ≤3 promise cards from LIVE Gemini events only. Templates on any failure.
-import Anthropic from "@anthropic-ai/sdk";
+import { llmJson, llmProvider, errCode, cleanText } from "./llm";
 import { promoCatalog, templateCards, type CatalogEvent } from "./catalog";
 import type { Card } from "./store";
 
@@ -39,50 +39,7 @@ const SYSTEM =
   "(e.g. 'Spurs lose' = the opponent's contract; 'under 74°F' = all bins below 74). Strips use contracts of a single event. Prefer promos tied to what hurts the business " +
   "(rain/cold for patios and iced drinks, heat for hot drinks, the home team losing for sports bars). Return 1-3 cards.";
 
-// Normalize arrows the model may garble (mojibake "â†’", "->", "=>", other Unicode arrows) and drop replacement chars.
-export const cleanText = (t: string) =>
-  String(t ?? "").replace(/â†’|â€‹/g, "→").replace(/\s*(?:->|=>|[\u2190-\u21FF\u27F6\u2794\u279C])\s*/g, " → ").replace(/[\uFFFD\u0000-\u001F]/g, "").replace(/\s{2,}/g, " ").trim();
-
-async function anthropicScan(userMsg: string): Promise<{ text: string; refused?: boolean }> {
-  const client = new Anthropic({ timeout: 12_000, maxRetries: 0 });
-  const req = {
-    model: process.env.ANTHROPIC_MODEL || "claude-opus-5-5",
-    max_tokens: 4000,
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
-    output_config: { effort: "low", format: { type: "json_schema", schema: SCHEMA } },
-    system: SYSTEM,
-    messages: [{ role: "user" as const, content: userMsg }],
-  };
-  const res = await client.beta.messages.create(req as unknown as Anthropic.Beta.MessageCreateParamsNonStreaming);
-  if (res.stop_reason === "refusal") return { text: "", refused: true };
-  const textBlock = res.content.find((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text");
-  return { text: textBlock?.text ?? "{}" };
-}
-
-// Google AI Studio (Gemini LLM) fallback provider: structured JSON output via responseJsonSchema.
-async function googleScan(userMsg: string): Promise<{ text: string; refused?: boolean }> {
-  const model = process.env.GOOGLE_MODEL || "gemini-2.5-flash";
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), Number(process.env.GOOGLE_TIMEOUT_MS || 20_000));
-  try {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-      method: "POST",
-      signal: ac.signal,
-      headers: { "content-type": "application/json", "x-goog-api-key": process.env.GOOGLE_API_KEY! },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM }] },
-        contents: [{ role: "user", parts: [{ text: userMsg }] }],
-        generationConfig: { responseMimeType: "application/json", responseJsonSchema: SCHEMA, maxOutputTokens: 4000 },
-      }),
-    });
-    if (!r.ok) throw Object.assign(new Error(`google ${r.status}`), { status: r.status });
-    const j = (await r.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
-    return { text: (j.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("") || "{}" };
-  } finally {
-    clearTimeout(timer);
-  }
-}
+export { cleanText };
 
 export type ScanResult = { cards: Card[]; source: "llm" | "template"; note?: string; ms: number };
 
@@ -90,13 +47,11 @@ export async function scan(text: string): Promise<ScanResult> {
   const t0 = Date.now();
   const cat = await promoCatalog();
   const fallback = async (note: string): Promise<ScanResult> => ({ cards: await templateCards(cat), source: "template", note, ms: Date.now() - t0 });
-  const useAnthropic = !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
-  const useGoogle = !useAnthropic && !!process.env.GOOGLE_API_KEY;
-  if (!useAnthropic && !useGoogle) return fallback("no LLM key; templates");
-  const provider = useAnthropic ? "anthropic" : "google";
+  const provider = llmProvider();
+  if (!provider) return fallback("no LLM key; templates");
   const userMsg = `Business: ${text.slice(0, 300)}\n\nLive Gemini catalog:\n${catalogLines(cat)}`;
   try {
-    const out = useAnthropic ? await anthropicScan(userMsg) : await googleScan(userMsg);
+    const out = await llmJson({ system: SYSTEM, user: userMsg, schema: SCHEMA });
     if (out.refused) return fallback("model declined; templates");
     const parsed = JSON.parse(out.text || "{}") as { cards?: Card[] };
     const byTicker = new Map(cat.map((e) => [e.ticker, e]));
@@ -109,7 +64,6 @@ export async function scan(text: string): Promise<ScanResult> {
     if (!valid.length) return fallback("LLM proposed no valid live market; templates");
     return { cards: valid, source: "llm", note: provider, ms: Date.now() - t0 };
   } catch (e) {
-    const code = e instanceof Anthropic.APIError ? e.status : ((e as { status?: number }).status ?? (e as Error).name);
-    return fallback(`${provider} error (${code}); templates`);
+    return fallback(`${provider} error (${errCode(e)}); templates`);
   }
 }
