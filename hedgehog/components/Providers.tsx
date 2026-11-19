@@ -60,22 +60,23 @@ function ConnectOnSelect() {
   const router = useRouter();
   const pathname = usePathname();
   const prev = useRef<string | null | undefined>(undefined);
-  const userPicked = useRef(false);
+  const pickedAt = useRef(0); // when the user picked a wallet in this tab (0 = never)
   useEffect(() => {
     const name = wallet?.adapter.name ?? null;
     const first = prev.current === undefined;
     const changed = !first && name !== prev.current;
     prev.current = name;
     if (changed && name && !connected && !connecting) {
-      userPicked.current = true;
-      connect().catch(() => { userPicked.current = false; /* surfaced via onError */ });
+      pickedAt.current = Date.now();
+      connect().catch(() => { /* surfaced via onError; the provider may still connect on its own */ });
     }
   }, [wallet, connected, connecting, connect]);
   // After a user-initiated connect from the landing page, go straight to the business scan (intake).
   // Not on page-load auto-connects, and not mid-checkout on other pages.
   useEffect(() => {
-    if (connected && userPicked.current) {
-      userPicked.current = false;
+    // Redirect only right after a user pick (not on page-load auto-connect), however the connect completed.
+    if (connected && pickedAt.current && Date.now() - pickedAt.current < 15_000) {
+      pickedAt.current = 0;
       if (pathname === "/") router.push("/intake");
     }
   }, [connected, pathname, router]);
