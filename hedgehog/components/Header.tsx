@@ -45,7 +45,7 @@ export function Header() {
             {LINKS.map((l) => <Link key={l.href} href={l.href} onClick={(e) => toPick(e, l.href)} aria-current={active(l.match) ? "page" : undefined}>{l.label}</Link>)}
           </nav>
           <div className="header-right">
-            <span className="badge badge-devnet" title="Solana devnet, test USDC">Devnet</span>
+            <span className="badge badge-devnet hide-m" title="Solana devnet, test USDC">Devnet</span>
             <DemoWalletButton />
             <WalletButton />
           </div>

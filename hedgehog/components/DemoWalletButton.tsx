@@ -11,9 +11,10 @@ export function DemoWalletButton() {
   useEffect(() => { setMounted(true); setExisting(hasDemoWallet()); }, []);
   if (!mounted || connected) return null;
   return (
-    <button type="button" className="btn btn-sm" disabled={connecting} onClick={() => select(DemoWalletName)}
+    <button type="button" className="btn btn-sm" aria-label={existing ? "Use demo wallet" : "Create demo wallet"} disabled={connecting} onClick={() => select(DemoWalletName)}
       title="A test wallet stored in this browser (devnet only). Funded automatically when you buy.">
-      {existing ? "Use demo wallet" : "Create demo wallet"}
+      <span className="hide-m">{existing ? "Use demo wallet" : "Create demo wallet"}</span>
+      <span className="show-m" aria-hidden="true">Demo</span>
     </button>
   );
 }

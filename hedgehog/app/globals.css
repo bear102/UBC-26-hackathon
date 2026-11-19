@@ -512,3 +512,7 @@ textarea.input { background-image: repeating-linear-gradient(transparent 0 27px,
 
 /* nav "Get a quote" jumps to #pick on the landing page; keep the heading clear of the sticky header */
 #pick { scroll-margin-top: 110px; }
+
+/* Visible only at phone widths (pair with .hide-m), e.g. the short "Demo" wallet label in the header. */
+.show-m { display: none; }
+@media (max-width: 640px) { .show-m { display: inline; } }
