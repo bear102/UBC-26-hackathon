@@ -3,6 +3,9 @@
 //   tokens: desk wallet balance vs worst-case $1 × open outcome tokens it sold (ledger in lib/venue/risk.ts; caps)
 //   backing: Gemini backing orders (dry-run unless HEDGE_LIVE=1) vs Gemini-priced exposure, and any unbacked sales
 //   pricing: Hedgehog fee (HEDGEHOG_FEE_BPS) on top of the market price
+// Test records (lib/visibility.ts): vault balances, exposure totals and coverage ratios stay the ONCHAIN / ledger truth
+// (test policies and tokens are real liabilities on the same vault and desk; excluding them would overstate coverage).
+// Counts and per-contract breakdowns hide test rows and report the test share beside them ("18 policies (17 test)").
 import { NextResponse } from "next/server";
 import { PublicKey } from "@solana/web3.js";
 import { getAccount, getAssociatedTokenAddressSync, getMint } from "@solana/spl-token";
@@ -14,6 +17,7 @@ import { deskKeypair } from "@/lib/venue/desk";
 import { liveEnabled } from "@/lib/venue/geminiHedge";
 import { feeBps } from "@/lib/venue/pricing";
 import { deskExposure, deskLimits } from "@/lib/venue/risk";
+import { isHiddenMarketRef, isTestRecord, showTest, summarizeTestPolicies, visibleRecords } from "@/lib/visibility";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,15 +27,28 @@ const r2 = (x: number) => Math.round(x * 100) / 100;
 export async function GET() {
   const out: Record<string, unknown> = { network: "devnet", at: new Date().toISOString() };
   try {
-    const i = await coverClient().info();
+    const cc = coverClient();
+    const i = await cc.info();
+    const test = i.initialized
+      ? await cc.listPolicies().then((rows) => summarizeTestPolicies(rows, (pda) => store.get("policies", pda)?.businessId as string | undefined)).catch(() => null)
+      : null;
     out.cover = i.initialized
       ? { program: i.programId, vault: i.vault, vaultUsd: i.vaultBalance, exposureUsd: i.exposure, freeUsd: i.freeCapacity, maxExposureUsd: i.maxExposure,
-          coverageRatio: i.exposure ? r2((i.vaultBalance ?? 0) / i.exposure) : null, policiesSold: i.policiesSold, enforcedOnChain: true }
+          coverageRatio: i.exposure ? r2((i.vaultBalance ?? 0) / i.exposure) : null, policiesSold: i.policiesSold, enforcedOnChain: true,
+          // onchain totals above include test policies; their share:
+          testPolicies: test?.testPolicies ?? null, testExposureUsd: test?.openTestExposureUsd ?? null,
+          policiesLabel: test && i.policiesSold != null ? `${i.policiesSold} policies (${test.testPolicies} test)` : null }
       : { initialized: false };
   } catch (e) { out.cover = { error: (e as Error).message }; }
 
   const exp = deskExposure();
-  const tokens: Record<string, unknown> = { exposureUsd: exp.totalUsd, openPositions: exp.openPositions, pendingPositions: exp.pendingPositions, limits: deskLimits(), byContract: exp.byContract };
+  // totals: every open token the desk sold (test included, it is real devnet liability); breakdown: product rows only
+  const testExp = showTest() ? null : deskExposure(store.list("positions").filter((p) => isTestRecord(p)));
+  const byContract = Object.fromEntries(Object.entries(exp.byContract)
+    .map(([id, usd]) => [id, usd - (testExp?.byContract[id] ?? 0)] as const)
+    .filter(([id, usd]) => usd > 0 && !isHiddenMarketRef(id)));
+  const tokens: Record<string, unknown> = { exposureUsd: exp.totalUsd, openPositions: exp.openPositions, pendingPositions: exp.pendingPositions, limits: deskLimits(), byContract,
+    testExposureUsd: testExp?.totalUsd ?? 0, testOpenPositions: testExp?.openPositions ?? 0 };
   try {
     const conn = getConnection("devnet");
     const desk = deskKeypair().publicKey;
@@ -46,11 +63,13 @@ export async function GET() {
   } catch (e) { tokens.error = (e as Error).message; }
   out.tokens = tokens;
 
-  const hedges = store.list("hedges");
+  const allHedges = store.list("hedges");
+  const hedges = visibleRecords(allHedges);
   const geminiExposure = store.list("positions").filter((p) => p.network === "devnet" && p.txSig && (p.status === "open" || p.status === "won") && p.contractId.startsWith("gemini:")).reduce((s, p) => s + p.contracts, 0);
   out.backing = {
     mode: liveEnabled() ? "live" : "dry-run",
     orders: hedges.length,
+    testOrders: allHedges.length - hedges.length, // dry-run orders recorded for test sales (not shown below)
     plannedContracts: hedges.filter((h) => h.status !== "error").reduce((s, h) => s + h.quantity, 0),
     unbacked: hedges.filter((h) => ["error", "rejected", "partial"].includes(h.status)).map((h) => ({ id: h.id, contractId: h.contractId, status: h.status, error: h.error })),
     geminiTokenExposure: geminiExposure,

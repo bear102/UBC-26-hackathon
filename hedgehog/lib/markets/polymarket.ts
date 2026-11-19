@@ -444,9 +444,15 @@ export async function getPolymarket(id: string): Promise<MarketContract | null> 
   }
   try {
     const slug = id.replace(/^polymarket:/, "");
-    const r = await fetch(`${GAMMA}/markets?slug=${encodeURIComponent(slug)}`, { signal: AbortSignal.timeout(8_000) });
-    const rows = r.ok ? ((await r.json()) as PMarket[]) : [];
-    const list = Array.isArray(rows) ? rows : [];
+    // Gamma's /markets omits closed markets unless closed=true is asked for, and a resolved market IS closed: without
+    // the second lookup a settled game reads as "not found" and its Cover policy would be refunded instead of paid.
+    let list: PMarket[] = [];
+    for (const q of ["", "&closed=true"]) {
+      const r = await fetch(`${GAMMA}/markets?slug=${encodeURIComponent(slug)}${q}`, { signal: AbortSignal.timeout(8_000) });
+      const rows = r.ok ? ((await r.json()) as PMarket[]) : [];
+      list = Array.isArray(rows) ? rows : [];
+      if (list.length) break;
+    }
     // not in any live source (e.g. a disaster market that closed): peril from the question so it can still settle
     return normalizePolymarkets(list)[0] ?? normalizePolymarkets(list, { key: "lookup", tagId: 0, perils: [perilFromText(list[0]?.question ?? "")], days: 0 })[0] ?? null;
   } catch { return null; }

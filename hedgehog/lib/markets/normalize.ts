@@ -202,6 +202,12 @@ function geminiStatus(e: GEvent, c: GContract): MarketContract["status"] {
   return "open";
 }
 
+/** Gemini's resolutionSide ("yes" / "no"; matched case-insensitively like geminiStatus does). */
+function geminiResolution(c: GContract): MarketContract["resolution"] {
+  const rs = (c.resolutionSide ?? "").toLowerCase();
+  return rs === "yes" || rs === "no" ? rs : null;
+}
+
 const SPORT_PREFIX = /^(NBA|NFL|NHL|NCAAF|NCAAM|NCAAW|WNBA|MLB|MLS|UCL|EPL|LALIGA|LIGAMX)-/;
 
 /**
@@ -272,7 +278,7 @@ export function normalizeGeminiEvents(events: GEvent[], opts: { includeProps?: b
         // the desk backs them with an order on Gemini (lib/venue/geminiHedge.ts). The deep link stays as `url`.
         tradable: true,
         status: geminiStatus(e, c),
-        resolution: c.resolutionSide === "yes" ? "yes" : c.resolutionSide === "no" ? "no" : null,
+        resolution: geminiResolution(c),
       };
       const meta: ContractMeta = { eventDate, bounds: bounds ?? undefined, series: typeof e.series === "string" ? e.series : undefined, category: e.category, station, source: "gemini", volume: num(e.volume) ?? undefined };
       if (kind === "sports") {

@@ -4,6 +4,7 @@ import { store } from "@/lib/store";
 import type { MarketContract } from "@/lib/types";
 import { defaultGetContract } from "@/lib/venue";
 import { markFor } from "@/lib/venue/pricing";
+import { isTestRecord } from "@/lib/visibility";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +15,7 @@ export async function GET(req: Request) {
   const businessId = u.searchParams.get("businessId");
   const rows = store.list("positions")
     .filter((p) => (!owner || p.owner === owner) && (!businessId || p.businessId === businessId))
+    .filter((p) => !isTestRecord(p, owner)) // test / e2e / parametric rows (lib/visibility.ts); an owner always sees their own
     .filter((p) => p.txSig || Date.now() - Date.parse(p.createdAt) < 10 * 60_000) // hide abandoned unsigned buys
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const ids = [...new Set(rows.map((p) => p.contractId))];

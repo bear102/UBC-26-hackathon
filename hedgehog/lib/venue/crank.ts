@@ -2,12 +2,24 @@
 // mark losers; when it is voided (settled with no YES/NO for VOID_AFTER_MS past expiry) refund the premium.
 // Also recovers devnet buys whose confirm call never arrived (memo lookup).
 // Hedgehog Cover policies (when `cover` is given): settle_policy from the official resolution (outcome = resolution ==
-// the policy's side), or expire_policy (premium refund) once expiry + grace has passed without one.
+// the policy's side), or expire_policy (premium refund) once expiry + grace has passed without one. A policy whose
+// market is real but still awaiting the venue's result (closed / under review) is held open up to RESULT_WAIT_MS past
+// its deadline (settle_policy has no onchain deadline), so a slow venue pays out instead of refunding. Measured lags:
+// docs/SETTLEMENT.md.
 import { store } from "../store";
 import type { MarketContract, Position } from "../types";
 import { OwnerSignatureRequired, type GetContract, type Venue } from "./types";
 
 export const VOID_AFTER_MS = 24 * 3600_000;
+/** How long past a policy's expiry + grace the crank keeps waiting for a venue result before refunding. */
+export const RESULT_WAIT_MS = () => (Number(process.env.COVER_RESULT_WAIT_H) || 72) * 3600_000;
+
+/** The venue has not posted YES/NO yet for a live (not voided) market: keep the policy open instead of refunding. */
+export function awaitingResult(c: MarketContract, policyExpiry: string, now = Date.now()): boolean {
+  if (c.status === "settled") return false; // settled without YES/NO = cancelled: refund
+  const exp = Date.parse(policyExpiry);
+  return Number.isFinite(exp) && now < exp + RESULT_WAIT_MS();
+}
 
 /** A market that settled without a YES/NO answer (cancelled/voided), a day past its expiry. */
 export function isVoided(c: MarketContract, now = Date.now()): boolean {
@@ -23,15 +35,16 @@ export interface CoverCrank {
   expire(pda: string): Promise<string>;
 }
 export interface CrankDeps { getContract: GetContract; venueFor: (network: Position["network"]) => Venue; log?: (s: string) => void; cover?: CoverCrank; now?: () => number }
-export interface CrankResult { checked: number; confirmed: number; won: number; lost: number; redeemed: number; voided: number; policiesSettled: number; policiesExpired: number; errors: string[] }
+export interface CrankResult { checked: number; confirmed: number; won: number; lost: number; redeemed: number; voided: number; policiesSettled: number; policiesExpired: number; policiesAwaiting?: number; errors: string[] }
 
 export async function runCrank(d: CrankDeps): Promise<CrankResult> {
   const log = d.log ?? (() => {});
   const res: CrankResult = { checked: 0, confirmed: 0, won: 0, lost: 0, redeemed: 0, voided: 0, policiesSettled: 0, policiesExpired: 0, errors: [] };
   const nowMs = d.now ?? Date.now;
   const contracts = new Map<string, MarketContract | null>();
+  const lookupFailed = new Set<string>(); // venue API error this pass (vs. "not found"): never refund on a blip
   const contractOf = async (id: string) => {
-    if (!contracts.has(id)) contracts.set(id, await d.getContract(id).catch((e) => { res.errors.push(`getContract ${id}: ${e}`); return null; }));
+    if (!contracts.has(id)) contracts.set(id, await d.getContract(id).catch((e) => { res.errors.push(`getContract ${id}: ${e}`); lookupFailed.add(id); return null; }));
     return contracts.get(id)!;
   };
 
@@ -86,11 +99,11 @@ export async function runCrank(d: CrankDeps): Promise<CrankResult> {
       res.errors.push(msg); log(`error ${msg}`);
     }
   }
-  if (d.cover) await crankPolicies(d.cover, contractOf, res, log, nowMs);
+  if (d.cover) await crankPolicies(d.cover, contractOf, res, log, nowMs, lookupFailed);
   return res;
 }
 
-async function crankPolicies(cover: CoverCrank, contractOf: (id: string) => Promise<MarketContract | null>, res: CrankResult, log: (s: string) => void, nowMs: () => number) {
+async function crankPolicies(cover: CoverCrank, contractOf: (id: string) => Promise<MarketContract | null>, res: CrankResult, log: (s: string) => void, nowMs: () => number, lookupFailed: Set<string> = new Set()) {
   let open: Awaited<ReturnType<CoverCrank["listOpen"]>>;
   try { open = await cover.listOpen(); } catch (e) { res.errors.push(`listPolicies: ${(e as Error).message}`); return; }
   for (const p of open) {
@@ -110,6 +123,8 @@ async function crankPolicies(cover: CoverCrank, contractOf: (id: string) => Prom
             : `Cover #${p.policyId} (${c.eventTitle || c.id}) settled ${c.resolution.toUpperCase()}: no payout, premium was the cost of cover` });
         res.policiesSettled++; log(`policy ${p.pda} settled ${hit ? "YES (paid)" : "NO"}: ${sig}`);
       } else if (nowMs() > Date.parse(p.expiry) + cover.graceSecs * 1000) {
+        if (side && lookupFailed.has(p.marketRef)) continue; // retry next pass
+        if (c && awaitingResult(c, p.expiry, nowMs())) { res.policiesAwaiting = (res.policiesAwaiting ?? 0) + 1; continue; }
         const sig = await cover.expire(p.pda);
         store.upsert("policies", { ...(local ?? {}), id: p.pda, status: "refunded", settledAt: now, settleTxSig: sig });
         store.feed({ id: `policy_expired:${p.pda}`, source: "crank", kind: "policy_settled", txSig: sig,

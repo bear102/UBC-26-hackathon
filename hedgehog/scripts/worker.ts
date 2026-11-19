@@ -39,7 +39,7 @@ async function main() {
   for (;;) {
     try {
       const r = await runOnce();
-      console.log(`[crank] checked=${r.checked} confirmed=${r.confirmed} won=${r.won} lost=${r.lost} redeemed=${r.redeemed} voided=${r.voided} policies settled=${r.policiesSettled} expired=${r.policiesExpired} errors=${r.errors.length}`);
+      console.log(`[crank] checked=${r.checked} confirmed=${r.confirmed} won=${r.won} lost=${r.lost} redeemed=${r.redeemed} voided=${r.voided} policies settled=${r.policiesSettled} expired=${r.policiesExpired} awaiting=${r.policiesAwaiting ?? 0} errors=${r.errors.length}`);
     } catch (e) { console.error("[crank] pass failed:", e); }
     if (once) break;
     await new Promise((r) => setTimeout(r, intervalMs));

@@ -1,8 +1,10 @@
 // GET ?owner=<pubkey> -> { policies: DecodedPolicy[] } (on-chain, newest first; all policies when owner omitted)
+// Without owner, test / parametric policies are hidden (lib/visibility.ts; HEDGEHOG_SHOW_TEST=1 shows them).
 import { NextResponse } from "next/server";
 import { PublicKey } from "@solana/web3.js";
 import { store } from "@/lib/store";
 import { coverClient } from "@/lib/solana/policyClient";
+import { visibleRecords } from "@/lib/visibility";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +18,7 @@ export async function GET(req: Request) {
       const local = store.get("policies", p.pda) as Record<string, unknown> | undefined;
       return { ...p, businessId: (local?.businessId as string | null) ?? null, trigger: (local?.trigger as string | undefined) ?? null, txSig: (local?.txSig as string | undefined) ?? null };
     });
-    return NextResponse.json({ policies });
+    return NextResponse.json({ policies: visibleRecords(policies, owner) });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e), code: "rpc_error" }, { status: 502 });
   }
