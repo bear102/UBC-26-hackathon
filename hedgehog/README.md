@@ -13,11 +13,8 @@ Hedgehog acts as an **AI hedging advisor**:
 
 Long-term vision: prediction markets replace small-business insurance.
 
-## What carries over from v1 (`../old`)
-- Gemini prediction-market public/private API clients: `../old/lib/hh/gemini.ts`, `geminiPrivate.ts`
-- H0 gate (real Gemini fill via API): `../old/scripts/h0-gate.ts`
-- Hackathon facts, judging research and prize targets: `../old/docs/HACKATHON.md`, `../old/docs/research/`
-- Weather-model and pricing math: `../old/reference/scaffold-lib/`
+## Reused from the earlier version
+The archived first idea (hedged customer promos) lives in the repo's `old/` folder. Its Gemini prediction-market clients were ported into `lib/markets/geminiPm.ts` and `lib/venue/geminiHedge.ts`. Hackathon facts and judging research are in [`docs/hackathon/`](docs/hackathon/).
 
 ## Design
 See [docs/DESIGN.md](docs/DESIGN.md): decisions, prize mapping, architecture, Anchor program, build plan, user actions.
