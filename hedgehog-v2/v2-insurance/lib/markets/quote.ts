@@ -1,0 +1,206 @@
+// Deterministic sizing + budget allocation (DESIGN §4 step 4). No LLM here.
+import type { HedgeLeg, MarketContract, QuoteLine, Risk } from "../types";
+import { getBook, type BookLevels } from "./book";
+import { contractMeta, type Bounds } from "./normalize";
+import { slotKey } from "./index";
+
+/** Integer-°F/whole-unit aware: "Above 77" (lo 77 exclusive) == "78°F or above" (lo 78 inclusive) for temperatures. */
+function boundsKey(b: Bounds | undefined): string | null {
+  if (!b) return null;
+  const temp = b.unit === "°F" || b.unit === "°C";
+  const lo = b.lo === undefined ? "" : String(temp && !b.loInclusive ? b.lo + 1 : b.lo);
+  const hi = b.hi === undefined ? "" : String(temp && !b.hiInclusive ? b.hi - 1 : b.hi);
+  return `${temp ? "T" : b.unit ?? ""}|${lo}|${hi}|${temp ? "" : `${b.loInclusive}${b.hiInclusive}`}`;
+}
+
+/** Same insured outcome on two venues: same slot (peril/day/place or game) and same YES definition. */
+export function sameContract(a: MarketContract, b: MarketContract): boolean {
+  if (a.peril !== b.peril || slotKey(a) !== slotKey(b)) return false;
+  if (a.peril === "game") return a.label.trim().toLowerCase() === b.label.trim().toLowerCase();
+  const lowSeries = (c: MarketContract) => /lowest|minimum|\blow\b/i.test(c.eventTitle);
+  if ((a.peril === "heat" || a.peril === "cold") && lowSeries(a) !== lowSeries(b)) return false; // daily high ≠ daily low
+  const ka = boundsKey(contractMeta(a.id)?.bounds), kb = boundsKey(contractMeta(b.id)?.bounds);
+  // outcome-named ladders (Fed: "Hike 25bps" / "Fed maintains rate") match on the label
+  if (ka === null && kb === null && a.peril === "fed") return a.label.trim().toLowerCase() === b.label.trim().toLowerCase();
+  return ka !== null && ka === kb;
+}
+
+export const MAX_INSURANCE_ASK = 0.85;
+/** Don't walk the book more than this above the top ask (keeps the avg fill near the quoted price). */
+export const MAX_SLIPPAGE = 0.1;
+
+type Level = { price: number; size: number };
+const r2 = (x: number) => Math.round(x * 100) / 100;
+const r4 = (x: number) => Math.round(x * 10000) / 10000;
+
+/** Gemini + Kalshi lines are bought onchain (Solana outcome tokens); Gemini lines are also backed on Gemini by the desk.
+ *  Polymarket (and anything non-tradable) is context only. A non-tradable Gemini contract falls back to the deep link. */
+export const actionFor = (c: MarketContract): QuoteLine["action"] =>
+  (c.venue === "gemini" || c.venue === "kalshi") && c.tradable ? "buy-onchain" : c.venue === "gemini" ? "open-on-gemini" : "read-only";
+
+/** Ask ladder for one side: real book if given, else a single level at the top ask (sized by depth if known, else unlimited). */
+export function ladderFor(c: MarketContract, side: "yes" | "no", book?: BookLevels | null): Level[] {
+  const ask = side === "yes" ? c.yesAsk : c.noAsk;
+  const fromBook = book?.[side]?.filter((l) => l.price > 0 && l.price < 1 && l.size > 0).sort((a, b) => a.price - b.price);
+  if (fromBook && fromBook.length) return fromBook;
+  if (ask === null) return [];
+  const depth = side === "yes" ? c.depthYes : c.depthNo;
+  return [{ price: ask, size: depth !== undefined && depth > 0 ? depth : Number.POSITIVE_INFINITY }];
+}
+
+/** Walk the ladder for `want` contracts, never paying above `cap`. */
+export function walk(levels: Level[], want: number, cap = MAX_INSURANCE_ASK): { filled: number; cost: number; available: number } {
+  let filled = 0, cost = 0, available = 0;
+  for (const l of levels) {
+    if (l.price > cap + 1e-9) break;
+    available += l.size;
+    const take = Math.min(l.size, want - filled);
+    if (take > 0) { filled += take; cost += take * l.price; }
+  }
+  return { filled, cost, available };
+}
+
+/** Largest integer n <= max whose walked cost fits in `budget`. */
+function maxAffordable(levels: Level[], max: number, budget: number): { n: number; cost: number } {
+  let n = 0, cost = 0;
+  for (const l of levels) {
+    if (l.price > MAX_INSURANCE_ASK + 1e-9) break;
+    const room = Math.min(l.size, max - n);
+    if (room <= 0) break;
+    const k = Math.min(room, Math.floor((budget - cost) / l.price + 1e-9));
+    n += k; cost += k * l.price;
+    if (k < room) break;
+  }
+  return { n: Math.floor(n), cost };
+}
+
+export interface SizeArgs {
+  legs: HedgeLeg[];
+  risks: Risk[];
+  contracts: Map<string, MarketContract>;
+  coveragePct: number;
+  budgetUsd: number;
+  /** Optional pre-fetched ask ladders by contract id (tests / callers that already hold books). */
+  books?: Map<string, BookLevels | null>;
+  /** Fetch live books for legs without one in `books` (default true). */
+  fetchBooks?: boolean;
+  /** Max price above the top ask to walk the book (default MAX_SLIPPAGE). */
+  maxSlippage?: number;
+  /** Attach a Polymarket cross-check to each line (default: same as fetchBooks; network, capped at ~4s). */
+  crossCheck?: boolean;
+  /** Best-execution routing: move a Kalshi leg to the identical Gemini contract when it is no dearer (default true). */
+  route?: boolean;
+}
+
+/** Gemini may cost at most this much more than Kalshi for the same contract and still win the route. */
+export const ROUTE_TOLERANCE = 0.01;
+
+/**
+ * Deterministic venue router ("priced & hedged on Gemini"): for each Kalshi leg, if `contracts` holds the SAME
+ * contract on Gemini (same game + same YES team, or same day/place + same bounds) whose ask on that side is an
+ * insurance price and not dearer than Kalshi's (+1¢ tolerance), the leg is re-pointed at Gemini. Kalshi keeps
+ * the leg when it is clearly cheaper or Gemini has no usable ask.
+ */
+export function routeToGemini(legs: HedgeLeg[], contracts: Map<string, MarketContract>): HedgeLeg[] {
+  const gem = [...contracts.values()].filter((c) => c.venue === "gemini" && c.status === "open" && c.tradable);
+  if (!gem.length) return legs;
+  const taken = new Set(legs.map((l) => l.contractId));
+  return legs.map((leg) => {
+    const k = contracts.get(leg.contractId);
+    if (!k || k.venue !== "kalshi") return leg;
+    const kAsk = leg.side === "yes" ? k.yesAsk : k.noAsk;
+    const best = gem
+      .filter((g) => !taken.has(g.id) && sameContract(k, g))
+      .map((g) => ({ g, ask: leg.side === "yes" ? g.yesAsk : g.noAsk }))
+      .filter((x): x is { g: MarketContract; ask: number } => x.ask !== null && x.ask <= MAX_INSURANCE_ASK && (kAsk === null || x.ask <= kAsk + ROUTE_TOLERANCE + 1e-9))
+      .sort((a, b) => a.ask - b.ask)[0];
+    if (!best) return leg;
+    taken.add(best.g.id);
+    return { ...leg, contractId: best.g.id, rationale: `${leg.rationale}${leg.rationale ? " " : ""}(Routed to the identical Gemini contract at ${Math.round(best.ask * 100)}¢${kAsk !== null ? ` vs Kalshi ${Math.round(kAsk * 100)}¢` : ""}.)` };
+  });
+}
+export interface SizeResult { lines: QuoteLine[]; uncovered: { riskId: string; reason: string }[]; totalPremiumUsd: number; totalPayoutUsd: number }
+
+export async function sizeQuote(args: SizeArgs): Promise<SizeResult> {
+  const { risks, contracts, coveragePct, budgetUsd } = args;
+  const legs = args.route === false ? args.legs : routeToGemini(args.legs, contracts);
+  const books = new Map(args.books ?? []);
+  const uncovered: SizeResult["uncovered"] = [];
+  const riskById = new Map(risks.map((r) => [r.id, r]));
+
+  if (args.fetchBooks !== false) {
+    await Promise.all(legs.map(async (l) => {
+      const c = contracts.get(l.contractId);
+      if (c && !books.has(c.id) && c.status === "open") books.set(c.id, await getBook(c));
+    }));
+  }
+
+  type Cand = { line: QuoteLine; ladder: Level[]; want: number };
+  const cands: Cand[] = [];
+  for (const leg of legs) {
+    const risk = riskById.get(leg.riskId);
+    const c = contracts.get(leg.contractId);
+    if (!risk) { uncovered.push({ riskId: leg.riskId, reason: `unknown risk ${leg.riskId}` }); continue; }
+    if (!c) { uncovered.push({ riskId: leg.riskId, reason: `contract ${leg.contractId} not found` }); continue; }
+    if (c.status !== "open") { uncovered.push({ riskId: leg.riskId, reason: `${c.label} market is ${c.status}` }); continue; }
+    const topAsk = leg.side === "yes" ? c.yesAsk : c.noAsk;
+    if (topAsk === null) { uncovered.push({ riskId: leg.riskId, reason: `no ${leg.side.toUpperCase()} offers on "${c.label}" (no ask)` }); continue; }
+    if (topAsk > MAX_INSURANCE_ASK) {
+      uncovered.push({ riskId: leg.riskId, reason: `too expensive to be insurance: ${leg.side.toUpperCase()} ask $${topAsk.toFixed(2)} > $${MAX_INSURANCE_ASK} (event is already likely)` });
+      continue;
+    }
+    const want = Math.ceil((coveragePct / 100) * risk.lossUsd - 1e-9);
+    if (want <= 0) { uncovered.push({ riskId: leg.riskId, reason: "nothing to cover (loss or coverage is 0)" }); continue; }
+    const cap = Math.min(MAX_INSURANCE_ASK, topAsk + (args.maxSlippage ?? MAX_SLIPPAGE));
+    const ladder = ladderFor(c, leg.side, books.get(c.id)).filter((l) => l.price <= cap + 1e-9);
+    const w = walk(ladder, want);
+    const filled = Math.floor(w.filled);
+    if (filled <= 0) { uncovered.push({ riskId: leg.riskId, reason: `no ${leg.side.toUpperCase()} liquidity at or below $${cap.toFixed(2)}` }); continue; }
+    const cost = walk(ladder, filled).cost;
+    const line: QuoteLine = {
+      ...leg, contract: c, coveragePct, contracts: filled,
+      pricePerContract: r4(cost / filled), premiumUsd: r2(cost), payoutUsd: filled,
+      impliedProb: topAsk, action: actionFor(c),
+    };
+    if (filled < want) line.maxCoverable = Math.floor(w.available);
+    cands.push({ line, ladder, want: filled });
+  }
+
+  // Read-only (context) lines are shown but never bought, so they don't spend the budget or count in totals.
+  const context = cands.filter((c) => c.line.action === "read-only").map((c) => c.line);
+  const buyable = cands.filter((c) => c.line.action !== "read-only");
+  cands.length = 0; cands.push(...buyable);
+
+  // Budget: keep the best payout-per-premium lines first; scale the marginal one; drop the rest.
+  let total = cands.reduce((s, c) => s + c.line.premiumUsd, 0);
+  let lines: QuoteLine[];
+  if (total <= budgetUsd + 1e-9) {
+    lines = cands.map((c) => c.line);
+  } else {
+    const order = [...cands].sort((a, b) => b.line.payoutUsd / b.line.premiumUsd - a.line.payoutUsd / a.line.premiumUsd);
+    let left = budgetUsd;
+    const kept = new Set<Cand>();
+    for (const c of order) {
+      if (c.line.premiumUsd <= left + 1e-9) { kept.add(c); left -= c.line.premiumUsd; continue; }
+      const { n, cost } = maxAffordable(c.ladder, c.want, left);
+      if (n >= 1) {
+        c.line = { ...c.line, contracts: n, payoutUsd: n, premiumUsd: r2(cost), pricePerContract: r4(cost / n) };
+        kept.add(c); left -= cost;
+        uncovered.push({ riskId: c.line.riskId, reason: `budget: scaled ${c.line.contract.label} to ${n} of ${c.want} contracts` });
+      } else {
+        uncovered.push({ riskId: c.line.riskId, reason: `over budget: ${c.line.contract.label} needs $${c.line.premiumUsd.toFixed(2)}, $${Math.max(0, left).toFixed(2)} left of $${budgetUsd}` });
+      }
+    }
+    lines = cands.filter((c) => kept.has(c)).map((c) => c.line);
+  }
+  total = r2(lines.reduce((s, l) => s + l.premiumUsd, 0));
+  const totalPayoutUsd = lines.reduce((s, l) => s + l.payoutUsd, 0);
+  lines = [...lines, ...context];
+  if (args.crossCheck ?? args.fetchBooks !== false) {
+    try {
+      const { attachCrossChecks } = await import("./index");
+      await Promise.race([attachCrossChecks(lines), new Promise((r) => setTimeout(r, 4_000))]);
+    } catch { /* cross-check is optional */ }
+  }
+  return { lines, uncovered, totalPremiumUsd: total, totalPayoutUsd };
+}

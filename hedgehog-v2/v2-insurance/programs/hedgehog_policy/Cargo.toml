@@ -1,0 +1,21 @@
+[package]
+name = "hedgehog_policy"
+version = "0.1.0"
+description = "Hedgehog Cover: parametric cover sold from a USDC underwriter vault"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "hedgehog_policy"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+
+[dependencies]
+anchor-lang = "0.31.1"
+anchor-spl = { version = "0.31.1", default-features = false, features = ["token", "token_2022", "associated_token"] }

@@ -1,0 +1,7 @@
+.diagram { overflow-x: auto; }
+.diagram svg { width: 100%; min-width: 720px; height: auto; display: block; }
+.two { display: grid; grid-template-columns: 1.1fr 1fr; gap: 28px; align-items: start; }
+@media (max-width: 900px) { .two { grid-template-columns: 1fr; } }
+.list { padding-left: 18px; margin: 0 0 12px; }
+.list li { margin-bottom: 10px; color: var(--ink-2); }
+.list b { color: var(--ink); }
