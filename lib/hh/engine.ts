@@ -65,7 +65,8 @@ export async function createPromise(inp: CreateInput): Promise<PromiseRec> {
 
 // ------------------------------------------------------------------ agent
 
-const inflight = new Map<string, Promise<unknown>>();
+// globalThis: shared by the worker bundle and route-handler bundles (one in-flight hedge per promise process-wide)
+const inflight = ((globalThis as unknown as { __hhInflight?: Map<string, Promise<unknown>> }).__hhInflight ??= new Map());
 
 /** Buy the next tranche if guards pass, then attest OPEN. reason: create | revert | timer */
 export async function hedge(promiseId: string, reason: "create" | "revert" | "timer"): Promise<{ ok: boolean; note: string }> {
@@ -265,7 +266,7 @@ export async function closeReceipts(promiseId: string) {
 
 // ------------------------------------------------------------------ worker tick
 
-const lastRun = new Map<string, number>();
+const lastRun = ((globalThis as unknown as { __hhLastRun?: Map<string, number> }).__hhLastRun ??= new Map());
 const every = (k: string, ms: number) => { const t = lastRun.get(k) ?? 0; if (Date.now() - t < ms) return false; lastRun.set(k, Date.now()); return true; };
 
 export async function tick() {
