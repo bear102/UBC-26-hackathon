@@ -63,8 +63,7 @@
 .heroCert :global(.cert-in) { padding: 22px 30px 34px; }
 .certHead { display: flex; align-items: center; gap: 14px; text-align: center; }
 .rule { flex: 1; height: 5px; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); opacity: .7; }
-.certKick { font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--red); }
-.certTitle { font-size: 14px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--ink); margin-top: 2px; white-space: nowrap; }
+.certTitle { font-size: 14px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--ink); white-space: nowrap; }
 .certH { font-family: var(--font-display), var(--sans) !important; font-weight: 800 !important; font-size: 29px !important; letter-spacing: -.025em !important; margin: 18px 0 6px !important; max-width: none !important; }
 .certWho { margin: 0 0 16px; font-size: 14px; color: var(--ink-2); }
 .certWho b { color: var(--ink); font-weight: 600; }

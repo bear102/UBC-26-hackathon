@@ -47,7 +47,7 @@ export default function Landing() {
                   <Rosette className="cert-rosette" density={9} steps={220} />
                   <div className={s.certHead}>
                     <span className={s.rule} aria-hidden="true" />
-                    <div><div className={s.certKick}>Example · Specimen</div><div className={s.certTitle}>Certificate of Cover</div></div>
+                    <div className={s.certTitle}>Certificate of Cover</div>
                     <span className={s.rule} aria-hidden="true" />
                   </div>
                   <h3 className={s.certH}>Rain or a cold snap empties the patio</h3>
