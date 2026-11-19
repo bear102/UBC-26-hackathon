@@ -30,9 +30,7 @@ try {
     await shot("auth-401");
     await p.locator('[data-testid=login-banner] input').fill(process.env.HH_ADMIN_TOKEN || "x");
     await p.getByRole("button", { name: "Log in" }).click();
-    await p.getByText("Logged in.").waitFor({ timeout: 15_000 });
-    step("logged in via token paste; retrying scan");
-    await p.getByRole("button", { name: "Coffee cart near UT" }).click();
+    step("pasted token → login sets the cookie and the scan retries by itself");
   }
   await Promise.race([
     p.getByTestId("risk-row").first().waitFor({ timeout: 95_000 }),
@@ -65,7 +63,7 @@ try {
     await btn.click();
     await Promise.race([p.getByTestId("error-box").waitFor({ timeout: 95_000 }), p.getByTestId("ticket").first().waitFor({ timeout: 95_000 })]);
     const e = await p.getByTestId("error-box").textContent().catch(() => null);
-    step(e ? `buy result (error shown): ${e}` : "buy result: ticket shown");
+    step(e ? `buy result (error shown): ${e}` : `buy result: ticket shown · ${await p.getByTestId("buy-outcome").textContent().catch(() => "")}`);
   }
   await shot("4-after-buy");
 } catch (e) { ok = false; step(`FAIL: ${e.message}`); await shot("fail").catch(() => {}); }

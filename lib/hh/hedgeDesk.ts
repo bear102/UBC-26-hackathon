@@ -187,13 +187,15 @@ export async function quoteDesk(input: { event_ticker: string; symbols: string[]
   const z = sizeTicket(legs, payout, env.limitSlippage());
   const sandbox = venue.mode === "live" && isSandbox(venue.trade);
   let reason: string | undefined;
-  if (!sandbox) reason = venue.mode === "live" ? "Buying is enabled on the Gemini sandbox only" : `Quote only: ${venue.why ?? "not listed on the trade venue"}`;
+  if (sandbox && !G.hasKeys("A")) reason = "No Gemini trading key A configured (quote only)";
+  else if (!sandbox) reason = venue.mode === "live" ? "Buying is enabled on the Gemini sandbox only" : `Quote only: ${venue.why ?? "not listed on the trade venue"}`;
   else if (z.premium == null) reason = "No Gemini book: can't buy";
   else if (z.legs.some((l) => l.qty <= 0)) reason = "Payout is below the contract's minimum size";
   else if (!z.fillable) reason = `Not enough depth for ${payout} contracts within ${Math.round(env.limitSlippage() * 100)}¢ of the ask`;
   else if (z.premium > deskMax()) reason = `Over the desk limit ($${deskMax()})`;
   const scen = legs.map((l) => l.label).join(" or ");
   const plain = z.premium == null ? "No live price for this cover right now." :
+    !z.fillable ? `Not enough Gemini depth for $${payout.toFixed(2)} of cover right now; lower the amount.` :
     `You pay $${z.premium.toFixed(2)} now. If "${scen}" happens, Gemini pays you $${payout.toFixed(2)}. Otherwise you lose the $${z.premium.toFixed(2)}.`;
   return {
     event_ticker: e.ticker, event_title: e.title, expiry: e.expiryDate, symbols: syms, outcome, payout_usd: payout, ...z,

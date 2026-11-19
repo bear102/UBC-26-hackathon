@@ -19,3 +19,4 @@ target/
 !target/types/
 .data/test-ledger/
 .next-local/
+.next-*/

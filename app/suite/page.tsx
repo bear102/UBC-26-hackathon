@@ -81,7 +81,7 @@ function Row({ r, biz }: { r: ExposureRow; biz: string }) {
   const expected = r.p_bad != null ? r.p_bad * impact : null;
   const coverCost = r.cost_per_usd != null ? r.cost_per_usd * impact : null;
   const actionPill = action === "promo" ? "good" : action === "hedge" ? "" : "warn";
-  const hedgeHref = `/suite/hedge?t=${encodeURIComponent(r.event_ticker)}&s=${encodeURIComponent(symbols.join(","))}&p=${impact}${r.cost_per_usd != null ? `&c=${r.cost_per_usd}` : ""}`;
+  const hedgeHref = `/suite/hedge?t=${encodeURIComponent(r.event_ticker)}&s=${encodeURIComponent(symbols.join(","))}&p=${impact}${r.cost_per_usd != null ? `&c=${r.cost_per_usd}` : ""}${r.side === "no" ? "&o=no" : ""}`;
   const canHedge = action !== "plan" && r.cost_per_usd != null && symbols.length > 0 && !!r.event_ticker;
   return (
     <div className="card" data-testid="risk-row">

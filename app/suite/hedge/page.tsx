@@ -14,7 +14,7 @@ const clampPayout = (n: number) => Math.max(1, Math.min(10_000, Math.round(n) ||
 const ceil2 = (x: number) => Math.ceil(x * 100 - 1e-6) / 100;
 
 export default function HedgeDesk() {
-  const [sel, setSel] = useState<{ t: string; s: string[] } | null>(null);
+  const [sel, setSel] = useState<{ t: string; s: string[]; o: "yes" | "no" } | null>(null);
   const [payout, setPayout] = useState(10);
   const [capNote, setCapNote] = useState("");
   const [q, setQ] = useState<DeskQuote | null>(null);
@@ -40,7 +40,7 @@ export default function HedgeDesk() {
   useEffect(() => {
     const u = new URLSearchParams(location.search);
     const t = u.get("t"), s = u.get("s");
-    if (t && s) setSel({ t, s: s.split(",").filter(Boolean) });
+    if (t && s) setSel({ t, s: s.split(",").filter(Boolean), o: u.get("o") === "no" ? "no" : "yes" });
     // Cover amount: keep the Risk Scan's `p` (estimated hit) but cap the starting point so the premium fits the
     // desk's per-ticket limit (default $100) — otherwise the first quote is "Over the desk limit" and Buy is dead.
     // `c` = cost per $1 of cover from the scan; without it fall back to a modest $10.
@@ -64,7 +64,7 @@ export default function HedgeDesk() {
     const go = async (first: boolean) => {
       if (first) setQT0(Date.now());
       try {
-        const r = await api<DeskQuote>("/api/hedge-desk/quote", { body: { event_ticker: sel.t, symbols: sel.s, payout_usd: payoutRef.current }, timeoutMs: 45_000, signal: ctl.signal });
+        const r = await api<DeskQuote>("/api/hedge-desk/quote", { body: { event_ticker: sel.t, symbols: sel.s, outcome: sel.o, payout_usd: payoutRef.current }, timeoutMs: 45_000, signal: ctl.signal });
         if (stop) return;
         setQ({ ...r, legs: Array.isArray(r.legs) ? r.legs : [] }); setQErr(null);
       } catch (e) { if (!stop) setQErr(e); }
@@ -79,7 +79,7 @@ export default function HedgeDesk() {
     if (!q || !sel) return;
     setBuyT0(Date.now()); setBuyErr(null); setResult(null);
     try {
-      const r = await api<DeskTicket>("/api/hedge-desk/buy", { body: { event_ticker: sel.t, symbols: sel.s, payout_usd: payout, max_usd: Number(maxUsd) }, timeoutMs: 90_000 });
+      const r = await api<DeskTicket>("/api/hedge-desk/buy", { body: { event_ticker: sel.t, symbols: sel.s, outcome: sel.o, payout_usd: payout, max_usd: Number(maxUsd) }, timeoutMs: 90_000 });
       setResult({ ...r, fills: Array.isArray(r.fills) ? r.fills : [] }); setMaxUsd(""); loadInfo();
     } catch (e) { setBuyErr(e); } finally { setBuyT0(null); }
   }
@@ -125,7 +125,7 @@ export default function HedgeDesk() {
               <h3 style={{ margin: 0 }}>{q?.event_title ?? sel.t}</h3>
               {q?.venue && <span className={`pill ${q.venue.sandbox ? "good" : "warn"}`}>{q.venue.mode === "live" ? `LIVE · ${q.venue.host}` : `QUOTE · ${q.venue.host} odds`}</span>}
             </div>
-            <div className="small muted">Pays if: <b>{q?.legs.length ? q.legs.map((l) => l.label).join(" or ") : sel.s.join(", ")}</b>{q?.expiry && <> · settles {new Date(q.expiry).toLocaleString()}</>}</div>
+            <div className="small muted">Pays if: <b>{q?.legs.length ? q.legs.map((l) => l.label).join(" or ") : `${sel.o === "no" ? "NO on " : ""}${sel.s.join(", ")}`}</b>{q?.expiry && <> · settles {new Date(q.expiry).toLocaleString()}</>}</div>
 
             <div className="row" style={{ margin: "12px 0" }}>
               <label>Cover amount $ <input type="number" min={1} max={10000} value={payout} onChange={(e) => { setCapNote(""); setPayout(clampPayout(Number(e.target.value))); }} style={{ width: 110 }} /></label>
@@ -165,6 +165,8 @@ export default function HedgeDesk() {
                 {why && <div className="small" style={{ marginTop: 6, color: "var(--warn)" }} data-testid="buy-why">{why}
                   {fitPayout != null && fitPayout < payout && <> <a href="#" onClick={(e) => { e.preventDefault(); setPayout(fitPayout); }}>lower cover to ${fitPayout}</a></>}</div>}
                 <ErrorBox err={buyErr} onLogin={afterLogin} />
+                {result && <div className={`small ${result.status === "REJECTED" ? "err" : "ok"}`} style={{ marginTop: 6 }} data-testid="buy-outcome">
+                  {result.status === "REJECTED" ? `Order not filled: ${result.note ?? "Gemini rejected it"}. Nothing was spent.` : `${result.status}: ${result.covered} contracts for ${m2(result.spent)}. Ticket below.`}</div>}
                 {buyErr != null && errStatus(buyErr) !== 401 && <div className="small muted">Nothing was charged unless a ticket appears under “Your cover”.</div>}
               </>
             )}
@@ -172,9 +174,8 @@ export default function HedgeDesk() {
         </Boundary>
       )}
 
-      {result && <Boundary label="the new ticket"><TicketCard t={result} highlight /></Boundary>}
-
       <h2>Your cover</h2>
+      {result && <Boundary label="the new ticket"><TicketCard t={result} highlight /></Boundary>}
       {!info && !infoErr && <p className="muted">Loading…</p>}
       {info && !info.tickets.length && <p className="muted">No cover bought yet.</p>}
       {info?.tickets.filter((t) => t.id !== result?.id).map((t, i) => <Boundary key={t?.id ?? i} label="a ticket"><TicketCard t={t} /></Boundary>)}
@@ -186,7 +187,7 @@ function TicketCard({ t, highlight }: { t: DeskTicket; highlight?: boolean }) {
   const legs = t.quote?.legs ?? [];
   const fills = t.fills ?? [];
   return (
-    <div className="card" style={highlight ? { borderColor: "var(--good)" } : undefined} data-testid="ticket">
+    <div className="card" style={highlight ? { borderColor: t.status === "REJECTED" ? "var(--bad)" : "var(--good)" } : undefined} data-testid="ticket">
       <div className="row spread">
         <b>{t.quote?.event_title ?? t.id}</b>
         <span className={`pill ${t.status === "FILLED" ? "good" : t.status === "PARTIAL" ? "warn" : "bad"}`}>{t.status}</span>
