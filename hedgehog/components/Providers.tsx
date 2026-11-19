@@ -7,6 +7,7 @@ import "@solana/wallet-adapter-react-ui/styles.css";
 import { usePathname, useRouter } from "next/navigation";
 import { DEVNET_RPC } from "@/lib/client/tx";
 import { initMockFromUrl } from "@/lib/client/mode";
+import { DemoWalletAdapter } from "@/lib/client/demoWallet";
 
 // Wallets are discovered via the Wallet Standard (Phantom, Solflare, Backpack, MetaMask's Solana support, ...),
 // so we register NO legacy adapters: a hard-coded PhantomWalletAdapter duplicated Phantom's own Standard wallet
@@ -20,7 +21,8 @@ async function shouldAutoConnect(adapter: Adapter): Promise<boolean> {
 }
 
 export function Providers({ children }: { children: ReactNode }) {
-  const wallets = useMemo(() => [], []);
+  // Real wallets come from Wallet Standard; the only adapter we register is the devnet demo (burner) wallet.
+  const wallets = useMemo(() => [new DemoWalletAdapter()], []);
   useEffect(() => { initMockFromUrl(); }, []);
   const onError = useCallback((error: WalletError, adapter?: Adapter) => {
     console.warn("[wallet]", error.name, error.message, adapter?.name, "| wallet said:", (error as { error?: unknown }).error);
