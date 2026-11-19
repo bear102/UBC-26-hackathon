@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { PresetGrid } from "@/components/PresetGrid";
-import { GuillocheBand, Rosette, Seal, Swash } from "@/components/Engraving";
+import { GuillocheBand, Rosette, Seal } from "@/components/Engraving";
 import { IconArrowRight } from "@/components/Icons";
 import { PastQuotes } from "@/components/PastQuotes";
 import s from "./page.module.css";
@@ -23,7 +23,7 @@ export default function Landing() {
             <span className="eyebrow">Insurance for your worst business day</span>
             <h1 className={s.h1}>
               Insure any <br className={s.br} />business against <br className={s.br} />
-              <em className={s.hedge}>anything<Swash /></em>
+              <em className={s.stamp}>anything</em>
             </h1>
             <p className={`lede ${s.lede}`}>
               Our AI finds the days that would hurt your business and builds cover from live prediction markets.
@@ -46,29 +46,22 @@ export default function Landing() {
                 <div className="cert-in">
                   <Rosette className="cert-rosette" density={9} steps={220} />
                   <div className="cert-head">
-                    <div><div className="cert-kicker">Example cover</div><div className="cert-title">Certificate of Cover</div></div>
-                    <div className="serial">No. SPECIMEN<small>Example · not issued</small></div>
+                    <div><div className="cert-kicker">Example</div><div className="cert-title">Certificate of Cover</div></div>
                   </div>
                   <h3>Rain washes out Saturday on the patio</h3>
-                  <p className="insured">Insured: <b>Rainey St patio bar</b> · 50% coverage · Trigger: measurable rain at Austin-Bergstrom, <b>Sat Nov 21</b></p>
+                  <p className="insured">Rainey St patio bar · rain at Austin airport, <b>Sat Nov 21</b> · <b>28%</b> chance</p>
                   <div className="terms">
-                    <div className="term pay"><span className="lab">If it rains, you get</span><span className="amt">$550</span><div className="sub">Paid to your wallet automatically</div></div>
-                    <div className="term cost"><span className="lab">If it doesn&apos;t, you paid</span><span className="amt">$154</span><div className="sub">Your premium. Nothing more.</div></div>
+                    <div className="term pay"><span className="lab">If it rains, you get</span><span className="amt">$550</span></div>
+                    <div className="term cost"><span className="lab">You pay</span><span className="amt">$154</span></div>
                   </div>
-                  <div className={s.expo}>
-                    <p className={s.expoLine}>Pay <b>$154</b> to cut your rainy-Saturday loss from <b className={s.expoBad}>$1,100</b> to <b>$550</b>. <span className={s.expoTag}>50% less exposure</span></p>
-                    <div className={s.expoBar} role="img" aria-label="Loss of $1,100: $550 you still lose, $550 paid by your cover">
-                      <i className={s.expoLeft}>you still lose $550</i>
-                      <i className={`hatch-pay ${s.expoCovered}`}><span>cover pays $550</span></i>
-                    </div>
-                  </div>
-                  <div className="cert-foot">
-                    <div className="facts">
-                      <div>Market odds<b>28%</b></div>
-                                            <div>Venue<b className={s.venue}><span className="badge badge-kalshi">Kalshi · DFlow</span></b></div>
-                    </div>
-                    <div className="sig"><div className="line">one signature</div><small>Signed on Solana</small></div>
-                  </div>
+                  <table className={s.swing}>
+                    <thead><tr><th /><th>Normal Saturday</th><th>Rainy Saturday</th></tr></thead>
+                    <tbody>
+                      <tr><th>Without cover</th><td>$0</td><td className={s.bad}>−$1,100</td></tr>
+                      <tr><th>With cover</th><td>−$154</td><td>−$704</td></tr>
+                    </tbody>
+                  </table>
+                  <p className={s.swingNote}>A known <b>$154</b> means a rainy Saturday costs you <b>$704</b>, not <b>$1,100</b>.</p>
                 </div>
                 <GuillocheBand tone="red" />
               </div>

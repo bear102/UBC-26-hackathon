@@ -15,6 +15,8 @@
 .h1 { margin: 22px 0 34px; font-size: clamp(42px, 4.6vw, 66px); line-height: .98; }
 .br { display: inline; }
 .hedge { display: inline-block; position: relative; margin-top: 8px; }
+/* "anything" as a red rubber stamp, matching the seal */
+.stamp { display: inline-block; font-style: normal; color: var(--red); border: 4px solid var(--red); padding: 0 .14em .06em; margin-top: .14em; transform: rotate(-3deg); box-shadow: inset 0 0 0 2px var(--bg), inset 0 0 0 3.5px var(--red); }
 .lede { margin: 0 0 30px; max-width: 540px; }
 .cta { display: flex; gap: 12px; flex-wrap: wrap; }
 .priced { margin-top: 34px; display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-3); font-family: var(--sans); letter-spacing: .06em; text-transform: uppercase; }
@@ -53,14 +55,15 @@
 }
 
 
-/* certificate: what the premium buys, as exposure cut (plain words + one bar) */
-.expo { margin: 14px 0 4px; }
-.expoLine { margin: 0 0 8px; font-size: 14.5px; line-height: 1.4; color: var(--ink); }
-.expoBad { color: var(--red); }
-.expoTag { display: inline-block; margin-left: 4px; padding: 1px 7px; font-size: 12px; font-weight: 700; color: var(--pay); background: var(--pay-soft); border: 1px solid var(--pay); white-space: nowrap; }
-.expoBar { display: flex; height: 24px; border: 1px solid var(--ink); font-style: normal; }
-.expoBar i { font-style: normal; display: flex; align-items: center; padding: 0 8px; font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; }
-.expoLeft { flex: 1 1 50%; background: var(--red-soft); color: var(--red); border-right: 1px solid var(--ink); }
-.expoCovered { flex: 1 1 50%; border: 0 !important; justify-content: flex-end; }
-.expoCovered span { background: var(--surface); color: var(--pay); padding: 0 4px; }
-@media (max-width: 480px) { .expoBar i { font-size: 10.5px; padding: 0 5px; } }
+
+/* certificate: why pay a premium — it trades a big unknown loss for a small known cost */
+.swing { width: 100%; border-collapse: collapse; margin: 14px 0 6px; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.swing th, .swing td { padding: 6px 8px; border-bottom: 1px solid var(--line-2); text-align: right; }
+.swing thead th { font-size: 11.5px; font-weight: 600; color: var(--ink-2); border-bottom: 1px solid var(--ink); }
+.swing tbody th { text-align: left; font-weight: 600; color: var(--ink); }
+.swing td { font-weight: 600; color: var(--ink); }
+.swing td.bad { color: var(--red); }
+.swing tbody tr:last-child th, .swing tbody tr:last-child td { color: var(--pay); border-bottom: 0; }
+.swingNote { margin: 0 0 2px; font-size: 13.5px; line-height: 1.45; color: var(--ink-2); }
+.swingNote b { color: var(--ink); }
+@media (max-width: 480px) { .swing { font-size: 12.5px; } .swing th, .swing td { padding: 5px 4px; } }
