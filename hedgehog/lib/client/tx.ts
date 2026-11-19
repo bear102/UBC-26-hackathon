@@ -57,6 +57,8 @@ async function waitForConfirm(conn: Connection, sig: string, timeoutMs = 60_000)
 export function walletErrorMessage(e: unknown): string {
   const m = e instanceof Error ? e.message : String(e);
   if (/reject|denied|cancel/i.test(m)) return "You cancelled the signature in your wallet.";
-  if (/insufficient|0x1\b|lamports/i.test(m)) return `Not enough devnet funds. Get test SOL at faucet.solana.com and test USDC at faucet.circle.com. (${m})`;
+  if (/insufficient|0x1\b|lamports/i.test(m)) return `Not enough devnet funds. Hedgehog tops up test dollars automatically; if SOL for fees is short, get some at faucet.solana.com. (${m})`;
+  if (/unexpected error|WalletConnectionError|not connected|connection/i.test(m)) return "Your wallet couldn't connect. Unlock Phantom, switch it to Solana Devnet (Settings → Developer Settings → Testnet Mode), close any open Phantom popups, then refresh this page and try again.";
+  if (/WalletNotReady|not installed|not found/i.test(m)) return "No Solana wallet found. Install Phantom (phantom.com) or another Solana wallet, then refresh.";
   return m;
 }
