@@ -32,7 +32,6 @@ export default async function MarketsPage({ searchParams }: { searchParams: Prom
           <span className="eyebrow">Market explorer</span>
           <h1>Every market <em>our AI can use</em></h1>
         </div>
-        <span className={s.headMeta}>Register of live contracts<br />Gemini · Kalshi · Polymarket</span>
       </header>
 
       <div className={s.intro}>
@@ -44,8 +43,7 @@ export default async function MarketsPage({ searchParams }: { searchParams: Prom
 
       <section className={`card ${s.legend}`} aria-label="Venues">
         <div className="doc-head">
-          <span className="caps-title">Venues of record</span>
-          <span className="meta">3 venues · roles</span>
+          <span className="caps-title">Venues</span>
         </div>
         <VenueLegend />
       </section>

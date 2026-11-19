@@ -64,18 +64,12 @@ export function IntakeForm() {
     <form onSubmit={submit} className={s.form} noValidate>
       <div className={`page-head ${s.head}`}>
         <div>
-          <span className="eyebrow">Step 2 · Intake</span>
+          <span className="eyebrow">Step 2</span>
           <h1 className={s.h1}>{base ? <>Let&apos;s check {base.name}&apos;s <em>details</em></> : <>Tell us about <em>your business</em></>}</h1>
         </div>
-        <span className={s.headMeta}>About 30 seconds · no account needed</span>
       </div>
 
       <div className={`card ${s.doc}`}>
-        <div className="doc-head">
-          <span className="caps-title">Proposal for cover</span>
-          <span className="serial">Form P-1</span>
-        </div>
-
         <div className={s.q}>
           <Seal withText={false} className={s.seal} />
           <p><span className={s.qn}>Q1</span>What do you sell, where, and what kind of day hurts your sales?</p>
@@ -86,7 +80,6 @@ export function IntakeForm() {
             placeholder="e.g. We run a taco truck in East Austin. No indoor seating, so rainy lunches kill us, and cold weekends are slow." />
         </label>
 
-        <div className={s.part}><span className={s.qn}>Q2</span>The particulars</div>
         <div className="grid grid-2">
           <label className="field"><span>Business name</span>
             <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Cielo Taco Truck" autoComplete="organization" />
@@ -112,12 +105,11 @@ export function IntakeForm() {
           <div className="seg" role="group" aria-label="Coverage">
             {([25, 50, 100] as const).map((c) => <button type="button" key={c} aria-pressed={coverage === c} onClick={() => setCoverage(c)}>{c}%</button>)}
           </div>
-          <p className="muted xs" style={{ marginTop: 8, marginBottom: 0 }}>You can change this later. It always stays within your budget.</p>
+          <p className="muted xs" style={{ marginTop: 8, marginBottom: 0 }}>You can change this later.</p>
         </fieldset>
 
         {err && <div className="alert alert-bad" role="alert" style={{ marginTop: 18 }}>{err}</div>}
         <div className={s.submit}>
-          <span className="muted small">Built only from live markets.</span>
           <button className="btn btn-primary btn-lg" type="submit">Build my hedge plan <IconArrowRight size={16} /></button>
         </div>
       </div>

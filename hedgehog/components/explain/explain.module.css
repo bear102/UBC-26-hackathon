@@ -119,23 +119,10 @@
 }
 
 /* ---------- plan explainer ---------- */
-:global(.card).plan { margin-top: 16px; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 0; align-items: stretch; padding: 0; }
+:global(.card).plan { margin-top: 16px; padding: 0; }
 .plan > div { padding: 20px 22px; }
-.plan > div + div { border-left: 1px solid var(--ink); }
-@media (max-width: 900px) {
-  :global(.card).plan { grid-template-columns: 1fr; }
-  .plan > div + div { border-left: 0; border-top: 1px solid var(--ink); }
-}
 .planLead { font-family: var(--serif); font-size: 1.3rem; line-height: 1.45; margin: 12px 0 12px; }
 .planLead b { font-family: var(--sans); font-size: .9em; }
-.steps3 { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; counter-reset: st; }
-.steps3 li { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 10px; align-items: start; counter-increment: st; padding: 10px 0; border-bottom: 1px solid var(--line); }
-.steps3 li:last-child { border-bottom: 0; }
-.steps3 li::before { content: "§ " counter(st); font-family: var(--serif); font-style: normal; font-weight: 700; font-size: 1.15rem; line-height: 1.2; color: var(--red); }
-.steps3 b { display: block; font-family: var(--serif); font-weight: 600; font-size: 1.1rem; line-height: 1.2; margin-bottom: 2px; }
-.steps3 span { font-size: .88rem; color: var(--ink-2); }
-.words { font-size: .86rem; color: var(--muted); margin: 14px 0 0; display: flex; flex-wrap: wrap; gap: 4px 14px; padding-top: 10px; border-top: 1px solid var(--line); }
-.words > span:first-child { font-family: var(--sans); font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; padding-top: 2px; }
 .tally { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 0; }
 
 /* ---------- dashboard position story ---------- */

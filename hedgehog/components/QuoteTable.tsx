@@ -7,18 +7,11 @@ import s from "./QuoteTable.module.css";
 /** "Schedule of cover": the quote typeset like a printed policy schedule. Plain on purpose: no ornament behind numbers. */
 export function QuoteTable({ quote }: { quote: Quote }) {
   const risk = new Map(quote.risks.map((r) => [r.id, r]));
-  const t = new Date(quote.createdAt);
-  const quoted = isNaN(t.getTime()) ? null : t.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   const ratio = (pay: number, prem: number) => (prem > 0 ? `${(pay / prem).toFixed(1)}×` : "—");
   return (
     <div className={s.schedule}>
       <div className={s.top}>
         <span className="caps-title">Schedule of cover</span>
-        <span className={s.meta}>
-          REF {quote.businessId}
-          {quoted && <> · QUOTED {quoted}</>}
-          {quote.model && <> · MODEL {quote.model}</>}
-        </span>
       </div>
       <table className={`table ${s.sch}`}>
         <thead>

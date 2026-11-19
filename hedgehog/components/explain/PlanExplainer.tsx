@@ -2,10 +2,9 @@
 import type { BusinessProfile, Quote } from "@/lib/types";
 import { explainPlan, fmtPct, money } from "@/lib/client/explain";
 import { usd } from "@/lib/client/format";
-import { Term } from "./Term";
 import s from "./explain.module.css";
 
-/** "Your plan in plain English" + 3-step how-it-works-for-me + glossary words. */
+/** "Your plan in plain English". */
 export function PlanExplainer({ quote, profile }: { quote: Quote; profile?: Pick<BusinessProfile, "avgDailyRevenueUsd"> | null }) {
   const pe = explainPlan(quote.lines, quote.risks, profile);
   const w = pe.worst;
@@ -28,19 +27,6 @@ export function PlanExplainer({ quote, profile }: { quote: Quote; profile?: Pick
           {pe.counts.ok > 0 && <span className="badge badge-brand">{pe.counts.ok} optional</span>}
           {pe.counts.skip > 0 && <span className="badge badge-gold">{pe.counts.skip} probably skip</span>}
         </div>
-        <p className={s.words}>
-          <span>Words you&apos;ll see:</span>
-          <Term k="premium">premium</Term><Term k="payout">payout</Term><Term k="market odds">market odds</Term>
-          <Term k="basis risk">basis risk</Term><Term k="settles">settles</Term><Term k="token">token</Term>
-        </p>
-      </div>
-      <div>
-        <span className="eyebrow">How it works for you</span>
-        <ol className={s.steps3} style={{ marginTop: 8 }}>
-          <li><div><b>Pay once, now</b><span>One wallet approval. This demo uses <Term k="devnet">test dollars</Term>.</span></div></li>
-          <li><div><b>The day plays out</b><span>We check the official result: weather station, final score or price index.</span></div></li>
-          <li><div><b>Money lands automatically</b><span>If it happened, the payout hits your wallet within hours. No claim forms.</span></div></li>
-        </ol>
       </div>
     </section>
   );

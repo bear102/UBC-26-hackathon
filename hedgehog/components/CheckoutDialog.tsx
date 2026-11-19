@@ -111,13 +111,8 @@ export function CheckoutDialog({ kind, line, risk, businessId, onClose, onDone }
   return (
     <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}>
       <div className="modal" role="dialog" aria-modal="true" aria-labelledby="co-title">
-        <div className="doc-head">
-          <span className="caps-title">Binding cover</span>
-          <span className="serial">{line.contractId}</span>
-        </div>
         <div className={s.kindRow}>
           <span className="eyebrow">{isCover ? "Hedgehog Cover · policy on Solana" : "Buy hedge · outcome tokens"}</span>
-          <span className="badge badge-devnet">Devnet</span>
         </div>
         <h2 id="co-title" className={s.title}>{risk?.title ?? line.contract.eventTitle}</h2>
         <p className={s.lede}>{isCover

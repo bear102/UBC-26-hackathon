@@ -41,7 +41,6 @@ export function PastQuotes({ eyebrow = "Signed in", title = "Your past quotes" }
     <section className={s.wrap} aria-label={title}>
       <div className="sec-head">
         <div><span className="eyebrow">{eyebrow}</span><h2>{title}</h2></div>
-        <span className="muted small">Saved in this browser</span>
       </div>
       <ul className={s.list}>
         {rows.map((r) => {

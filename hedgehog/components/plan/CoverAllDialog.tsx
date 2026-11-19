@@ -95,7 +95,6 @@ export function CoverAllDialog({ items, businessId, budgetUsd, onClose, onDone }
       <div className="modal" role="dialog" aria-modal="true" aria-labelledby="ca-title">
         <div className="doc-head">
           <span className="caps-title">Binding cover · whole plan</span>
-          <span className="badge badge-devnet">Devnet</span>
         </div>
         <h2 id="ca-title" className={c.title}>Cover all {items.length} risks</h2>
         <p className={c.lede}>One approval in your wallet. Each risk becomes its own Hedgehog Cover policy on Solana.</p>

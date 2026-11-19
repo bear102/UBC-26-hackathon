@@ -89,7 +89,6 @@ export default function Landing() {
           <PastQuotes eyebrow="Welcome back" />
           <div className="sec-head">
             <div><span className="eyebrow">Step 1</span><h2>Pick a business, <em>or describe yours</em></h2></div>
-            <span className="muted small">Three Austin examples · a quote in about 30 seconds</span>
           </div>
           <PresetGrid />
         </div>
@@ -99,7 +98,6 @@ export default function Landing() {
         <div className="container">
           <div className="sec-head">
             <div><span className="eyebrow">The terms, in three clauses</span><h2>From your worst day <em>to a payout</em></h2></div>
-            <Link href="/how-it-works" className="btn btn-sm">How it works <IconArrowRight size={14} /></Link>
           </div>
           <ol className={s.clauses}>
             <li className={s.clause}>

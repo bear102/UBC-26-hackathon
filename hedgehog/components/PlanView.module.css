@@ -27,7 +27,6 @@
 .quoted { font-family: var(--sans); font-size: 12px; letter-spacing: .06em; display: inline-flex; gap: 8px; align-items: center; }
 
 .excl { position: relative; padding-top: 22px; }
-.exclStamp { position: absolute; right: 14px; top: -12px; background: var(--surface); }
 
 @media (max-width: 640px) {
   .meta { text-align: left; }

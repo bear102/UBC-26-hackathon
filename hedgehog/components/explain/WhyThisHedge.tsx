@@ -92,7 +92,6 @@ export function WhyThisHedge({ line, risk, profile, children }: {
             {risk?.correlation && <><dt>Link strength</dt><dd>{risk.correlation}</dd></>}
             {sold && <><dt>Backing</dt><dd>Sold on Solana, backed by a matching order on Gemini.</dd></>}
             {morePitfalls.length > 0 && <><dt>Also note</dt><dd>{morePitfalls.join(" ")}</dd></>}
-            <dt>Expected value</dt><dd>Like any insurance, it pays back a bit less than it costs on average. You buy it to <b>smooth out a bad day</b>, not to make money.</dd>
           </dl>
           {children}
         </div>

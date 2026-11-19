@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { CoverInfoPanel } from "@/components/CoverInfoPanel";
-import { VenueLegend } from "@/components/markets/VenueBadge";
 import { Rosette } from "@/components/Engraving";
 import { IconArrowRight } from "@/components/Icons";
 import { DayBars } from "@/components/explain/Visuals";
@@ -38,18 +37,13 @@ export default function HowItWorks() {
         <div className="container">
           <div className={`page-head ${s.head}`}>
             <div>
-              <span className="eyebrow">For judges &amp; the curious</span>
+              <span className="eyebrow">How it works</span>
               <h1>How Hedgehog <em>works</em></h1>
               <p className={`lede ${s.lede}`}>
                 Small businesses lose money on predictable bad days: rain, cold fronts, game-night losses, fuel spikes. Prediction markets already price those events.
                 Hedgehog turns them into cover a shop owner understands: <b>what it pays if it happens, what it costs if it doesn&apos;t</b>.
               </p>
             </div>
-            <dl className={s.headMeta}>
-              <div><dt>Priced on</dt><dd>Gemini · Kalshi · Polymarket</dd></div>
-              <div><dt>Settled on</dt><dd>Solana devnet</dd></div>
-              <div><dt>Live feed</dt><dd>QuickNode Streams</dd></div>
-            </dl>
           </div>
         </div>
       </div>
@@ -59,7 +53,6 @@ export default function HowItWorks() {
         <section className={`card ${s.exhibit}`} aria-labelledby="ex-a">
           <div className="doc-head">
             <span className="caps-title" id="ex-a">Exhibit A · Architecture</span>
-            <span className="meta">OFFCHAIN APP + MARKETS <span className={s.metaSep}>/</span> ONCHAIN SOLANA DEVNET</span>
           </div>
           <div className={s.diagram}>
             <svg viewBox="0 0 980 450" role="img" aria-labelledby="arch-t">
@@ -153,8 +146,6 @@ export default function HowItWorks() {
             <div>
               <span className="eyebrow">Venues</span>
               <h2 className={s.h2}>One market layer, <em>three venues</em></h2>
-              <p className={s.intro}>You never pick a venue. <b>Every hedge is a real market on Gemini, Kalshi or Polymarket. The best price wins.</b></p>
-              <div className={`card ${s.legend}`}><VenueLegend /></div>
               <h3 className={s.h3}>What&apos;s on the menu</h3>
               <ul className={s.ledger}>
                 <li><b>Gemini:</b> daily highs in 60+ cities, games, crude, natural gas, metals, crypto, Fed decisions.</li>
@@ -170,7 +161,6 @@ export default function HowItWorks() {
                 <li><b>Same event, side by side.</b> Each hedge shows a one-line check, e.g. <span className={s.sample}>Gemini 11% · Kalshi 12% · Polymarket 11% — markets agree</span>, that opens into a full comparison.</li>
                 <li><b>Cheapest wins.</b> Code (not the AI) moves each pick to the cheapest identical contract; near-ties go to Gemini.</li>
                 <li><b>Disagreement is flagged.</b> A venue 4+ points away gets a warning. Similar-but-not-identical questions are marked ≈.</li>
-                <li><b>Same on the dashboard.</b> Each position shows where its price came from and where it&apos;s backed.</li>
               </ol>
               <Link href="/markets?cross=1" className="btn">Browse every live market <IconArrowRight size={14} /></Link>
             </div>

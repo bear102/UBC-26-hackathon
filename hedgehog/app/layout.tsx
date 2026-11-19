@@ -26,7 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <main>{children}</main>
           <footer className="site-footer">
             <div className="container inner">
-              <span>Hedgehog · worst-day cover for small business · Austin, TX</span>
+              <span>Hedgehog</span>
               <span className="foot-r">
                 <Link href="/how-it-works">How it works</Link>
                 <span>Devnet prototype. Not a licensed insurance product. Hedges carry basis risk.</span>

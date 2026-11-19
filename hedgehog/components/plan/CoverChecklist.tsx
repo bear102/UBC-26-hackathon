@@ -33,7 +33,7 @@ export function CoverSteps({ total, done }: { total: number; done: number }) {
   const steps = [
     { n: 1, t: "Check your plan", d: "What each risk pays and costs." },
     { n: 2, t: "Press Get covered", d: total ? `On each risk you want. ${done} of ${total} done.` : "On each risk you want." },
-    { n: 3, t: "Approve in your wallet", d: "One signature per risk. Payouts are automatic." },
+    { n: 3, t: "Approve in your wallet", d: "Payouts are automatic." },
   ];
   return (
     <ol className={s.steps} aria-label="How to get covered">

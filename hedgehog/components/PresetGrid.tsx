@@ -14,7 +14,6 @@ const ART: Record<string, { Icon: IconC; kind: string; worst: string }> = {
   "east-austin-food-truck": { Icon: IconTruck, kind: "Food truck", worst: "Rain at the lunch rush" },
   "austin-catering-delivery": { Icon: IconCloche, kind: "Catering", worst: "Fuel spike on fixed-price jobs" },
 };
-const letter = (i: number) => String.fromCharCode(65 + (i % 26));
 
 export function PresetGrid() {
   const [presets, setPresets] = useState<Preset[] | null>(null);
@@ -22,11 +21,11 @@ export function PresetGrid() {
   return (
     <div className={s.grid} aria-busy={!presets}>
       {!presets && [0, 1, 2].map((i) => <div key={i} className={`form ${s.skeleton}`} aria-hidden="true" />)}
-      {(presets ?? []).map((p, i) => {
+      {(presets ?? []).map((p) => {
         const art = ART[p.id] ?? { Icon: IconUmbrella, kind: "Business", worst: "" };
         return (
           <Link key={p.id} href={`/intake?preset=${encodeURIComponent(p.id)}`} className="form" onClick={() => saveProfile(p)}>
-            <div className="fno"><span>Form {letter(i)} · {art.kind}</span><span>{p.zip ?? p.city}</span></div>
+            <div className="fno"><span>{art.kind}</span></div>
             <art.Icon className="ico" />
             <h3>{p.name}</h3>
             <p>{p.tagline}</p>
@@ -40,11 +39,9 @@ export function PresetGrid() {
         );
       })}
       <Link href="/intake" className="form blank">
-        <div className="fno"><span>Form · Blank</span><span>Any</span></div>
         <IconBlankForm className="ico" />
         <h3>Describe your business</h3>
         <p>One sentence: what you sell and what ruins a day.</p>
-        <div className="lines" aria-hidden="true"><i /><i /></div>
         <div className="go"><span>Start from scratch</span><IconArrowRight size={15} /></div>
       </Link>
     </div>

@@ -65,8 +65,7 @@ export function MarketExplorer({ data, initial }: { data: ExplorerData; initial:
   return (
     <>
       <p className={s.note}>
-        <b>The cheapest venue prices your cover.</b> Kalshi trades on Solana via DFlow.{" "}
-        Every hedge is a real market on Gemini, Kalshi or Polymarket.
+        <b>The cheapest venue prices your cover.</b> Kalshi trades on Solana via DFlow.
       </p>
       <div className={s.stat}>
         <div className={s.statMain}><span>Live contracts</span><b className="fig">{data.total.toLocaleString()}</b></div>
@@ -95,7 +94,7 @@ export function MarketExplorer({ data, initial }: { data: ExplorerData; initial:
           <div className="chips">
             {VENUE_ORDER.map((v) => (
               <button key={v} type="button" className={`chip ${s.venueChip} ${s[`vc_${v}`]}`} aria-pressed={venues.includes(v)} onClick={() => toggleVenue(v)} title={VENUES[v].desc}>
-                <span className={s.vdot} aria-hidden="true" />{VENUES[v].name} <span className={s.count}>· {VENUES[v].roleLabel}</span>
+                <span className={s.vdot} aria-hidden="true" />{VENUES[v].name}
               </button>
             ))}
             <button type="button" className="chip" aria-pressed={cross} onClick={() => setCross((c) => !c)} title="Only events that trade on more than one venue">Same event on 2+ venues</button>
@@ -118,19 +117,19 @@ export function MarketExplorer({ data, initial }: { data: ExplorerData; initial:
         <div className="empty">No live markets match. {data.total === 0 ? "The venues didn't answer; try again in a minute." : "Try another risk type or turn a venue back on."}</div>
       ) : (
         <div className={s.events}>
-          {filtered.slice(0, shown).map((e, i) => <EventRow key={e.key} e={e} venues={venues} ix={i + 1} />)}
+          {filtered.slice(0, shown).map((e) => <EventRow key={e.key} e={e} venues={venues} />)}
           {filtered.length > shown && <button type="button" className={`btn ${s.moreBtn}`} onClick={() => setShown((n) => n + PAGE)}>Show more ({(filtered.length - shown).toLocaleString()} left)</button>}
         </div>
       )}
       <p className={s.footnote}>
         Chance = midpoint price. Cost = price of $1 of payout (YES). The same event on several venues shares one row.
-        The AI only picks from this list. <Link href="/how-it-works">How venues are used <IconArrowRight size={12} /></Link>
+        <Link href="/how-it-works">How venues are used <IconArrowRight size={12} /></Link>
       </p>
     </>
   );
 }
 
-function EventRow({ e, venues, ix }: { e: ExplorerEvent; venues: VenueId[]; ix: number }) {
+function EventRow({ e, venues }: { e: ExplorerEvent; venues: VenueId[] }) {
   const [open, setOpen] = useState(false);
   const cols = e.venues.map((v) => v.venue).filter((v) => venues.includes(v));
   const quoted = e.outcomes.filter((o) => cols.some((v) => o.cells[v]));
@@ -141,7 +140,6 @@ function EventRow({ e, venues, ix }: { e: ExplorerEvent; venues: VenueId[]; ix: 
   return (
     <article className={s.ev}>
       <div className={s.evHead}>
-        <span className={s.evIx} aria-hidden="true">{String(ix).padStart(2, "0")}</span>
         <span className={s.evIcon} aria-hidden="true"><PerilIcon peril={e.group} size={18} /></span>
         <div className={s.evMain}>
           <h3 className={s.evTitle}>{e.title}</h3>

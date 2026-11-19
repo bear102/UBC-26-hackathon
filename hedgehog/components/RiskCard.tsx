@@ -79,6 +79,10 @@ export function RiskCard({ risk, lines, bought, onBuy, onCover, profile, index, 
               </div>
               {l.maxCoverable != null && l.contracts > 0 && l.contracts >= Math.floor(l.maxCoverable) && <p className="xs" style={{ color: "var(--gold)", margin: "0 0 8px" }}>Only {l.maxCoverable.toLocaleString()} contracts for sale at this price.</p>}
               {zero && <p className="xs" style={{ color: "var(--gold)", margin: "0 0 8px" }}>Left out to stay within budget.</p>}
+              {/* Sized below coverage% × loss and not because the book ran out: the monthly budget is the cap. */}
+              {!zero && l.contracts < Math.ceil((risk.lossUsd * (l.coveragePct || 0)) / 100) && !(l.maxCoverable != null && l.contracts >= Math.floor(l.maxCoverable)) && (
+                <p className="xs" style={{ color: "var(--gold)", margin: "0 0 8px" }}>Capped by your monthly budget. Raise it (Edit details) for more cover.</p>
+              )}
               <p className={s.why}>{l.rationale}</p>
               <p className={s.basis}><b>Basis risk:</b> {l.basisRisk}</p>
               </WhyThisHedge>

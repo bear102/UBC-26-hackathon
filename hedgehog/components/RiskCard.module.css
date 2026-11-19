@@ -36,10 +36,6 @@
 .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
 .stats > div { display: flex; flex-direction: column; font-family: var(--sans); font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
 .stats b { color: var(--ink); font-size: 15px; font-weight: 600; letter-spacing: 0; text-transform: none; margin-top: 2px; }
-.payline { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--surface); border: 1px solid var(--ink); margin-bottom: 10px; }
-.payline > div { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; min-width: 0; }
-.payline > div + div { border-left: 1px solid var(--ink); }
-.payline b { font-size: 1.2rem; font-weight: 600; }
 .why { font-size: .9rem; margin: 0 0 8px; }
 .basis { font-size: .84rem; color: var(--ink-2); background: var(--gold-soft); border: 1px solid var(--line-2); border-left: 3px solid var(--gold-rule); padding: 8px 12px; margin: 0 0 12px; }
 .basis b { color: var(--gold); }
@@ -48,6 +44,4 @@
 @media (max-width: 860px) { .hedges { border-left: 0; } }
 @media (max-width: 640px) {
   .risk, .hedges { padding: 18px 16px; }
-  .payline > div { padding: 9px 10px; }
-  .payline b { font-size: 1.05rem; }
 }
