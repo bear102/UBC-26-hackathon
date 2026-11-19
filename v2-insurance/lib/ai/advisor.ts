@@ -49,7 +49,7 @@ async function resolveDeps(d: Partial<AdvisorDeps> = {}): Promise<AdvisorDeps> {
 export interface AdviseOpts { coveragePct?: number; deps?: Partial<AdvisorDeps> }
 
 // ---------- schemas ----------
-export const PERILS = ["heat", "cold", "rain", "game", "oil", "gas", "fed", "cpi", "crypto", "other"] as const satisfies readonly Peril[];
+export const PERILS = ["heat", "cold", "rain", "game", "oil", "gas", "fed", "cpi", "crypto", "other", "snow", "power", "water", "quake", "storm", "natgas", "metals"] as const satisfies readonly Peril[];
 
 export const riskMapSchema = z.object({
   risks: z.array(z.object({
@@ -251,15 +251,17 @@ const RISK_SYSTEM = `You are Hedgehog's risk analyst for small businesses in Aus
 Find the business's worst NEAR-TERM days that a binary prediction market could hedge, and estimate the dollars lost per occurrence.
 Rules:
 - Return 3 to 5 risks, most material first.
-- Only objective, publicly settled events: official daily high temperature, rain, a named team's game result, WTI/Brent oil or US gas price, Fed decision, CPI print. Never "staff quits" or "bad review".
-- peril is one of: heat, cold, rain, game, oil, gas, fed, cpi, crypto, other.
+- Only objective, publicly settled events: official daily high/low temperature, rain, snowfall or snow days, a named team's game result, WTI/Brent oil, US gas or diesel price, natural gas, metals, Texas (ERCOT) power prices/peak demand, lake/river water levels, earthquakes, tornado counts, Fed decision, CPI print. Never "staff quits" or "bad review". Wildfire, flood, hail and air quality have no market on any venue: don't list them as hedgeable risks.
+- peril is one of: heat, cold, rain, snow, game, oil, gas (incl. diesel), natgas, metals, power, water, quake, storm, fed, cpi, crypto, other.
 - trigger is plain English (no venue names or brackets) and reads like a market question with a concrete threshold or team, e.g. "Austin high >= 85°F on Sat Nov 22", "Spurs lose to the Lakers on Fri Nov 21". Use thresholds that fit the season (late-November Austin normal high is ~70°F, record highs mid-80s).
 - window is a specific date or date range inside the next 7 days (dates are given). Fed/CPI may use the next scheduled release.
 - location is where the event is measured: "Austin", the team's city, or "US".
 - lossUsd = revenue lost (or extra cost) per occurrence, grounded in the given average daily revenue and busy days. Show the arithmetic in lossReasoning in one or two sentences (e.g. "Sat ~1.5x avg = $6,300; 80% patio; -40% => ~$2,000"). One event should rarely exceed two days of revenue.
 - confidence (0..1) = how sure you are that the event causes that loss.
 - Align triggers and windows with the LIVE MARKETS (same dates, thresholds and games), but write them in your own plain English: a trigger a live market settles beats a more precise one nobody trades. E.g. if a market asks where it will rain this weekend, write "Rain in Austin this weekend (Nov 21-22)", not ">= 0.25 in on Saturday". Use absolute price thresholds from the market labels, not "+$0.50". Daily weather markets often exist only for today/tomorrow; if the risky day has no market, still list the risk.
-- Prefer risks the LIVE MARKETS can hedge, but still include a material risk if no market is listed.`;
+- Prefer risks the LIVE MARKETS can hedge, but still include a material risk if no market is listed.
+- Relevance beats coverage: every risk must follow from something the owner said or an obvious trait of the business (outdoor seats, vans, a loan, crypto revenue, game-night crowds). A market existing is NOT a reason to list a risk: no fuel/gas-price risk unless the business buys meaningful fuel (vehicles, generators, equipment); no Fed/CPI risk unless it carries variable-rate debt or its revenue moves with rates/prices.
+- Weather risks must land on the owner's BUSY DAYS (or the days it operates). A weekend weather market does not hedge a Monday-Friday business: pick a weekday market or list the risk without one.`;
 
 const MATCH_SYSTEM = `You pick prediction-market contracts that hedge business risks (several risks at once, each with its own CANDIDATES list). Each contract is binary: a YES share pays $1 if the label resolves true, a NO share pays $1 if it resolves false.
 Rules:
@@ -269,7 +271,7 @@ Rules:
    - "high >= T": YES on a threshold contract like "T°F or above" near T. Avoid narrow range buckets ("88-89°F") unless nothing else exists.
    - "cold / high below T": YES on "below T" contracts, or NO on "T or above".
    - Price rising above X: YES on "above X" / "X or above". Falling below X: NO on "above X", or YES on "below X".
-3. Prefer: date inside the risk window, threshold closest to the trigger, ask between 0.05 and 0.85. Prefer gemini contracts when they are otherwise equal or close in price (Gemini = our primary venue; kalshi only when Gemini lacks the market). Polymarket candidates are context-only (never buyable): pick them only when nothing else fits.
+3. Prefer: date inside the risk window, threshold closest to the trigger, ask between 0.05 and 0.85, ideally 0.10-0.50. An ask above ~0.60 means the bad outcome is already likely, so the owner mostly prepays the payout: make the further-out strike the "recommended" pick and offer the pricey one as "broad". Prefer gemini contracts when they are otherwise equal or close in price (Gemini = our primary venue; kalshi only when Gemini lacks the market). Polymarket candidates are context-only (never buyable): pick them only when nothing else fits.
 4. Imperfect is OK: if a contract pays in most of the scenarios where the loss happens (e.g. "rain this weekend" for "rain Saturday", a nearby threshold, the same team's next game), pick it and explain the gap in basisRisk.
 5. Give the owner CHOICES. For each risk return 1 to 3 picks:
    - picks[0] tier "recommended": the best hedge.
