@@ -982,3 +982,13 @@ store                   + profiles[merchant], exposures[scanId], tickets[id], ap
 | R27 | Thin or empty books outside weather/sports | high | `bestAsk` filter, `thin` label, `fillable` flag; WTI excluded today |
 | R28 | A judge reads M3 as unlicensed advice | low | Numbers from code, macro rows are plan-only, CLI-only buys after a user yes, "not advice" footer |
 | R29 | Pitch gets crowded again (D2) | medium | M1 replaces an existing beat (1:20-2:00); M3 replaces the told vision (4:10-4:45); no new beats |
+
+### 14.10 Build decisions, Thu 2026-11-19 ~04:00Z (user answers; supersede §14.4 money rule where they differ)
+- Gemini trading runs on the **sandbox** (test money). Data/odds come from production. Per-promise venue (`lib/hh/venue.ts`): LIVE on the sandbox when it lists the event, else PAPER on production odds.
+- **Hedge Desk buys:** a merchant-login **[Buy cover]** button (typed max amount, `DESK_MAX_USD` default $100) places real IOC orders **only when the trade venue is the sandbox**; production is quote-only. The CLI-only rule above applies again if production keys are ever used.
+- Each desk fill is committed as an **SPL Memo** (`hh:desk:v1:<sha256 of fills>`) from the merchant key.
+- **Finals live moment:** the BTC hourly promo on the sandbox (real fill → receipt → payout within the hour). Spurs/weather promos are shown on real odds, labelled PAPER.
+- **Risk Scan demo business:** "coffee cart near UT, iced and hot drinks, we take crypto". AI estimates the $ hit; the owner can edit it.
+- LLM: Google AI Studio (`gemini-2.5-flash`) on the user's PC; Anthropic if a key is added. Keyword fallback always.
+- Built: `/suite` (Risk Scan), `/suite/hedge` (Hedge Desk), `/api/exposures`, `/api/hedge-desk/*`, commit d2a4f8a. Odds Brief (M4) not built.
+- ngrok free warning page accepted for now.
