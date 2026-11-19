@@ -47,3 +47,7 @@ test("need and capacity math", () => {
   assert.equal(capacityOf([500_000], 10_000), 500_000);
   assert.equal(capacityOf([1000, 950], 1_000_000), 9);
 });
+test("ceiling is per $1, not scaled by refund size", () => {
+  const bins = [quoteBin("s", { bids: [], asks: [L(0.51, 100)] })];
+  assert.equal(guardReason({ ...base, k: 0.1, bins, needContracts: [1] }), null);
+});

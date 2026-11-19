@@ -69,7 +69,8 @@ export function guardReason(g: GuardInput): string | null {
   if (g.halted) return "agent halted";
   if (g.bins.some((b) => b.ask == null || b.limit == null)) return "book empty";
   const sumAsk = g.bins.reduce((s, b) => s + (b.ask as number), 0);
-  if (sumAsk > g.priceCeiling * g.k + 1e-9) return `price ceiling: Σask ${sumAsk.toFixed(2)} > ${(g.priceCeiling * g.k).toFixed(2)}`;
+  // ceiling is per $1 of payout (D19): Σask of one contract per bin, independent of the refund size
+  if (sumAsk > g.priceCeiling + 1e-9) return `price ceiling: Σask ${sumAsk.toFixed(2)} > ${g.priceCeiling.toFixed(2)} per $1`;
   const spend = g.bins.reduce((s, b, i) => s + (b.limit as number) * g.needContracts[i], 0);
   if (g.premiumToday + spend > g.dailyBudget + 1e-9) return `daily budget: ${(g.premiumToday + spend).toFixed(2)} > ${g.dailyBudget}`;
   if (g.targetReceipts > g.cap) return "target exceeds liability cap";

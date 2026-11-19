@@ -17,3 +17,4 @@ keys/
 target/
 !target/idl/
 !target/types/
+.data/test-ledger/
