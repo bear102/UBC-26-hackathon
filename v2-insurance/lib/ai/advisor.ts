@@ -219,9 +219,24 @@ export function heuristicPick(risk: Risk, candidates: MarketContract[]): HedgeLe
   return c ? { riskId: risk.id, contractId: c.id, side: "yes", rationale: `Pays if "${c.eventTitle}" resolves ${c.label}.`, basisRisk: `Threshold and date may not match the trigger exactly. ${note}` } : null;
 }
 
+/** Macro perils need a hook in the owner's own words (eval iter 4: the risk map kept adding "US gas prices" for a
+ *  mortgage broker, a coffee cart and an online merch shop because a gas market exists). */
+const GROUNDING: Partial<Record<string, RegExp>> = {
+  gas: /fuel|\bgas\b|gasoline|diesel|petrol|\bvans?\b|truck|\bcars?\b|vehicle|\bdriv|deliver|\bmiles?\b|fleet|generator|equipment|haul|tractor|commut|courier|\broutes?\b|boat/i,
+  fed: /loan|credit|\brates?\b|mortgage|debt|financ|refi|lease|interest/i,
+  cpi: /inflation|food cost|ingredient|price|cost|milk|bean|menu|wholesale|\brates?\b|mortgage/i,
+};
+GROUNDING.oil = GROUNDING.gas;
+export function groundedRisk(peril: string, profile: BusinessProfile): boolean {
+  const re = GROUNDING[peril];
+  return !re || re.test(profile.description);
+}
+
 function sanitizeRisks(raw: z.infer<typeof riskMapSchema>["risks"], profile: BusinessProfile): Risk[] {
   const cap = Math.max(100, profile.avgDailyRevenueUsd * 7);
-  return raw.slice(0, 5).map((r, i) => ({
+  const grounded = raw.filter((r) => groundedRisk(r.peril, profile));
+  if (grounded.length < raw.length) console.warn(`[advise] dropped ungrounded risks: ${raw.filter((r) => !grounded.includes(r)).map((r) => r.title).join("; ")}`);
+  return (grounded.length ? grounded : raw).slice(0, 5).map((r, i) => ({
     id: `r${i + 1}`,
     peril: r.peril,
     title: r.title.trim(),

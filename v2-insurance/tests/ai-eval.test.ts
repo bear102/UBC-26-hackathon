@@ -42,3 +42,13 @@ test("iter2: guardSide flips a wrong side on threshold contracts and drops NO on
   const game = mk("g:G", "Arkansas vs Texas", "Texas", "game", 0.9);
   assert.equal(guardSide(risk({ peril: "game", title: "Texas loses", trigger: "Arkansas beats Texas" }), { ...leg, contractId: "g:G" }, game)?.side, "no");
 });
+
+import { groundedRisk } from "../lib/ai/advisor";
+test("iter4: macro risks need a hook in the owner's words", () => {
+  const p = (description: string): BusinessProfile => ({ ...profile, description });
+  assert.equal(groundedRisk("gas", p("Independent mortgage broker; volume lives and dies by rates")), false);
+  assert.equal(groundedRisk("gas", p("four delivery vans doing 3,000 miles a week")), true);
+  assert.equal(groundedRisk("fed", p("coffee cart at the farmers market")), false);
+  assert.equal(groundedRisk("fed", p("we carry a $150k line of credit")), true);
+  assert.equal(groundedRisk("rain", p("anything")), true);
+});
