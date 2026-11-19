@@ -312,10 +312,11 @@ export async function tick() {
   }
 }
 
-let started = false;
 export function startWorker() {
-  if (started || process.env.HH_WORKER === "0") return;
-  started = true;
+  // global flag: `next dev` can evaluate this module more than once; never run two worker loops
+  const g = globalThis as unknown as { __hhWorker?: boolean };
+  if (g.__hhWorker || process.env.HH_WORKER === "0") return;
+  g.__hhWorker = true;
   let busy = false;
   setInterval(async () => {
     if (busy) return;

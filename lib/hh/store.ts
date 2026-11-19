@@ -73,7 +73,12 @@ export function save() {
   fs.mkdirSync(DIR, { recursive: true });
   const tmp = `${FILE}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(s, null, 1));
-  fs.renameSync(tmp, FILE);
+  try { fs.renameSync(tmp, FILE); }
+  catch (e) {
+    // Windows: renaming over a file another process (antivirus, indexer) holds open can fail with EPERM/EBUSY.
+    if (!["EPERM", "EBUSY", "EACCES"].includes((e as NodeJS.ErrnoException).code ?? "")) throw e;
+    fs.copyFileSync(tmp, FILE);
+  }
   if (!g.__hhLastBackup || Date.now() - g.__hhLastBackup > 10 * 60_000) {
     g.__hhLastBackup = Date.now();
     fs.mkdirSync(path.join(DIR, "backup"), { recursive: true });
