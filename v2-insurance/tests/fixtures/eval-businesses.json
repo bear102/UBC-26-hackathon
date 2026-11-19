@@ -1,0 +1,65 @@
+{
+  "_note": "AI eval benchmark (scripts/eval-ai.ts). The 3 demo presets are loaded from lib/ai/presets.ts; these are 6 extra, deliberately diverse Austin-area businesses. Fictional names.",
+  "businesses": [
+    {
+      "id": "eval-roofing",
+      "name": "Lone Star Roofing Co.",
+      "description": "We're a 12-person residential roofing contractor in South Austin. Rain days mean crews can't work but we still pay them, and a cold wet week pushes every job back. We buy a lot of copper flashing and asphalt shingles on fixed-price bids, and we run our trucks and equipment on a $250k variable-rate credit line.",
+      "city": "Austin, TX",
+      "zip": "78748",
+      "avgDailyRevenueUsd": 9000,
+      "busyDays": ["Mon", "Tue", "Wed", "Thu", "Fri"],
+      "monthlyBudgetUsd": 400
+    },
+    {
+      "id": "eval-courier",
+      "name": "ATX Same-Day Courier",
+      "description": "Same-day courier with 9 drivers in their own cars plus 2 cargo vans, about 6,000 miles a week across Austin and Round Rock. We pay drivers a fuel allowance tied to pump prices and our per-delivery prices are fixed by contract. Rain slows deliveries and causes late-delivery credits.",
+      "city": "Austin, TX",
+      "zip": "78758",
+      "avgDailyRevenueUsd": 5500,
+      "busyDays": ["Mon", "Tue", "Wed", "Thu", "Fri"],
+      "monthlyBudgetUsd": 250
+    },
+    {
+      "id": "eval-coffee-cart",
+      "name": "Bean There Coffee Cart",
+      "description": "I run a coffee cart at the Mueller farmers market on weekends and outside a coworking space on weekdays. Fully outdoors. Rain kills the market crowd, and really cold mornings are actually good for hot drinks but nobody lingers. Milk and coffee bean prices keep climbing.",
+      "city": "Austin, TX",
+      "zip": "78723",
+      "avgDailyRevenueUsd": 900,
+      "busyDays": ["Sat", "Sun"],
+      "monthlyBudgetUsd": 60
+    },
+    {
+      "id": "eval-mortgage-broker",
+      "name": "Hill Country Home Loans",
+      "description": "Independent mortgage broker, 4 loan officers. Our volume lives and dies by mortgage rates: when the Fed holds or rates jump, refi applications dry up and purchase buyers back out. A hot inflation print usually pushes rates up within days. We're paid per closed loan.",
+      "city": "Austin, TX",
+      "zip": "78731",
+      "avgDailyRevenueUsd": 7000,
+      "busyDays": ["Mon", "Tue", "Wed", "Thu", "Fri"],
+      "monthlyBudgetUsd": 500
+    },
+    {
+      "id": "eval-str-host",
+      "name": "Eastside Stays (short-term rentals)",
+      "description": "I manage 6 short-term rental houses in East Austin. Bookings spike on Longhorns home football weekends and big events, and guests cancel when a cold or rainy weekend is forecast. Our nightly rates are set weeks ahead.",
+      "city": "Austin, TX",
+      "zip": "78702",
+      "avgDailyRevenueUsd": 1800,
+      "busyDays": ["Fri", "Sat"],
+      "monthlyBudgetUsd": 150
+    },
+    {
+      "id": "eval-crypto-merch",
+      "name": "Satoshi Threads",
+      "description": "We sell streetwear and crypto-themed merch online and at a South Congress pop-up. About 40% of our sales are paid in BTC or SOL and we hold that crypto for a few weeks before converting. When bitcoin crashes our customers stop buying.",
+      "city": "Austin, TX",
+      "zip": "78704",
+      "avgDailyRevenueUsd": 2500,
+      "busyDays": ["Fri", "Sat", "Sun"],
+      "monthlyBudgetUsd": 200
+    }
+  ]
+}

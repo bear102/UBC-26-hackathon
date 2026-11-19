@@ -41,8 +41,8 @@ const hintOf = (series: string) => series.split("<")[0].replace(/\b(on|in|for)\s
  * Groups open, priced contracts into ~20-40 one-line "series" entries across every peril. Weather is one line per
  * peril with Texas cities named first; games only for teams the owner mentions or Texas teams (+ a count of the rest).
  */
-export function buildCatalog(markets: MarketContract[], profile: BusinessProfile, teamWords: string[] = []): CatalogEntry[] {
-  const now = Date.now();
+export function buildCatalog(markets: MarketContract[], profile: BusinessProfile, teamWords: string[] = [], nowMs = Date.now()): CatalogEntry[] {
+  const now = nowMs;
   const live = markets.filter((m) => m.status === "open" && (m.yesAsk !== null || m.noAsk !== null) && !(Date.parse(m.expiry) <= now));
   const groups = new Map<string, { peril: Peril; series: string; cs: MarketContract[] }>();
   const city = profile.city.split(",")[0].trim().toLowerCase();
@@ -309,8 +309,8 @@ export function sameExposure(a: Risk, b: Risk, teamWords: (t: string) => string[
 }
 
 /** Candidates for a proxy idea: filtered to its catalog series (hint) when we know it. */
-export function filterIdeaCandidates(idea: Idea, cands: MarketContract[], universe: MarketContract[]): MarketContract[] {
-  const now = Date.now();
+export function filterIdeaCandidates(idea: Idea, cands: MarketContract[], universe: MarketContract[], nowMs = Date.now()): MarketContract[] {
+  const now = nowMs;
   const ok = (c: MarketContract) => c.status === "open" && !(Date.parse(c.expiry) <= now) && (c.yesAsk !== null || c.noAsk !== null);
   const h = idea.hint?.toLowerCase();
   const city = WEATHER.includes(idea.risk.peril) ? (idea.risk.location ?? "").split(",")[0].trim().toLowerCase() : "";

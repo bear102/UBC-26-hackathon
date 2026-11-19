@@ -160,6 +160,19 @@ export async function findCandidates(risk: Risk, profile: BusinessProfile, limit
   return top;
 }
 
+/** Named underlyings in multi-asset perils (crypto coins, metals, energy). A risk that names one only gets contracts on it. */
+const UNDERLYINGS: [string, string, RegExp][] = [
+  ["btc", "btc", /\bbtc\b|bitcoin/i], ["eth", "eth", /\beth\b|ethereum|\bether\b/i], ["sol", "sol", /\bsol\b|solana/i], ["xrp", "xrp", /\bxrp\b|ripple/i],
+  ["zec", "zec", /\bzec\b|zcash/i], ["hype", "hype", /\bhype\b|hyperliquid/i], ["doge", "doge", /\bdoge/i],
+  ["gold", "gold", /\bgold\b|\bxau\b/i], ["silver", "silver", /\bsilver\b|\bxag\b/i], ["copper", "copper", /\bcopper\b/i],
+  ["natgas", "natgas", /natural gas|henry hub|\bnat ?gas\b|propane/i],
+  ["wti", "crude", /\bwti\b/i], ["brent", "crude", /\bbrent\b/i], ["crude", "crude", /\bcrude\b|\boil\b|diesel/i],
+  ["gasoline", "gasoline", /(?<!natural )\bgas (price|prices)\b|gasoline|pump price/i],
+];
+export function underlyings(text: string): { key: string; group: string }[] {
+  return UNDERLYINGS.filter(([, , re]) => re.test(text)).map(([key, group]) => ({ key, group }));
+}
+
 const perilFamily = (p: Peril): Peril[] => (p === "heat" || p === "cold" ? ["heat", "cold"] : [p]);
 const candidateVenues = (p: Peril): VenueId[] => (POLY_PERILS.includes(p) ? ["gemini", "kalshi", "polymarket"] : ["gemini", "kalshi"]);
 
@@ -174,6 +187,7 @@ export function rankCandidates(risk: Risk, profile: BusinessProfile, universe: M
   const text = `${risk.title} ${risk.trigger} ${risk.lossReasoning ?? ""} ${profile.description}`;
   const wantTeams = risk.peril === "game" ? teamsIn(`${risk.title} ${risk.trigger}`).length ? teamsIn(`${risk.title} ${risk.trigger}`) : teamsIn(text) : [];
   const target = triggerNumber(risk.trigger);
+  const wantU = !["heat", "cold", "rain", "game"].includes(risk.peril) ? underlyings(`${risk.title} ${risk.trigger}`) : [];
 
   const scored: { c: MarketContract; s: number; exp: number }[] = [];
   for (const c of all) {
@@ -194,6 +208,11 @@ export function rankCandidates(risk: Risk, profile: BusinessProfile, universe: M
 
     // relevance
     if (c.peril === risk.peril) s += 2;
+    if (wantU.length) {
+      const have = underlyings(c.eventTitle);
+      if (have.length && !have.some((h) => wantU.some((w) => w.group === h.group))) continue; // gold is not copper, SOL is not BTC
+      if (have.some((h) => wantU.some((w) => w.key === h.key))) s += 1;                       // WTI risk: WTI before Brent
+    }
     if (risk.peril === "game") {
       const tm = wantTeams.length ? teamMatch(c, meta, wantTeams) : null;
       if (wantTeams.length && !tm) continue;
