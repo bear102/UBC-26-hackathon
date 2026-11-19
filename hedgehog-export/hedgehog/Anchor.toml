@@ -1,0 +1,19 @@
+[toolchain]
+anchor_version = "0.31.1"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.devnet]
+hedgehog_promise = "6x27yJQSb1iGRNumQG6Et8nB8x7Zq7qiKEzLkZhbQraf"
+
+[programs.localnet]
+hedgehog_promise = "6x27yJQSb1iGRNumQG6Et8nB8x7Zq7qiKEzLkZhbQraf"
+
+[provider]
+cluster = "devnet"
+wallet = "keys/deployer.json"
+
+[scripts]
+test = "node --import tsx --test tests/program/*.test.ts"

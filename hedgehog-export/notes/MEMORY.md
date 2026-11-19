@@ -1,0 +1,2 @@
+- [Build box compromised](build-box-compromised.md) — miners + ssh-hijack malware found 2026-11-18; no real secrets on this host until user decides
+- [Hedgehog build status](hedgehog-build-status.md) — what exists, keys/pubkeys, toolchain state
