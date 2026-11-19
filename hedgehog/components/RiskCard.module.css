@@ -1,5 +1,5 @@
 /* Risk card = one "clause" of the policy: the peril on the left, the matched market on the right. Flat sheet, ink frame. */
-.card { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); background: var(--surface); border: 1px solid var(--ink); border-radius: var(--radius-sm); }
+.card { scroll-margin-top: 110px; display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); background: var(--surface); border: 1px solid var(--ink); border-radius: var(--radius-sm); }
 @media (max-width: 860px) { .card { grid-template-columns: 1fr; } }
 .risk { padding: 22px 22px 20px; align-self: start; position: sticky; top: 96px; }
 @media (max-width: 860px) { .risk { position: static; border-bottom: 1px solid var(--ink); } }
@@ -16,6 +16,21 @@
 .hedge + .hedge { border-top: 1px dashed var(--ink); padding-top: 16px; }
 .matched { display: block; margin-bottom: 8px; }
 .matched b { color: var(--ink); font-weight: 600; }
+.ofN { color: var(--red); font-weight: 700; margin-right: 8px; }
+/* price + buy, first thing in the hedge column */
+.buybar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: center; background: var(--surface); border: 1.5px solid var(--ink); margin: 0 0 14px; scroll-margin-top: 120px; }
+.buybar > div { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; min-width: 0; }
+.buybar > div + div { border-left: 1px solid var(--line-2); }
+.buybar span { font-size: 12px; color: var(--ink-2); }
+.buybar b { font-size: 1.3rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.buyCell { align-items: stretch; }
+.buyCell :global(.btn) { white-space: nowrap; }
+.buybarDone { border-color: var(--pay); background: var(--pay-soft, var(--surface)); }
+@media (max-width: 480px) {
+  .buybar { grid-template-columns: 1fr 1fr; }
+  .buyCell { grid-column: 1 / -1; border-left: 0 !important; border-top: 1px solid var(--line-2); }
+  .buyCell :global(.btn) { width: 100%; }
+}
 .event { margin: 8px 0 2px; font-weight: 650; }
 .label { margin: 0 0 12px; color: var(--ink-2); font-size: .93rem; }
 .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }

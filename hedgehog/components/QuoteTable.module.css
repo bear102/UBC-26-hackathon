@@ -34,3 +34,6 @@
   .sch tfoot .lbl { grid-column: 1 / -1; }
   .sch :global(.oddbar) { margin-left: 0; }
 }
+
+.rlink { color: inherit; text-decoration: none; }
+.rlink:hover { text-decoration: underline; text-underline-offset: 3px; }

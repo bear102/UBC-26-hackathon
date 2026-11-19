@@ -16,7 +16,8 @@ import { CreativeHedges } from "./plan/CreativeHedges";
 import { ClarifyQuestions, ClarifyRecap } from "./plan/ClarifyQuestions";
 import { QuoteTable } from "./QuoteTable";
 import { CheckoutDialog, type CheckoutKind, type CheckoutResult } from "./CheckoutDialog";
-import { IconArrowRight, IconCheck, IconShieldCheck } from "./Icons";
+import { CoverChecklist, CoverSteps, NextStepBar, coverItems } from "./plan/CoverChecklist";
+import { IconArrowRight, IconCheck } from "./Icons";
 import s from "./PlanView.module.css";
 
 const COVS: Coverage[] = [25, 50, 100];
@@ -36,6 +37,7 @@ export function PlanView() {
   const [checkout, setCheckout] = useState<{ kind: CheckoutKind; line: QuoteLine } | null>(null);
   const [bought, setBought] = useState<Record<string, CheckoutResult>>({});
   const reqId = useRef(0);
+  const bindRef = useRef<HTMLElement>(null);
   // Quick questions before the quote (null = not asking). `edit` = re-answering on an existing plan.
   const [asking, setAsking] = useState<{ questions: ClarifyQuestion[]; previous: ClarifyAnswer[]; edit: boolean } | null>(null);
   const [rebuilding, setRebuilding] = useState(false);
@@ -161,6 +163,9 @@ export function PlanView() {
   const uncoveredIds = new Set([...quote.uncovered.map((u) => u.riskId), ...proxyIds]);
   const applyChoice = (q: Quote) => { setQuote(q); setLocal(true); };
   const totalLoss = coveredRisks.reduce((a, r) => a + r.lossUsd, 0);
+  const items = coverItems(quote.lines, risksById, (l) => !!bought[`cover:${l.contractId}`], profile);
+  const doneCount = items.filter((i) => i.done).length;
+  const startCover = (line: QuoteLine) => setCheckout({ kind: "cover", line });
 
   return (
     <div className="container">
@@ -172,6 +177,8 @@ export function PlanView() {
         <p className={s.meta}>{profile.city}{profile.zip ? ` · ${profile.zip}` : ""} · {usd(profile.avgDailyRevenueUsd)}/day · busy {profile.busyDays.join(", ") || "—"}
           {" · "}<Link href={`/intake?preset=${encodeURIComponent(profile.id)}`}>Edit</Link></p>
       </section>
+
+      <CoverSteps total={items.length} done={doneCount} />
 
       <section className={s.schedGrid}>
         <div className={s.left}>
@@ -196,7 +203,7 @@ export function PlanView() {
           </div>
         </div>
 
-        <aside className={`bind ${s.bind}`} aria-label="Your quote">
+        <aside ref={bindRef} className={`bind ${s.bind}`} aria-label="Your quote">
           <div className="bind-inner">
             <div className={s.bindTop}>
               <span className="bind-k">Your quote · binding summary</span>
@@ -217,7 +224,7 @@ export function PlanView() {
               Covers {cov}% of ~{usd(totalLoss)} in estimated losses across {coveredRisks.length} risk{coveredRisks.length === 1 ? "" : "s"}.
               {local && <> Resized at current prices. <button className={s.linkBtn} onClick={() => runAdvise(profile, cov)} disabled={loading}>{loading ? "Re-running…" : "Re-run AI"}</button></>}
             </p>
-            <a className="btn btn-buy" href="#risks"><IconShieldCheck size={20} />Review &amp; buy each hedge</a>
+            <CoverChecklist items={items} onCover={startCover} />
             <div className="signline"><span className="x">x</span><span className="l" /><span>Your wallet signs</span></div>
             <ul className="assure">
               <li><IconCheck size={14} />You see the exact cost before you sign.</li>
@@ -233,12 +240,12 @@ export function PlanView() {
 
       <section className={`section ${s.risks}`} id="risks">
         <div className="sec-head">
-          <div><span className="eyebrow">Line by line · buy here</span><h2>Your risks, <em>matched to markets</em></h2></div>
+          <div><span className="eyebrow">Each risk in detail · buy here</span><h2>Your risks, <em>matched to markets</em></h2></div>
           <span className={`muted small ${s.quoted}`}>{loading ? <><span className="spinner" /> refreshing…</> : `Quoted ${new Date(quote.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`}</span>
         </div>
         <div className="stack">
-          {coveredRisks.map((r) => (
-            <RiskCard key={r.id} risk={r} lines={linesByRisk.get(r.id) ?? []} bought={bought} profile={profile}
+          {coveredRisks.map((r, i) => (
+            <RiskCard key={r.id} index={i + 1} total={coveredRisks.length} risk={r} lines={linesByRisk.get(r.id) ?? []} bought={bought} profile={profile}
               onBuy={(line) => setCheckout({ kind: "hedge", line })} onCover={(line) => setCheckout({ kind: "cover", line })} />
           ))}
         </div>
@@ -268,6 +275,9 @@ export function PlanView() {
           </div>
         </section>
       )}
+
+      <NextStepBar items={items} onCover={startCover} watch={bindRef} />
+      <div className={s.barSpace} aria-hidden="true" />
 
       {checkout && (
         <CheckoutDialog kind={checkout.kind} line={checkout.line} risk={risksById.get(checkout.line.riskId)} businessId={profile.id}

@@ -1,0 +1,55 @@
+/* Guided buy path on the plan page (Printed Policy theme, IBM Plex Sans only). */
+
+/* ---- 3-step guide ---- */
+.steps { list-style: none; margin: 0 0 24px; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; border: 1px solid var(--ink); background: var(--surface); }
+.steps > li { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; min-width: 0; }
+.steps > li + li { border-left: 1px solid var(--line-2); }
+.steps b { display: block; font-size: 15px; font-weight: 600; color: var(--ink); line-height: 1.25; }
+.steps small { display: block; font-size: 13px; color: var(--ink-2); margin-top: 2px; line-height: 1.35; }
+.num { flex: none; width: 28px; height: 28px; display: grid; place-items: center; border: 1.5px solid var(--line-2); font-weight: 700; font-size: 14px; color: var(--ink-3); background: var(--surface); }
+.now .num { border-color: var(--ink); background: var(--ink); color: var(--surface); }
+.now { background: var(--surface-2); }
+.done .num { border-color: var(--pay); background: var(--pay); color: var(--surface); }
+.done b { color: var(--pay); }
+.next b { color: var(--ink-2); }
+.finish { align-items: center !important; }
+@media (max-width: 860px) {
+  .steps { grid-template-columns: 1fr; }
+  .steps > li + li { border-left: 0; border-top: 1px solid var(--line-2); }
+  .steps > li { padding: 11px 14px; }
+}
+
+/* ---- checklist in the navy panel ---- */
+.check { margin-top: 4px; }
+.checkHead { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.count { font-size: 13px; font-weight: 600; color: var(--surface); font-variant-numeric: tabular-nums; }
+.list { list-style: none; margin: 0 0 14px; padding: 0; border-top: 1px solid rgba(251, 248, 240, .2); }
+.list > li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(251, 248, 240, .2); }
+.itemText { min-width: 0; color: var(--surface); text-decoration: none; }
+.itemText:hover b { text-decoration: underline; text-underline-offset: 3px; }
+.itemText b { display: block; font-size: 14px; font-weight: 600; line-height: 1.3; color: var(--surface); }
+.itemText small { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; font-size: 12.5px; color: rgba(251, 248, 240, .75); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.rec { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ink); background: var(--pay-on-ink); padding: 1px 6px; }
+.itemBtn { flex: none; white-space: nowrap; }
+.isDone .itemText b { color: rgba(251, 248, 240, .7); }
+.doneTag { flex: none; display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 600; color: var(--pay-on-ink); white-space: nowrap; }
+.none { font-size: 14px; color: rgba(251, 248, 240, .8); }
+
+/* ---- sticky next-step bar ---- */
+.bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--ink); color: var(--surface); border-top: 3px double var(--surface-2); box-shadow: 0 -12px 30px -18px rgba(20, 32, 63, .6); transition: transform .2s ease; }
+.barHidden { transform: translateY(110%); }
+.barIn { display: flex; align-items: center; gap: 16px; padding-top: 10px; padding-bottom: 10px; }
+.barCount { font-size: 13px; color: rgba(251, 248, 240, .8); white-space: nowrap; }
+.barCount b { color: var(--surface); font-variant-numeric: tabular-nums; }
+.barNext { flex: 1; min-width: 0; color: var(--surface); text-decoration: none; display: flex; flex-direction: column; }
+.barNext small { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: rgba(251, 248, 240, .65); }
+.barNext b { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.barPrice { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bar :global(.btn-primary) { background: var(--surface); color: var(--ink); border-color: var(--surface); box-shadow: none; white-space: nowrap; }
+.bar :global(.btn-primary):hover { background: #fff; color: var(--ink); }
+.bar > div > :global(.btn-primary):only-child { margin-left: auto; }
+@media (max-width: 640px) {
+  .barIn { gap: 10px; }
+  .barCount, .barPrice { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .bar { transition: none; } }

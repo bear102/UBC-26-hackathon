@@ -10,8 +10,7 @@
 .summary { font-family: var(--serif); font-size: 1.08rem; line-height: 1.5; color: var(--ink); margin: 0 0 12px; }
 .venues { margin: 10px 0 0; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 
-.bind { position: sticky; top: 96px; }
-@media (max-width: 1000px) { .bind { position: static; } }
+.bind { position: static; } /* the buy checklist made it taller than the viewport; NextStepBar covers the scrolled state */
 .bindTop { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding-bottom: 4px; }
 .budget { padding: 14px 0 0; }
 .budgetRow { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; color: rgba(251, 248, 240, .78); margin-bottom: 7px; }
@@ -24,6 +23,7 @@
 .linkBtn:disabled { opacity: .6; cursor: default; }
 
 .risks { scroll-margin-top: 110px; }
+.barSpace { height: 72px; }
 .quoted { font-family: var(--sans); font-size: 12px; letter-spacing: .06em; display: inline-flex; gap: 8px; align-items: center; }
 
 .excl { position: relative; padding-top: 22px; }

@@ -1,6 +1,7 @@
 import type { Quote } from "@/lib/types";
 import { cents, pct, usd } from "@/lib/client/format";
 import { VenueBadge } from "./markets/VenueBadge";
+import { riskAnchor } from "./plan/CoverChecklist";
 import s from "./QuoteTable.module.css";
 
 /** "Schedule of cover": the quote typeset like a printed policy schedule. Plain on purpose: no ornament behind numbers. */
@@ -35,7 +36,7 @@ export function QuoteTable({ quote }: { quote: Quote }) {
               <tr key={l.contractId} className={ref ? "ref" : undefined}>
                 <td className={s.ix}>{String(i + 1).padStart(2, "0")}</td>
                 <td className={s.risk}>
-                  <b>{r?.title ?? l.riskId}</b>
+                  <b>{ref ? (r?.title ?? l.riskId) : <a href={`#${riskAnchor(l.riskId)}`} className={s.rlink}>{r?.title ?? l.riskId}</a>}</b>
                   <span>{l.contract.label} · {l.side.toUpperCase()}{ref ? " · reference only" : ""}</span>
                   <div className={s.ven}><VenueBadge venue={l.contract.venue} role={false} /></div>
                 </td>
