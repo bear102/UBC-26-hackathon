@@ -114,11 +114,12 @@ main { flex: 1; }
 a { color: var(--ink); text-decoration-color: var(--line-2); text-underline-offset: 3px; }
 a:hover { color: var(--brand-2); text-decoration-color: var(--ink); }
 h1, h2, h3 { font-family: var(--serif); font-weight: 600; letter-spacing: -.02em; line-height: 1.08; margin: 0 0 .4em; font-optical-sizing: auto; text-wrap: balance; }
-h1 { font-size: clamp(40px, 5.5vw, 80px); line-height: 1; letter-spacing: -.03em; }
-h2 { font-size: clamp(30px, 3.6vw, 48px); line-height: 1.05; }
+h1, h2 { font-family: var(--font-display), var(--sans); font-weight: 800; }
+h1 { font-size: clamp(40px, 5.5vw, 80px); line-height: 1; letter-spacing: -.035em; }
+h2 { font-size: clamp(30px, 3.6vw, 48px); line-height: 1.05; letter-spacing: -.03em; }
 h3 { font-size: 1.25rem; font-weight: 600; letter-spacing: -.01em; line-height: 1.15; }
 h4 { font-family: var(--serif); font-weight: 600; font-size: 1.1rem; margin: 0 0 .4em; line-height: 1.2; }
-h1 em, h2 em { font-style: normal; font-weight: 700; color: var(--red); }
+h1 em, h2 em { font-style: normal; font-weight: 800; color: var(--red); }
 p { margin: 0 0 1em; }
 b, strong { font-weight: 600; }
 :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 2px; }

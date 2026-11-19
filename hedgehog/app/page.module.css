@@ -11,7 +11,9 @@
 .stage { grid-area: cert; }
 .pricedMob { display: none !important; }
 
-.h1 { margin: 22px 0 34px; text-wrap: wrap; font-size: clamp(40px, 4.7vw, 68px); }
+/* three lines: "Insure any / business against / anything"; sized so "business against" fits the column */
+.h1 { margin: 22px 0 34px; font-size: clamp(42px, 4.6vw, 66px); line-height: .98; }
+.br { display: inline; }
 .hedge { display: inline-block; position: relative; margin-top: 8px; }
 .lede { margin: 0 0 30px; max-width: 540px; }
 .cta { display: flex; gap: 12px; flex-wrap: wrap; }
@@ -50,3 +52,15 @@
   .cno { font-size: 36px; }
 }
 
+
+/* certificate: what the premium buys, as exposure cut (plain words + one bar) */
+.expo { margin: 14px 0 4px; }
+.expoLine { margin: 0 0 8px; font-size: 14.5px; line-height: 1.4; color: var(--ink); }
+.expoBad { color: var(--red); }
+.expoTag { display: inline-block; margin-left: 4px; padding: 1px 7px; font-size: 12px; font-weight: 700; color: var(--pay); background: var(--pay-soft); border: 1px solid var(--pay); white-space: nowrap; }
+.expoBar { display: flex; height: 24px; border: 1px solid var(--ink); font-style: normal; }
+.expoBar i { font-style: normal; display: flex; align-items: center; padding: 0 8px; font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; }
+.expoLeft { flex: 1 1 50%; background: var(--red-soft); color: var(--red); border-right: 1px solid var(--ink); }
+.expoCovered { flex: 1 1 50%; border: 0 !important; justify-content: flex-end; }
+.expoCovered span { background: var(--surface); color: var(--pay); padding: 0 4px; }
+@media (max-width: 480px) { .expoBar i { font-size: 10.5px; padding: 0 5px; } }

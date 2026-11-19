@@ -22,7 +22,7 @@ export default function Landing() {
           <div className={s.copy}>
             <span className="eyebrow">Insurance for your worst business day</span>
             <h1 className={s.h1}>
-              Insure your business against{" "}
+              Insure any <br className={s.br} />business against <br className={s.br} />
               <em className={s.hedge}>anything<Swash /></em>
             </h1>
             <p className={`lede ${s.lede}`}>
@@ -55,10 +55,16 @@ export default function Landing() {
                     <div className="term pay"><span className="lab">If it rains, you get</span><span className="amt">$550</span><div className="sub">Paid to your wallet automatically</div></div>
                     <div className="term cost"><span className="lab">If it doesn&apos;t, you paid</span><span className="amt">$154</span><div className="sub">Your premium. Nothing more.</div></div>
                   </div>
+                  <div className={s.expo}>
+                    <p className={s.expoLine}>Pay <b>$154</b> to cut your rainy-Saturday loss from <b className={s.expoBad}>$1,100</b> to <b>$550</b>. <span className={s.expoTag}>50% less exposure</span></p>
+                    <div className={s.expoBar} role="img" aria-label="Loss of $1,100: $550 you still lose, $550 paid by your cover">
+                      <i className={s.expoLeft}>you still lose $550</i>
+                      <i className={`hatch-pay ${s.expoCovered}`}><span>cover pays $550</span></i>
+                    </div>
+                  </div>
                   <div className="cert-foot">
                     <div className="facts">
                       <div>Market odds<b>28%</b></div>
-                      <div>Expected loss<b>~$1,100</b></div>
                                             <div>Venue<b className={s.venue}><span className="badge badge-kalshi">Kalshi · DFlow</span></b></div>
                     </div>
                     <div className="sig"><div className="line">one signature</div><small>Signed on Solana</small></div>
