@@ -59,15 +59,31 @@
 
 
 
-/* certificate: what each bad day pays, then the worst case before → after */
-.ifs { list-style: none; margin: 14px 0 0; padding: 0; border-top: 1px solid var(--ink); }
-.ifs li { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 8px 2px; border-bottom: 1px solid var(--line-2); font-size: 14.5px; }
-.ifs span { color: var(--ink-2); }
-.ifs b { color: var(--pay); font-weight: 700; white-space: nowrap; }
-.worst { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0 2px; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--ink); }
-.worstLab { font-size: 14px; font-weight: 600; color: var(--ink); }
-.worstNums { display: inline-flex; align-items: baseline; gap: 10px; font-variant-numeric: tabular-nums; }
-.worstNums s { color: var(--red); font-size: 17px; font-weight: 600; text-decoration-thickness: 2px; }
-.worstNums > span { color: var(--ink-3); }
-.worstNums b { color: var(--pay); font-size: 22px; font-weight: 800; }
-.worstPct { color: var(--pay); font-family: var(--font-display), var(--sans); font-size: 30px; font-weight: 800; line-height: 1; }
+/* hero certificate: banknote-style head, ledger payout rows, green ribbon for the loss cut */
+.heroCert :global(.cert-in) { padding: 22px 30px 34px; }
+.certHead { display: flex; align-items: center; gap: 14px; text-align: center; }
+.rule { flex: 1; height: 5px; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); opacity: .7; }
+.certKick { font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--red); }
+.certTitle { font-size: 14px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--ink); margin-top: 2px; white-space: nowrap; }
+.certH { font-family: var(--font-display), var(--sans) !important; font-weight: 800 !important; font-size: 29px !important; letter-spacing: -.025em !important; margin: 18px 0 6px !important; max-width: none !important; }
+.certWho { margin: 0 0 16px; font-size: 14px; color: var(--ink-2); }
+.certWho b { color: var(--ink); font-weight: 600; }
+.certTerms :global(.lab) { text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 600; }
+.certTerms :global(.amt) { font-size: 48px; margin-top: 6px; }
+.ifs { list-style: none; margin: 14px 0 0; padding: 0; }
+.ifs li { display: flex; align-items: center; gap: 10px; padding: 9px 0; }
+.ifs li + li { border-top: 1px dashed var(--line-2); }
+.ifIc { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border: 1.25px solid var(--ink); color: var(--ink); background: var(--surface); }
+.ifTxt { display: flex; flex-direction: column; font-size: 15px; font-weight: 600; color: var(--ink); line-height: 1.2; }
+.ifTxt small { font-size: 12px; font-weight: 400; color: var(--ink-2); margin-top: 2px; }
+.leader { flex: 1; align-self: flex-end; margin-bottom: 7px; border-bottom: 2px dotted var(--line-2); min-width: 16px; }
+.ifs b { font-size: 20px; font-weight: 700; color: var(--pay); font-variant-numeric: tabular-nums; }
+.worst { display: flex; align-items: center; gap: 14px; margin: 14px 0 0; padding: 12px 16px; background: var(--pay-soft); border-left: 4px solid var(--pay); }
+.worstPct { font-family: var(--font-display), var(--sans); font-size: 40px; font-weight: 800; line-height: 1; color: var(--pay); letter-spacing: -.02em; }
+.worstLab { font-size: 15px; font-weight: 600; color: var(--ink); line-height: 1.25; }
+@media (max-width: 640px) {
+  .heroCert :global(.cert-in) { padding: 18px 16px 30px; }
+  .certH { font-size: 24px !important; }
+  .certTerms :global(.amt) { font-size: 38px; }
+  .worstPct { font-size: 34px; }
+}

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PresetGrid } from "@/components/PresetGrid";
 import { GuillocheBand, Rosette, Seal } from "@/components/Engraving";
-import { IconArrowRight } from "@/components/Icons";
+import { IconArrowRight, PerilIcon } from "@/components/Icons";
 import { PastQuotes } from "@/components/PastQuotes";
 import s from "./page.module.css";
 
@@ -39,29 +39,41 @@ export default function Landing() {
 
           <div className={`cert-stage ${s.stage}`} aria-label="Example quote">
             <div className="cert-under" />
-            <div className="cert tilt">
+            <div className={`cert tilt ${s.heroCert}`}>
               <div className="seal-stamp"><Seal /></div>
               <div className="cert-frame">
                 <GuillocheBand />
                 <div className="cert-in">
                   <Rosette className="cert-rosette" density={9} steps={220} />
-                  <div className="cert-head">
-                    <div><div className="cert-kicker">Example</div><div className="cert-title">Certificate of Cover</div></div>
+                  <div className={s.certHead}>
+                    <span className={s.rule} aria-hidden="true" />
+                    <div><div className={s.certKick}>Example · Specimen</div><div className={s.certTitle}>Certificate of Cover</div></div>
+                    <span className={s.rule} aria-hidden="true" />
                   </div>
-                  <h3>Rain or a cold snap empties the patio</h3>
-                  <p className="insured">Rainey St patio bar · <b>Sat Nov 21</b> · rain <b>28%</b> on Kalshi · cold snap <b>12%</b> on Gemini</p>
-                  <div className="terms">
+                  <h3 className={s.certH}>Rain or a cold snap empties the patio</h3>
+                  <p className={s.certWho}>Rainey St patio bar, Austin · <b>Saturday, Nov 21</b></p>
+                  <div className={`terms ${s.certTerms}`}>
                     <div className="term pay"><span className="lab">You get up to</span><span className="amt">$950</span></div>
                     <div className="term cost"><span className="lab">You pay</span><span className="amt">$202</span></div>
                   </div>
                   <ul className={s.ifs}>
-                    <li><span>If it rains Saturday</span><b>we pay you $550</b></li>
-                    <li><span>If a cold snap hits</span><b>we pay you $400</b></li>
+                    <li>
+                      <span className={s.ifIc} aria-hidden="true"><PerilIcon peril="rain" size={16} /></span>
+                      <span className={s.ifTxt}>If it rains<small>28% chance · Kalshi</small></span>
+                      <span className={s.leader} aria-hidden="true" />
+                      <b>$550</b>
+                    </li>
+                    <li>
+                      <span className={s.ifIc} aria-hidden="true"><PerilIcon peril="cold" size={16} /></span>
+                      <span className={s.ifTxt}>If a cold snap hits<small>12% chance · Gemini</small></span>
+                      <span className={s.leader} aria-hidden="true" />
+                      <b>$400</b>
+                    </li>
                   </ul>
                   {/* worst case (rain and cold): −$1,900 uncovered vs −$952 covered = 49.9% less */}
                   <div className={s.worst}>
-                    <span className={s.worstLab}>Cuts your worst-Saturday losses by</span>
                     <b className={s.worstPct}>50%</b>
+                    <span className={s.worstLab}>smaller loss on your worst Saturday</span>
                   </div>
                 </div>
                 <GuillocheBand tone="red" />
