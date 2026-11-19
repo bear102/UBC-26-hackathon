@@ -164,7 +164,8 @@ async function attestableQty(rec: PromiseRec, freshOrderIds: string[] = []): Pro
   // Hedge Desk fills (direct cover, same Gemini account) are someone else's position too: never let them stand in
   // for a promise's hedge, or a sold-back promo hedge would be masked by a desk position on the same contract.
   const deskQty = (sym: string) => (s.desk ?? []).filter((t) => t.status !== "REJECTED")
-    .reduce((a, t) => a + t.fills.filter((f) => f.symbol === sym).reduce((x, f) => x + f.filled, 0), 0);
+    // Gemini positions are per outcome; promo hedges are YES, so only desk YES fills share that position
+    .reduce((a, t) => a + t.fills.filter((f) => f.symbol === sym && (f.outcome ?? "yes") === "yes").reduce((x, f) => x + f.filled, 0), 0);
   return rec.card.strip.map((sym) => {
     const otherAlloc = others.reduce((a, o) => a + (o.alloc[sym] ?? 0), 0) + deskQty(sym);
     return Math.max(0, Math.min(rec.alloc[sym] ?? 0, posQty(sym) - otherAlloc));
