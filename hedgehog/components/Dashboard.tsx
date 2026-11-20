@@ -315,9 +315,11 @@ function FeedPanel({ feed }: { feed: FeedEvent[] }) {
     <aside className={`card ${s.feed}`} aria-label="Live event feed">
       <div className={`doc-head ${s.feedHead}`}>
         <span className="caps-title">Live feed</span>
-        <span className="badge badge-good"><span className="dot live" /> Live</span>
+        <span className="row" style={{ gap: 6 }}>
+          <span className={`badge ${SOURCE.quicknode.cls}`}>{SOURCE.quicknode.label}</span>
+          <span className="badge badge-good"><span className="dot live" /> Live</span>
+        </span>
       </div>
-      <p className={s.feedIntro}>Onchain events via QuickNode Streams.</p>
       {feed.length === 0 ? <div className="empty small">Waiting for events…</div> : (
         <ol className={s.events}>
           {feed.map((e) => {
@@ -325,7 +327,7 @@ function FeedPanel({ feed }: { feed: FeedEvent[] }) {
             return (
               <li key={e.id}>
                 <div className="row between" style={{ gap: 6 }}>
-                  <span className={`badge ${src.cls}`}>{src.label}</span>
+                  {e.source === "quicknode" && src === SOURCE.quicknode ? <span /> : <span className={`badge ${src.cls}`}>{src.label}</span>}
                   <span className={s.when} title={e.at}>{timeAgo(e.at)}</span>
                 </div>
                 <p>{e.text}</p>
