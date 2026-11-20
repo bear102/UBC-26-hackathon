@@ -85,3 +85,23 @@ test("gameTrigger: title/trigger from the contract (who loses, home, real game d
   const sas = { ...g, id: "gemini:GEMI-NBA-2611220100-NOP-SAS-M-SAS", symbol: "GEMI-NBA-2611220100-NOP-SAS-M-SAS", label: "San Antonio" } as MarketContract;
   assert.equal(gameTrigger(sas, "no")!.title, "The Spurs lose at home to the Pelicans (Sat, Nov 21)");
 });
+
+test("plan switch: each choice carries its own wording; applyPicks swaps the risk's title/trigger with the contract", async () => {
+  const { wordChoices } = await import("../lib/ai/advisor");
+  const { applyPicks } = await import("../lib/client/choices");
+  setMeta("kalshi:KXNBAWINS-27SAS-50", { eventDate: "2026-10-20", eventEnd: "2027-04-11", futureKind: "wins", league: "NBA", teams: ["San Antonio"] });
+  setMeta("kalshi:KXNBAPLAYOFF-27-SAS", { eventDate: "2026-10-20", eventEnd: "2027-04-17", futureKind: "playoffs", league: "NBA", teams: ["San Antonio"] });
+  const mk = (id: string, eventTitle: string, label: string, ask: number) => ({ id, venue: "kalshi", symbol: id.split(":")[1], eventTicker: id.split(":")[1], eventTitle, label, peril: "game", status: "open", yesAsk: 1 - ask, noAsk: ask, expiry: "2029-06-01T00:00:00Z" }) as unknown as MarketContract;
+  const wins = mk("kalshi:KXNBAWINS-27SAS-50", "Pro Basketball: San Antonio Total Wins", "50+ wins", 0.12);
+  const po = mk("kalshi:KXNBAPLAYOFF-27-SAS", "Pro Basketball Playoff Qualifiers", "San Antonio", 0.04);
+  const line = (c: MarketContract, n: number) => ({ riskId: "r5", contractId: c.id, side: "no", rationale: "", basisRisk: "", contract: c, coveragePct: 50, contracts: n, pricePerContract: c.noAsk!, premiumUsd: n * c.noAsk!, payoutUsd: n, impliedProb: c.noAsk!, action: "buy-devnet" }) as any;
+  const risk = { id: "r5", peril: "game", title: "San Antonio Spurs win fewer than 50 games", trigger: "San Antonio Spurs win fewer than 50 games", lossUsd: 1000, lossReasoning: "", confidence: 0.5, horizon: "season" } as Risk;
+  const q: any = { businessId: "b", createdAt: "", risks: [risk], lines: [line(wins, 600)], uncovered: [], totalPremiumUsd: 72, totalPayoutUsd: 600, budgetUsd: 300, summary: "", model: "",
+    options: [{ riskId: "r5", choices: [line(wins, 600), line(po, 500)] }] };
+  wordChoices(q);
+  const a = applyPicks(q, { r5: po.id }, 50);
+  assert.equal(a.risks[0].title, "San Antonio Spurs miss the NBA playoffs");
+  assert.equal(a.risks[0].trigger, "San Antonio Spurs miss the NBA playoffs");
+  const b = applyPicks(a, { r5: wins.id }, 50);
+  assert.equal(b.risks[0].title, "San Antonio Spurs win fewer than 50 games");
+});

@@ -105,6 +105,10 @@ export interface HedgeLeg {
 /** Sized line in the quote. */
 export interface QuoteLine extends HedgeLeg {
   contract: MarketContract;
+  /** The risk's title / trigger worded for THIS contract (set on option choices; the plan switcher applies them, so a
+   *  swapped stage or strike never shows the other contract's words). */
+  riskTitle?: string;
+  riskTrigger?: string;
   coveragePct: number;        // 25 | 50 | 100
   contracts: number;
   pricePerContract: number;   // avg fill price walking the book

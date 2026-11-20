@@ -1292,6 +1292,7 @@ export async function advise(owner: BusinessProfile, opts: AdviseOpts = {}): Pro
   // QA #4: the plan shown first IS Plan B (the AI's picks, sized like the plan switcher); skip-priced lines stay out
   settleDefaultPlan(quote, coveragePct as Coverage, new Map(defaultLegs.map((l) => [l.riskId, l.contractId])));
   marketWordedTriggers(risks, quote.lines, quote.options);
+  wordChoices(quote);
   attachForecast(quote, fc); // forecast vs market on weather lines (QuoteLine.forecast)
 
   // (5) summary
@@ -1549,6 +1550,30 @@ export function gameTrigger(r: Risk, c: MarketContract, side: "yes" | "no"): str
 }
 
 const PROMPT_ECHO = /\b(?:the chosen|pick (?:a|the) (?:rung|strike|contract)|rung|(?:label|bracket) offered|priced \d+\s*[-–]\s*\d+\s*(?:cents|¢)|catalogKey)\b/i;
+
+/** Word every option choice for its own contract (riskTitle / riskTrigger), so switching plans swaps the words with the
+ *  contract (demo QA: Plan A put a "miss the playoffs" contract under "Spurs win fewer than 50 games"). */
+export function wordChoices(q: Quote): void {
+  for (const o of q.options ?? []) {
+    const r = q.risks.find((x) => x.id === o.riskId);
+    if (!r) continue;
+    const def = q.lines.find((l) => l.riskId === r.id && l.contracts > 0) ?? q.lines.find((l) => l.riskId === r.id);
+    for (const c of o.choices) {
+      if (def && c.contractId === def.contractId) { c.riskTitle = r.title; c.riskTrigger = r.trigger; continue; }
+      const clone: Risk = { ...r };
+      marketWordedTriggers([clone], [c]);
+      // a different season stage than the default line (wins ladder vs playoffs): the title names what this one pays on
+      const k0 = def ? contractMeta(def.contractId)?.futureKind : undefined, k1 = contractMeta(c.contractId)?.futureKind;
+      if (r.peril === "game" && k1 && (k0 !== k1 || clone.trigger !== r.trigger)) clone.title = clone.trigger;
+      if (clone.trigger === r.trigger && r.peril !== "game") {
+        // a different strike / bucket on the same event: name it in the market's words
+        const what = c.side === "yes" ? c.contract.label : `not ${c.contract.label}`;
+        clone.trigger = c.contract.eventTitle && c.contract.eventTitle !== c.contract.label ? `${c.contract.eventTitle.replace(/\?$/, "")}: ${what}` : what;
+      }
+      c.riskTitle = clone.title; c.riskTrigger = clone.trigger;
+    }
+  }
+}
 
 export function marketWordedTriggers(risks: Risk[], lines: QuoteLine[], options: Quote["options"] = []): void {
   for (const r of risks) {

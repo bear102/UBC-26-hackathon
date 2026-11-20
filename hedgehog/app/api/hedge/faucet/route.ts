@@ -36,8 +36,11 @@ export async function POST(req: Request) {
     const minted = have < target ? target - have : 0n;
     if (minted > 0n) tx.add(createAssociatedTokenAccountIdempotentInstruction(desk.publicKey, ata, owner, mint), createMintToInstruction(mint, ata, desk.publicKey, minted));
     const lamports = await conn.getBalance(owner);
-    const solSent = lamports < 0.006 * LAMPORTS_PER_SOL;
-    if (solSent) tx.add(SystemProgram.transfer({ fromPubkey: desk.publicKey, toPubkey: owner, lamports: 0.01 * LAMPORTS_PER_SOL }));
+    // top up to 0.02 SOL: each policy account costs ~0.0024 SOL rent, so Cover all on a 5-line plan needs ~0.014 SOL
+    // (the old 0.01 drip failed "insufficient funds for rent" on 5 policies); ~60 fresh wallets per 1.2 desk SOL
+    const SOL_TARGET = 0.02 * LAMPORTS_PER_SOL;
+    const solSent = lamports < 0.015 * LAMPORTS_PER_SOL;
+    if (solSent) tx.add(SystemProgram.transfer({ fromPubkey: desk.publicKey, toPubkey: owner, lamports: Math.round(SOL_TARGET - lamports) }));
     const sig = tx.instructions.length ? await sendAndPoll(conn, tx, [desk]) : null;
     return NextResponse.json({ minted: Number(minted) / 10 ** m.decimals, usd: TARGET_USD, solSent, sig });
   } catch (e) {

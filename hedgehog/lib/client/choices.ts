@@ -31,5 +31,10 @@ export function applyPicks(q: Quote, picks: Picks, cov: Coverage): Quote {
   }
   const order = new Map(q.risks.map((r, i) => [r.id, i]));
   lines.sort((a, b) => (order.get(a.riskId) ?? 99) - (order.get(b.riskId) ?? 99));
-  return rescaleQuote({ ...q, lines }, cov);
+  // the risk's title / trigger follow the chosen contract (each choice carries its own wording from the advisor)
+  const risks = q.risks.map((r) => {
+    const l = lines.find((x) => x.riskId === r.id);
+    return l && (l.riskTitle || l.riskTrigger) ? { ...r, title: l.riskTitle ?? r.title, trigger: l.riskTrigger ?? r.trigger } : r;
+  });
+  return rescaleQuote({ ...q, risks, lines }, cov);
 }
