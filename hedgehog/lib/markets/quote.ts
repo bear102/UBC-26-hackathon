@@ -41,7 +41,9 @@ const r4 = (x: number) => Math.round(x * 10000) / 10000;
 
 /** Demo: cover can be priced from ANY of the 3 venues (whichever is cheapest for the same contract). The policy is sold
  *  on Solana; the desk's backing order on that venue is recorded but only ever placed on Gemini (and only when live). */
-export const isCoverable = (c: MarketContract): boolean => c.status === "open" && (c.tradable || c.venue === "polymarket");
+export const isCoverable = (c: MarketContract): boolean => c.status === "open" && (c.tradable || c.venue === "polymarket") && fitsOnchain(c.id);
+/** The Cover program stores marketRef in <= 64 bytes; longer ids (some Polymarket slugs) could be quoted but never bought. */
+export const fitsOnchain = (id: string): boolean => new TextEncoder().encode(id).length <= 64;
 export const actionFor = (c: MarketContract): QuoteLine["action"] =>
   isCoverable(c) ? "buy-onchain" : c.venue === "gemini" ? "open-on-gemini" : "read-only";
 

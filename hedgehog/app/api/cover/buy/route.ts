@@ -51,6 +51,7 @@ export async function POST(req: Request) {
     if (!(contracts >= 1)) throw new VenueError("contracts (or payoutUsd) must be >= 1");
     const contract = await defaultGetContract(b.marketRef);
     if (!contract) throw new VenueError(`unknown market ${b.marketRef}`, 404, "not_found");
+    if (contract.status !== "open") throw new VenueError(`market ${contract.id} is ${contract.status}, not open`, 409, "market_closed");
     if (!isCoverable(contract)) throw new VenueError(`${contract.venue} markets are read-only context (cannot price cover)`, 400, "not_tradable");
     assertNotCovered(await ownerPolicies(() => coverClient().listPolicies(owner)), { businessId: b.businessId, marketRef: contract.id });
     const price = priceBuy(contract, b.side, contracts); // open, not expired, ask <= MAX_ASK, fee applied

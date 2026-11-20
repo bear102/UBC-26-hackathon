@@ -94,7 +94,8 @@ export function CoverAllDialog({ items: initial, businessId, budgetUsd, onClose,
   }, [busy, onClose]);
 
   const priceMoved = !!err && /price moved/i.test(err);
-  const noRetry = !!err && /budget|can't take on/i.test(err); // retrying the same plan fails the same way
+  const closed = !!err && /market has closed|can't be covered on Hedgehog/i.test(err);
+  const noRetry = !!err && /budget|can't take on|already have this cover/i.test(err); // retrying the same plan fails the same way
   async function refresh() {
     if (!onRefresh) return;
     setRefreshing(true);
@@ -146,7 +147,7 @@ export function CoverAllDialog({ items: initial, businessId, budgetUsd, onClose,
             {mock && <div className="alert alert-info small" style={{ marginBottom: 12 }}>Demo mode: simulated, nothing goes onchain.</div>}
             <div className={c.actions}>
               <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-              <button className="btn btn-primary" onClick={start}>{connected || mock ? `Cover all · ${usd(premium, 2)}` : "Connect wallet & cover all"}</button>
+              <button className="btn btn-primary" onClick={start} autoFocus>{connected || mock ? `Cover all · ${usd(premium, 2)}` : "Connect wallet & cover all"}</button>
             </div>
           </>
         )}
@@ -159,7 +160,7 @@ export function CoverAllDialog({ items: initial, businessId, budgetUsd, onClose,
             <div className="alert alert-bad" role="alert" style={{ marginBottom: 12 }}>{priceMoved ? <>A market price moved since your quote. <span className="muted">({err})</span></> : err}</div>
             <div className={c.actions}>
               <button className="btn btn-ghost" onClick={onClose}>Close</button>
-              {priceMoved && onRefresh
+              {(priceMoved || closed) && onRefresh
                 ? <button className="btn btn-primary" onClick={refresh} disabled={refreshing}>{refreshing ? <><span className="spinner" /> Refreshing…</> : "Refresh prices"}</button>
                 : noRetry ? null : <button className="btn btn-primary" onClick={start}>Try again</button>}
             </div>

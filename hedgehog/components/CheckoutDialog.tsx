@@ -92,11 +92,13 @@ export function CheckoutDialog({ kind, line: initialLine, risk, businessId, onCl
   useEffect(() => { if (stage === "connect" && connected && publicKey) run(); }, [stage, connected, publicKey, run]);
 
   const priceMoved = !!err && /price moved/i.test(err);
+  const closed = !!err && /market has closed|can't be covered on Hedgehog/i.test(err);
   async function refresh() {
     if (!onRefresh) return;
     setRefreshing(true);
     try {
       const fresh = (await onRefresh()).find((i) => i.line.contractId === line.contractId)?.line;
+      if (!fresh) { onClose(); return; } // its market closed (dropped from the plan) or the line is already covered
       if (fresh) { setMoved({ before: line.premiumUsd, after: fresh.premiumUsd }); setLine(fresh); }
       setErr(null); setFailedAt(null); setStage("review");
     } catch (e) { setErr(plainError(e, walletErrorMessage)); }
@@ -157,7 +159,7 @@ export function CheckoutDialog({ kind, line: initialLine, risk, businessId, onCl
             {mock && <div className="alert alert-info small" style={{ marginBottom: 12 }}>Demo mode: simulated, nothing goes onchain.</div>}
             <div className={s.actions}>
               <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-              <button className="btn btn-primary" onClick={start}>{connected || mock ? (isCover ? "Get covered" : "Buy hedge") : "Connect wallet & get covered"}</button>
+              <button className="btn btn-primary" onClick={start} autoFocus>{connected || mock ? (isCover ? "Get covered" : "Buy hedge") : "Connect wallet & get covered"}</button>
             </div>
           </>
         )}
@@ -180,7 +182,7 @@ export function CheckoutDialog({ kind, line: initialLine, risk, businessId, onCl
             <div className="alert alert-bad" role="alert" style={{ marginBottom: 12 }}>{priceMoved ? <>The market price moved since your quote. <span className="muted">({err})</span></> : err}</div>
             <div className={s.actions}>
               <button className="btn btn-ghost" onClick={onClose}>Close</button>
-              {priceMoved && onRefresh
+              {(priceMoved || closed) && onRefresh
                 ? <button className="btn btn-primary" onClick={refresh} disabled={refreshing}>{refreshing ? <><span className="spinner" /> Refreshing…</> : "Refresh prices"}</button>
                 : <button className="btn btn-primary" onClick={start}>Try again</button>}
             </div>

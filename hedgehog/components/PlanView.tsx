@@ -30,6 +30,12 @@ import { IconArrowRight, IconCheck } from "./Icons";
 import s from "./PlanView.module.css";
 
 const COVS: Coverage[] = [25, 50, 100];
+/** "4:02 PM" today; "Nov 19, 4:02 PM" for an older quote, so a stale price is visible. */
+const pricedAt = (iso: string) => {
+  const d = new Date(iso);
+  const opts: Intl.DateTimeFormatOptions = d.toDateString() === new Date().toDateString() ? { hour: "numeric", minute: "2-digit" } : { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" };
+  return d.toLocaleString([], opts);
+};
 const asCov = (n: number | null): Coverage => (n === 25 || n === 100 ? n : 50);
 
 export function PlanView() {
@@ -201,7 +207,7 @@ export function PlanView() {
   const coveredRisks = quote.risks.filter((r) => linesByRisk.has(r.id));
   // creative (proxy) ideas live in their own section, never under "Not coverable"
   const proxyIds = new Set(quote.risks.filter((r) => r.kind === "proxy").map((r) => r.id));
-  const notCoverable = quote.uncovered.filter((u) => !proxyIds.has(u.riskId));
+  const notCoverable = quote.uncovered.filter((u) => !proxyIds.has(u.riskId) && !linesByRisk.has(u.riskId));
   const uncoveredIds = new Set([...quote.uncovered.map((u) => u.riskId), ...proxyIds]);
   const applyChoice = (q: Quote) => { saveQuote(q, cov); setQuote(q); setLocal(true); };
   // Owner corrects the AI's loss estimate: re-size that hedge (and the budget fit) instantly, no AI call.
@@ -221,11 +227,17 @@ export function PlanView() {
     const buyable = quote.lines.filter((l) => l.action !== "read-only");
     const r = await coverReprice(buyable.map((l) => ({ marketRef: l.contractId, side: l.side })));
     const ask = new Map(r.lines.map((x) => [`${x.marketRef}|${x.side}`, x.ask]));
-    const lines = quote.lines.map((l) => {
+    // A market that closed while the quote sat open can't be bought any more: drop its line and say why.
+    const shut = new Set(r.lines.filter((x) => x.ask == null && /market is (closed|settled|not coverable)|not found/i.test(x.error ?? "")).map((x) => `${x.marketRef}|${x.side}`));
+    const lines = quote.lines.filter((l) => !shut.has(`${l.contractId}|${l.side}`)).map((l) => {
       const a = ask.get(`${l.contractId}|${l.side}`);
       return a == null ? l : { ...l, pricePerContract: a };
     });
-    const q = rescaleQuote({ ...quote, lines, createdAt: r.at }, cov);
+    const dropped = quote.lines.filter((l) => shut.has(`${l.contractId}|${l.side}`) && !lines.some((k) => k.riskId === l.riskId) && !quote.uncovered.some((u) => u.riskId === l.riskId));
+    const uncovered = [...quote.uncovered, ...dropped.map((l) => ({ riskId: l.riskId, reason: "Its market has closed since this quote." }))];
+    // ...and keep it out of the plan switcher, which rebuilds lines from these options
+    const options = quote.options?.map((o) => ({ ...o, choices: o.choices.filter((c) => !shut.has(`${c.contractId}|${c.side}`)) }));
+    const q = rescaleQuote({ ...quote, lines, uncovered, ...(options ? { options } : {}), createdAt: r.at }, cov);
     saveQuote(q, cov); setQuote(q); setLocal(true);
     const byId = new Map(q.risks.map((x) => [x.id, x]));
     return coverItems(q.lines, byId, (l) => !!bought[`cover:${l.contractId}`], profile).filter((i) => !i.done);
@@ -302,7 +314,7 @@ export function PlanView() {
         <div className="sec-head">
           <div><span className="eyebrow">Each risk in detail</span><h2>Your risks, <em>matched to markets</em></h2></div>
           <span className={`muted small ${s.quoted}`}>{loading || repricing ? <><span className="spinner" /> refreshing…</> : <>
-            Priced {new Date(quote.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+            Priced {pricedAt(quote.createdAt)}
             {" · "}<button type="button" className={s.tourLink} onClick={async () => { setRepricing(true); try { await refreshPrices(); } finally { setRepricing(false); } }}>Refresh prices</button>
           </>}</span>
         </div>

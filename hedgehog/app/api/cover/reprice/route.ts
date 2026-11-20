@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { defaultGetContract } from "@/lib/venue";
 import { askFor } from "@/lib/venue/pricing";
+import { fitsOnchain } from "@/lib/markets/quote";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +20,7 @@ export async function POST(req: Request) {
       const c = await defaultGetContract(marketRef);
       if (!c) return { marketRef, side, ask: null, error: "market not found" };
       if (c.status !== "open") return { marketRef, side, ask: null, error: `market is ${c.status}` };
+      if (!fitsOnchain(c.id)) return { marketRef, side, ask: null, error: "market is not coverable" };
       const ask = askFor(c, side);
       return { marketRef, side, ask: ask != null && ask > 0 && ask < 1 ? ask : null, ...(ask == null ? { error: "no ask" } : {}) };
     } catch (e) {

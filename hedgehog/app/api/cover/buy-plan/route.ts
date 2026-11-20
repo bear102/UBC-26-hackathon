@@ -50,6 +50,7 @@ export async function POST(req: Request) {
       const tag = `line ${i + 1} (${l.marketRef})`;
       const contract = await defaultGetContract(l.marketRef);
       if (!contract) throw new VenueError(`${tag}: unknown market`, 404, "not_found");
+      if (contract.status !== "open") throw new VenueError(`${tag}: market is ${contract.status}, not open`, 409, "market_closed");
       if (!isCoverable(contract)) throw new VenueError(`${tag}: ${contract.venue} markets are read-only context`, 400, "not_tradable");
       try {
         assertNotCovered(mine, { businessId: b.businessId, marketRef: contract.id });
