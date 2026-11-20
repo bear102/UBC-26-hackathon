@@ -48,3 +48,13 @@ test("eventClause: a NO hedge never reads 'If Houston wins'; names keep their ca
   assert.equal(eventClause({ peril: "game", title: "x", trigger: "Denver beats our team" } as Risk, null, "yes"), "Denver beats our team");
   assert.equal(eventClause({ peril: "rain", title: "x", trigger: "Rain hits" } as Risk, null), eventClause({ peril: "rain" } as Risk, null));
 });
+
+test("tempMeasureOf: daily high vs overnight low wording", async () => {
+  const { tempMeasureOf } = await import("../lib/markets/index");
+  assert.equal(tempMeasureOf("Cold snap empties the patio: Austin daily high <= 55F"), "high");
+  assert.equal(tempMeasureOf("Nights below 40F empty the deck"), "low");
+  assert.equal(tempMeasureOf("Freeze overnight bursts pipes"), "low");
+  assert.equal(tempMeasureOf("Heat wave cuts lunch traffic"), "high");
+  assert.equal(tempMeasureOf("Cold weekend"), null);
+  assert.equal(tempMeasureOf("High demand season with low sales"), null);
+});

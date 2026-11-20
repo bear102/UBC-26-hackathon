@@ -249,6 +249,15 @@ export function properNouns(text: string): string[] {
 }
 
 /** Pure ranking step of findCandidates over a given market universe (no network; used by the eval harness). */
+/** Which daily temperature a weather risk is about: "high" (daily high, daytime, afternoon), "low" (overnight low,
+ *  nights, freeze), or null when the wording doesn't say. */
+export function tempMeasureOf(text: string): "high" | "low" | null {
+  const t = text.toLowerCase();
+  const hi = /\b(daily high|high temp|high of|highs?\b(?! (wind|demand|price|season|school))|daytime|afternoon|midday|lunch)/.test(t);
+  const lo = /\b(overnight|nights?|nighttime|daily low|low temp|lows?\b(?! (season|demand|price|turnout|traffic|sales))|minimum|lowest|freez|frost)/.test(t);
+  return hi && !lo ? "high" : lo && !hi ? "low" : null;
+}
+
 export function rankCandidates(risk: Risk, profile: BusinessProfile, universe: MarketContract[], limit = 15, nowDate = new Date()): MarketContract[] {
   const family = perilFamily(risk.peril), venues = candidateVenues(risk.peril);
   const all = universe.filter((c) => family.includes(c.peril) && venues.includes(c.venue));
@@ -285,6 +294,7 @@ export function rankCandidates(risk: Risk, profile: BusinessProfile, universe: M
   const otherWords = risk.peril === "other" ? [...new Set((`${risk.title} ${risk.trigger}`.toLowerCase().match(/[a-z]{5,}/g) ?? [])
     .filter((w) => !["price", "prices", "above", "below", "business", "occurs", "during", "spike", "drops", "rises", "before", "after", "through", "until"].includes(w)))] : [];
   const named = new Set<string>(); // "other" contracts whose title names the risk's own words
+  const tempMeasure = tempMeasureOf(`${risk.title} ${risk.trigger}`);
 
   const scored: { c: MarketContract; s: number; exp: number }[] = [];
   for (const c of all) {
@@ -298,6 +308,13 @@ export function rankCandidates(risk: Risk, profile: BusinessProfile, universe: M
     // market (US tornado count) only counts for national perils (incl. the storm proxy for hail)
     if (isNationalPlace(c.location) ? local && !NATIONAL_PERILS.includes(c.peril) : !locMatches(c.location, loc) && !sameState(c.location, risk.location || profile.city) && !sameState(c.location, profile.city)) continue;
     if (!proxyFits(risk.peril, c)) continue; // proxy markets only on the side that tracks the loss (wet month for flood, dry for wildfire)
+    // daily HIGH vs daily LOW are different measurements: a "daily high <= 55F" cold risk never gets the overnight-low
+    // market, and "nights below 40F" never gets the daytime-high one (demo QA: cold snap matched to Polymarket's daily low)
+    if ((risk.peril === "heat" || risk.peril === "cold") && (c.peril === "heat" || c.peril === "cold")) {
+      const isLow = /lowest|minimum|\blow\b|wxlow|lowt/i.test(`${c.eventTitle} ${c.symbol}`);
+      if (tempMeasure === "high" && isLow) continue;
+      if (tempMeasure === "low" && !isLow) continue;
+    }
     const meta = contractMeta(c.id);
 
     // time window
