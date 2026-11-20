@@ -129,12 +129,13 @@ export function buildExplorer(markets: MarketContract[], now = Date.now()): Expl
       const num = (o: ExplorerOutcome) => { const [lo, hi] = o.key.split("|"); const n = Number(lo !== "" ? lo : hi); return Number.isFinite(n) ? n : 0; };
       ev.outcomes.sort((a, b) => num(a) - num(b));
     }
-    let spread = -1;
+    let spread = -1, aligned = 0;
     for (const o of ev.outcomes) {
       const ps = ORDER.map((v) => o.cells[v]?.p).filter((x): x is number => typeof x === "number");
-      if (ps.length >= 2) spread = Math.max(spread, Math.round((Math.max(...ps) - Math.min(...ps)) * 100));
+      if (ps.length >= 2) { aligned++; spread = Math.max(spread, Math.round((Math.max(...ps) - Math.min(...ps)) * 100)); }
     }
-    if (spread >= 0) ev.spreadPts = spread;
+    // "markets agree" needs 2+ outcomes quoted by 2+ venues (one shared bucket proves little; misaligned buckets prove nothing)
+    if (spread >= 0 && (aligned >= 2 || ev.outcomes.length === 1)) ev.spreadPts = spread;
     events.push(ev);
   }
   events.sort((a, b) => (b.venues.length - a.venues.length) || a.date.localeCompare(b.date) || a.title.localeCompare(b.title));

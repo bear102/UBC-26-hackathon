@@ -144,12 +144,14 @@ test("wildfire -> a dry-season rain market (California 'Drier'), air quality -> 
   assert.match(noMarketReason("rain", " in Austin"), /No live market for rain in Austin/);
 });
 
+// in season (Oct 15): from Nov 16 to May 31 landfall markets are dropped as off-season (tests/matching-qa-c1.test.ts)
+const IN_SEASON = new Date("2026-10-15T15:00:00Z");
 test("hurricane risk: the business's state / city landfall markets, not other states", () => {
-  const hou = rankCandidates(risk("storm", "Hurricane hits the coast", "hurricane landfall in Texas"), biz("Houston, TX"), UNIVERSE, 10, NOW);
+  const hou = rankCandidates(risk("storm", "Hurricane hits the coast", "hurricane landfall in Texas"), biz("Houston, TX"), UNIVERSE, 10, IN_SEASON);
   assert.ok(hou.some((c) => c.location === "Texas"));
   assert.ok(hou.every((c) => c.location === "Texas" || c.location === "US"), hou.map((c) => c.location).join(","));
   assert.match(hou[0].eventTitle, /hurricane/i);
-  const tpa = rankCandidates(risk("storm", "Hurricane closes the shop", "hurricane landfall"), biz("Tampa, FL"), UNIVERSE, 10, NOW);
+  const tpa = rankCandidates(risk("storm", "Hurricane closes the shop", "hurricane landfall"), biz("Tampa, FL"), UNIVERSE, 10, IN_SEASON);
   assert.ok(tpa.some((c) => c.venue === "kalshi" && c.location === "Tampa") && tpa.some((c) => c.location === "Florida"));
   assert.ok(!tpa.some((c) => c.location === "Hawaii" || c.location === "Texas"));
 });

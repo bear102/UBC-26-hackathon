@@ -13,6 +13,8 @@ import { PolicyStory, PositionStory } from "./explain/PositionStory";
 import { PastQuotes } from "./PastQuotes";
 import { TaxRecord } from "./TaxRecord";
 import { HeadsUp } from "./plan/HeadsUp";
+import { DemoWalletButton } from "./DemoWalletButton";
+import { venueName } from "@/lib/client/venues";
 import { Provenance, venueOfId } from "./markets/Provenance";
 import { When } from "./markets/When";
 import { GuillocheBand, Rosette, Seal } from "./Engraving";
@@ -36,6 +38,31 @@ const policyStamp = (status: string) => (/paid/i.test(status) ? "stamp-settled" 
 /** Serial printed on a stub, derived from the real id (never invented). */
 const IconPlus = ({ size = 15 }: { size?: number }) => <svg viewBox="0 0 16 16" width={size} height={size} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" aria-hidden="true"><path d="M8 3v10M3 8h10" /></svg>;
 const Ext = () => <IconExternal size={11} className={s.ext} />;
+const MON: Record<string, string> = { JAN: "Jan", FEB: "Feb", MAR: "Mar", APR: "Apr", MAY: "May", JUN: "Jun", JUL: "Jul", AUG: "Aug", SEP: "Sep", OCT: "Oct", NOV: "Nov", DEC: "Dec" };
+const CITY: Record<string, string> = { AUS: "Austin", HOU: "Houston", DAL: "Dallas", SAT: "San Antonio", NY: "New York", CHI: "Chicago", MIA: "Miami", LAX: "Los Angeles" };
+/** Readable name for a market id when we have no market data for it (never show a raw ticker as a title). */
+export function prettyRef(id?: string | null): string {
+  if (!id) return "Market";
+  const t = id.replace(/^[a-z]+:/, "");
+  const wk = t.match(/^KXRAINWKND-\d\d([A-Z]{3})(\d\d)-([A-Z]{2,3})/);
+  if (wk) return `Rain in ${CITY[wk[3]] ?? wk[3]}, weekend of ${MON[wk[1]] ?? wk[1]} ${Number(wk[2])}`;
+  const rain = t.match(/^KXRAIN(?:WKND)?([A-Z]{2,3})M?-(\d\d)([A-Z]{3})(\d\d)?/);
+  if (rain) return `Rain in ${CITY[rain[1]] ?? rain[1]}${rain[4] ? ` on ${MON[rain[3]] ?? rain[3]} ${Number(rain[4])}` : ` in ${MON[rain[3]] ?? rain[3]}`}`;
+  const game = t.match(/^GAME-([A-Z]+)-([A-Z]+)-([A-Z]+)-\d\d(\d\d)(\d\d)-([A-Z]+)/);
+  if (game) return `${game[1]}: ${game[2]} vs ${game[3]}, ${Object.values(MON)[Number(game[4]) - 1] ?? ""} ${Number(game[5])} (${game[6]} wins)`;
+  return `${venueName(id.slice(0, Math.max(0, id.indexOf(":"))) || "")} market ${t}`.trim();
+}
+/** Feed lines in plain words (server text is desk/ops wording). */
+function plainFeed(text: string): string {
+  let m: RegExpMatchArray | null;
+  if (/^QuickNode: tx .* touched the Hedgehog desk/.test(text)) return "Transaction on the Hedgehog program";
+  if (/^QuickNode: business registered/.test(text)) return "A business signed up for cover";
+  if ((m = text.match(/^Hedgehog Cover #\d+: ([\d.]+) USDC premium for ([\d.]+) USDC payout(?: \((\w+),\s*([^)]+)\))?/)))
+    return `Policy bought: pays ${usd(Number(m[2]))} for a ${usd(Number(m[1]), 2)} premium${m[4] ? ` (${prettyRef(m[4])})` : ""}`;
+  if ((m = text.match(/^Desk hedge on (\w+) \((dry-run|live)\)/))) return `Hedgehog backed a policy on ${m[1]}${m[2] === "dry-run" ? " (test order)" : ""}`;
+  if ((m = text.match(/^Hedge filled: ([\d,]+) \w+ × (\S+) for (\$[\d.,]+)/))) return `Hedge bought: ${m[1]} contracts on ${prettyRef(m[2])} for ${m[3]}`;
+  return text;
+}
 
 export function Dashboard() {
   const { publicKey } = useWallet();
@@ -100,7 +127,7 @@ export function Dashboard() {
   // /api/positions enriches rows with { markPrice, contract }; fall back to market polling / stored quotes.
   const label = (p: Position) => {
     const m = (p as RichPosition).contract ?? markets.get(p.contractId) ?? ctx.get(p.contractId)?.line?.contract;
-    return m ? { title: m.eventTitle, sub: m.label, m } : { title: p.contractId, sub: "", m: undefined };
+    return m ? { title: m.eventTitle, sub: m.label, m } : { title: prettyRef(p.contractId), sub: "", m: undefined };
   };
   const markOf = (p: Position): number | null => {
     const mp = (p as RichPosition).markPrice;
@@ -143,9 +170,11 @@ export function Dashboard() {
                   <h2 className={s.connectTitle}>Connect your wallet <em>to see your cover</em></h2>
                   <p className={s.connectText}>Your hedges and policies live in your wallet on Solana devnet.</p>
                   <div className="row">
-                    <button className="btn btn-primary" onClick={() => setVisible(true)}><IconWallet size={16} /> Connect Phantom</button>
-                    <a className="btn" href="/dashboard?mock=1">View demo dashboard</a>
+                    <button className="btn btn-primary" onClick={() => setVisible(true)}><IconWallet size={16} /> Connect wallet</button>
+                    <DemoWalletButton />
+                    <a className="btn btn-ghost" href="/dashboard?mock=1">View sample dashboard</a>
                   </div>
+                  <p className="xs muted" style={{ margin: "10px 0 0" }}>No wallet? The demo wallet lives in this browser and comes with free test dollars.</p>
                 </div>
               </div>
             </div>
@@ -156,6 +185,7 @@ export function Dashboard() {
     );
   }
 
+  const mock = isMock();
   const heroCtx = stats.hero ? ctx.get(stats.hero.contractId) : undefined;
   const heroLoss = heroCtx?.risk?.lossUsd ?? (stats.hero?.businessId === "rainey-patio-bar" ? 1100 : undefined);
   const heroLabel = stats.hero ? label(stats.hero) : null;
@@ -171,6 +201,7 @@ export function Dashboard() {
         <Link href="/#pick" className="btn btn-primary"><IconPlus size={15} /> New quote</Link>
       </header>
 
+      {mock && <div className="alert alert-info small" style={{ marginBottom: 16 }}>Sample data: a demo wallet with made-up cover. Nothing here is real. <a href="/dashboard">Leave sample mode</a></div>}
       <section className={s.stats} aria-label="Totals">
         <div><span className="label">Active cover</span><b className="fig pay">{usd(stats.openCover)}</b><small>paid if your triggers hit</small></div>
         <div><span className="label">Premiums paid</span><b className="fig cost">{usd(stats.premium, 2)}</b><small>hedges + Cover policies</small></div>
@@ -228,7 +259,7 @@ export function Dashboard() {
                     <span className={`stamp ${STATUS[p.status]?.cls ?? "stamp-void"} ${s.stamp}`}>{STATUS[p.status]?.label ?? p.status}</span>
                     <div className={s.kick}>{p.status === "open" && <span className="dot live" />}Hedge · {p.side.toUpperCase()} · {timeAgo(p.createdAt)}</div>
                     <h4>{lb.title}</h4>
-                    <p>{lb.sub || p.contractId}{lb.m?.expiry ? <> · closes <When iso={lb.m.expiry} /></> : ""}</p>
+                    <p>{lb.sub || venueName(venueOfId(p.contractId) ?? "")}{lb.m?.expiry ? <> · closes <When iso={lb.m.expiry} /></> : ""}</p>
                     <div className={s.story}><PositionStory position={p} risk={ctx.get(p.contractId)?.risk} contract={lb.m ?? null} mark={mark} /></div>
                     <div className={`stub-grid ${s.grid4}`}>
                       <div><span>Contracts</span><b>{p.contracts.toLocaleString()}</b></div>
@@ -265,8 +296,8 @@ export function Dashboard() {
                   <Rosette className="stub-rosette" density={8} steps={200} />
                   <span className={`stamp ${policyStamp(x.status)} ${s.stamp}`}>{x.status}</span>
                   <div className={s.kick}>Hedgehog Cover · Policy #{x.policyId}</div>
-                  <h4>{x.trigger ?? x.marketRef}</h4>
-                  <p>{x.marketRef}{x.expiry ? <> · closes <When iso={x.expiry} /></> : ""}</p>
+                  <h4>{x.trigger ?? prettyRef(x.marketRef)}</h4>
+                  <p>{(x.marketRef && (markets.get(x.marketRef)?.eventTitle ?? ctx.get(x.marketRef)?.line?.contract.eventTitle)) || prettyRef(x.marketRef)}{x.expiry ? <> · closes <When iso={x.expiry} /></> : ""}</p>
                   <div className={s.story}><PolicyStory status={x.status} payoutUsd={x.payoutUsd} premiumUsd={x.premiumUsd} trigger={x.trigger} expiry={x.expiry} /></div>
                   <div className="stub-grid">
                     <div><span>Pays</span><b className="pay">{usd(x.payoutUsd)}</b></div>
@@ -284,9 +315,9 @@ export function Dashboard() {
               </article>
             ))}
           </div>
-          {owner && <TaxRecord owner={owner} />}
+          {owner && !mock && <TaxRecord owner={owner} />}
         </div>
-        <FeedPanel feed={feed} />
+        <FeedPanel feed={feed} mine={new Set([...(policies ?? []).map((x) => x.txSig), ...(positions ?? []).map((p) => p.txSig)].filter(Boolean) as string[])} />
       </section>
     </div>
   );
@@ -298,39 +329,42 @@ function Backing({ h }: { h?: DeskHedge }) {
   return (
     <div className={s.backing}>
       <div className="row between" style={{ gap: 8 }}>
-        <b className={s.backingTitle}>Hedgehog&apos;s backing on Gemini</b>
-        <span className={`badge ${h.status === "error" || h.status === "rejected" ? "badge-bad" : "badge-gemini"}`}>{h.mode === "live" ? h.status : h.status === "error" ? "not placed" : "dry-run"}</span>
+        <b className={s.backingTitle}>Hedgehog&apos;s backing on {venueName(venueOfId(h.contractId) ?? "gemini")}</b>
+        <span className={`badge ${h.status === "error" || h.status === "rejected" ? "badge-bad" : "badge-gemini"}`}>{h.mode === "live" ? h.status : h.status === "error" ? "not placed" : "test order"}</span>
       </div>
       <div className={s.order}>{h.limitPrice > 0 ? orderText(h) : `${h.outcome.toUpperCase()} ${h.symbol}`}</div>
       <div className="muted" style={{ marginTop: 4 }}>
         {h.error ? h.error : <>Desk spends ≤ {usd(h.notionalUsd, 2)}{h.soldForUsd != null ? ` vs ${usd(h.soldForUsd, 2)} received` : ""}. It pays out exactly when you&apos;re owed.</>}
-        {h.url && <> · <a href={h.url} target="_blank" rel="noreferrer">Gemini market <Ext /></a></>}
+        {h.url && <> · <a href={h.url} target="_blank" rel="noreferrer">{venueName(venueOfId(h.contractId) ?? "gemini")} market <Ext /></a></>}
       </div>
     </div>
   );
 }
 
-function FeedPanel({ feed }: { feed: FeedEvent[] }) {
+function FeedPanel({ feed, mine }: { feed: FeedEvent[]; mine?: Set<string> }) {
   return (
     <aside className={`card ${s.feed}`} aria-label="Live event feed">
       <div className={`doc-head ${s.feedHead}`}>
-        <span className="caps-title">Live feed</span>
+        <span className="caps-title">Network activity</span>
         <span className="row" style={{ gap: 6 }}>
           <span className={`badge ${SOURCE.quicknode.cls}`}>{SOURCE.quicknode.label}</span>
           <span className="badge badge-good"><span className="dot live" /> Live</span>
         </span>
       </div>
+      <p className="xs muted" style={{ margin: "8px 0 0" }}>Everything happening on Hedgehog right now{mine?.size ? ". Yours are marked." : "."}</p>
       {feed.length === 0 ? <div className="empty small">Waiting for events…</div> : (
         <ol className={s.events}>
           {feed.map((e) => {
-            const src = e.text.startsWith("Desk hedge on Gemini") ? { label: "Gemini desk", cls: "badge-gemini" } : SOURCE[e.source] ?? SOURCE.app;
+            const desk = e.text.match(/^Desk hedge on (\w+)/);
+            const src = desk ? { label: `${desk[1]} backing`, cls: /gemini/i.test(desk[1]) ? "badge-gemini" : "badge-kalshi" } : SOURCE[e.source] ?? SOURCE.app;
+            const yours = !!e.txSig && !!mine?.has(e.txSig);
             return (
               <li key={e.id}>
                 <div className="row between" style={{ gap: 6 }}>
-                  {e.source === "quicknode" && src === SOURCE.quicknode ? <span /> : <span className={`badge ${src.cls}`}>{src.label}</span>}
+                  <span className="row" style={{ gap: 4 }}>{e.source === "quicknode" && src === SOURCE.quicknode ? null : <span className={`badge ${src.cls}`}>{src.label}</span>}{yours && <span className="badge badge-good">Yours</span>}</span>
                   <span className={s.when} title={e.at}>{timeAgo(e.at)}</span>
                 </div>
-                <p>{e.text}</p>
+                <p>{plainFeed(e.text)}</p>
                 {e.txSig && <a className={s.tx} href={explorerTx(e.txSig)} target="_blank" rel="noreferrer">{shortAddr(e.txSig, 6)} <Ext /></a>}
               </li>
             );

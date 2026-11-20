@@ -171,7 +171,86 @@ export const OWN_TEAMS: (OwnTeam & { re: RegExp })[] = [
   { re: /\bcowboys\b/i, nick: "Cowboys", city: "Dallas", names: ["dallas", "dallas cowboys", "cowboys"], league: ["NFL"], conf: "NFC", homePerRound: 0.5 },
   { re: /\blonghorns\b|\bUT Austin\b/i, nick: "Longhorns", city: "Austin", names: ["texas", "texas longhorns", "longhorns"], league: ["NCAAF", "NCAAM"], homePerRound: 0.5 },
   { re: /\bdallas stars\b|\bstars (game|hockey|playoff)/i, nick: "Stars", city: "Dallas", names: ["dallas", "dallas stars", "stars"], league: ["NHL"], conf: "Western", homePerRound: 2.5 },
+  ...leagueTeams(),
 ];
+
+/**
+ * Every other NBA / NFL / NHL team (+ big college programs), so a Boston pub's Celtics or a Kansas City lot's Chiefs get
+ * the same season-futures and game handling as the Texas teams (QA cycle 1: OWN_TEAMS was Texas-only, so non-Texas owners
+ * were told "no market" while their team's futures were live). Row: label venues use | full name | nickname | home city | conf.
+ * Nicknames that are also everyday words (Heat, Bills, Avalanche, Wild...) only count next to their city or a sports word.
+ */
+function leagueTeams(): (OwnTeam & { re: RegExp })[] {
+  const AMBIG = /^(heat|magic|thunder|kings|jazz|nets|suns|bulls|hawks|wild|stars|blues|lightning|jets|giants|rangers|bills|saints|lions|bears|eagles|titans|sharks|ducks|flames|flyers|senators|capitals|predators|hurricanes|avalanche|panthers|cardinals|devils|rams|colts|chiefs|kraken|mammoth|islanders|packers|raiders|chargers|browns|commanders|dolphins|jaguars|bengals|ravens|falcons|vikings|steelers|warriors|pistons|pacers|hornets|grizzlies|pelicans|knicks|clippers|lakers|celtics|nuggets)$/i;
+  const SAFE = /^(celtics|nuggets|knicks|lakers|clippers|pelicans|grizzlies|hornets|pacers|pistons|warriors|steelers|vikings|falcons|ravens|bengals|jaguars|dolphins|commanders|browns|chargers|raiders|packers|islanders|chiefs|kraken)$/i;
+  const rows: [string, string, string, string, string, string?][] = [
+    // NBA
+    ["NBA", "Boston", "Celtics", "Boston", "Eastern"], ["NBA", "Brooklyn", "Nets", "New York", "Eastern"], ["NBA", "New York", "Knicks", "New York", "Eastern"],
+    ["NBA", "Philadelphia", "76ers", "Philadelphia", "Eastern", "sixers"], ["NBA", "Toronto", "Raptors", "Toronto", "Eastern"], ["NBA", "Chicago", "Bulls", "Chicago", "Eastern"],
+    ["NBA", "Cleveland", "Cavaliers", "Cleveland", "Eastern", "cavs"], ["NBA", "Detroit", "Pistons", "Detroit", "Eastern"], ["NBA", "Indiana", "Pacers", "Indianapolis", "Eastern"],
+    ["NBA", "Milwaukee", "Bucks", "Milwaukee", "Eastern"], ["NBA", "Atlanta", "Hawks", "Atlanta", "Eastern"], ["NBA", "Charlotte", "Hornets", "Charlotte", "Eastern"],
+    ["NBA", "Miami", "Heat", "Miami", "Eastern"], ["NBA", "Orlando", "Magic", "Orlando", "Eastern"], ["NBA", "Washington", "Wizards", "Washington", "Eastern"],
+    ["NBA", "Denver", "Nuggets", "Denver", "Western"], ["NBA", "Minnesota", "Timberwolves", "Minneapolis", "Western", "wolves"], ["NBA", "Oklahoma City", "Thunder", "Oklahoma City", "Western", "okc"],
+    ["NBA", "Portland", "Trail Blazers", "Portland", "Western", "blazers"], ["NBA", "Utah", "Jazz", "Salt Lake City", "Western"], ["NBA", "Golden State", "Warriors", "San Francisco", "Western", "dubs"],
+    ["NBA", "Los Angeles C", "Clippers", "Los Angeles", "Western"], ["NBA", "Los Angeles L", "Lakers", "Los Angeles", "Western"], ["NBA", "Phoenix", "Suns", "Phoenix", "Western"],
+    ["NBA", "Sacramento", "Kings", "Sacramento", "Western"], ["NBA", "Memphis", "Grizzlies", "Memphis", "Western"], ["NBA", "New Orleans", "Pelicans", "New Orleans", "Western"],
+    // NFL
+    ["NFL", "Buffalo", "Bills", "Buffalo", "AFC"], ["NFL", "Miami", "Dolphins", "Miami", "AFC"], ["NFL", "New England", "Patriots", "Boston", "AFC", "pats"],
+    ["NFL", "New York J", "Jets", "New York", "AFC"], ["NFL", "Baltimore", "Ravens", "Baltimore", "AFC"], ["NFL", "Cincinnati", "Bengals", "Cincinnati", "AFC"],
+    ["NFL", "Cleveland", "Browns", "Cleveland", "AFC"], ["NFL", "Pittsburgh", "Steelers", "Pittsburgh", "AFC"], ["NFL", "Indianapolis", "Colts", "Indianapolis", "AFC"],
+    ["NFL", "Jacksonville", "Jaguars", "Jacksonville", "AFC", "jags"], ["NFL", "Tennessee", "Titans", "Nashville", "AFC"], ["NFL", "Denver", "Broncos", "Denver", "AFC"],
+    ["NFL", "Kansas City", "Chiefs", "Kansas City", "AFC"], ["NFL", "Las Vegas", "Raiders", "Las Vegas", "AFC"], ["NFL", "Los Angeles C", "Chargers", "Los Angeles", "AFC"],
+    ["NFL", "Philadelphia", "Eagles", "Philadelphia", "NFC"], ["NFL", "New York G", "Giants", "New York", "NFC"], ["NFL", "Washington", "Commanders", "Washington", "NFC"],
+    ["NFL", "Chicago", "Bears", "Chicago", "NFC"], ["NFL", "Detroit", "Lions", "Detroit", "NFC"], ["NFL", "Green Bay", "Packers", "Green Bay", "NFC"],
+    ["NFL", "Minnesota", "Vikings", "Minneapolis", "NFC"], ["NFL", "Atlanta", "Falcons", "Atlanta", "NFC"], ["NFL", "Carolina", "Panthers", "Charlotte", "NFC"],
+    ["NFL", "New Orleans", "Saints", "New Orleans", "NFC"], ["NFL", "Tampa Bay", "Buccaneers", "Tampa", "NFC", "bucs"], ["NFL", "Arizona", "Cardinals", "Phoenix", "NFC"],
+    ["NFL", "Los Angeles R", "Rams", "Los Angeles", "NFC"], ["NFL", "San Francisco", "49ers", "San Francisco", "NFC", "niners"], ["NFL", "Seattle", "Seahawks", "Seattle", "NFC"],
+    // NHL
+    ["NHL", "Boston", "Bruins", "Boston", "Eastern"], ["NHL", "Buffalo", "Sabres", "Buffalo", "Eastern"], ["NHL", "Detroit", "Red Wings", "Detroit", "Eastern"],
+    ["NHL", "Florida", "Panthers", "Miami", "Eastern"], ["NHL", "Montréal", "Canadiens", "Montreal", "Eastern", "habs"], ["NHL", "Ottawa", "Senators", "Ottawa", "Eastern"],
+    ["NHL", "Tampa Bay", "Lightning", "Tampa", "Eastern"], ["NHL", "Toronto", "Maple Leafs", "Toronto", "Eastern", "leafs"], ["NHL", "Carolina", "Hurricanes", "Raleigh", "Eastern", "canes"],
+    ["NHL", "Columbus", "Blue Jackets", "Columbus", "Eastern"], ["NHL", "New Jersey", "Devils", "Newark", "Eastern"], ["NHL", "New York I", "Islanders", "New York", "Eastern"],
+    ["NHL", "New York R", "Rangers", "New York", "Eastern"], ["NHL", "Philadelphia", "Flyers", "Philadelphia", "Eastern"], ["NHL", "Pittsburgh", "Penguins", "Pittsburgh", "Eastern", "pens"],
+    ["NHL", "Washington", "Capitals", "Washington", "Eastern", "caps"], ["NHL", "Chicago", "Blackhawks", "Chicago", "Western"], ["NHL", "Colorado", "Avalanche", "Denver", "Western", "avs"],
+    ["NHL", "Minnesota", "Wild", "Minneapolis", "Western"], ["NHL", "Nashville", "Predators", "Nashville", "Western", "preds"], ["NHL", "St. Louis", "Blues", "St. Louis", "Western"],
+    ["NHL", "Utah", "Mammoth", "Salt Lake City", "Western"], ["NHL", "Winnipeg", "Jets", "Winnipeg", "Western"], ["NHL", "Anaheim", "Ducks", "Anaheim", "Western"],
+    ["NHL", "Calgary", "Flames", "Calgary", "Western"], ["NHL", "Edmonton", "Oilers", "Edmonton", "Western"], ["NHL", "Los Angeles K", "Kings", "Los Angeles", "Western"],
+    ["NHL", "San Jose", "Sharks", "San Jose", "Western"], ["NHL", "Seattle", "Kraken", "Seattle", "Western"], ["NHL", "Vegas", "Golden Knights", "Las Vegas", "Western"],
+    ["NHL", "Vancouver", "Canucks", "Vancouver", "Western"],
+  ];
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const sport = "(?:game|games|fans?|playoffs?|home games?|game nights?|tickets)";
+  const out: (OwnTeam & { re: RegExp })[] = rows.map(([lg, label, nick, city, conf, alias]) => {
+    const full = `${label.replace(/ [A-Z]$/, "")} ${nick}`;
+    const places = [...new Set([label.replace(/ [A-Z]$/, ""), city])].map(esc).join("|");
+    const n = esc(nick);
+    const loose = SAFE.test(nick) || !AMBIG.test(nick);
+    const re = new RegExp(loose ? `\\b${n}\\b${alias ? `|\\b${esc(alias)}\\b` : ""}` : `\\b(?:${places}) ${n}\\b|\\b${n} ${sport}\\b${alias ? `|\\b${esc(alias)}\\b` : ""}`, "i");
+    const names = [...new Set([label, full, `${city} ${nick}`, nick].map((x) => x.toLowerCase()))];
+    return { re, nick, city, names, league: [lg], conf, homePerRound: lg === "NFL" ? 0.5 : 2.5 };
+  });
+  // college programs (venues label them "Ohio St.", "Michigan"); only the program's own name or mascot, never a bare state
+  const college: [RegExp, string, string, string[]][] = [
+    [/\bohio state\b|\bbuckeyes\b|\bOSU football\b/i, "Buckeyes", "Columbus", ["ohio st.", "ohio state", "ohio st"]],
+    [/\bwolverines\b|\bmichigan football\b|\bUMich\b/i, "Wolverines", "Ann Arbor", ["michigan"]],
+    [/\bcrimson tide\b|\balabama football\b/i, "Crimson Tide", "Tuscaloosa", ["alabama"]],
+    [/\bgeorgia bulldogs\b|\bUGA\b/i, "Bulldogs", "Athens", ["georgia"]],
+    [/\bLSU\b|\bfighting tigers\b/i, "Tigers", "Baton Rouge", ["lsu"]],
+    [/\bnotre dame\b|\bfighting irish\b/i, "Fighting Irish", "South Bend", ["notre dame"]],
+    [/\bpenn state\b|\bnittany lions\b/i, "Nittany Lions", "State College", ["penn st.", "penn state"]],
+    [/\boregon ducks\b|\boregon football\b/i, "Ducks", "Eugene", ["oregon"]],
+    [/\btexas a&m\b|\baggies\b/i, "Aggies", "College Station", ["texas a&m"]],
+    [/\bsooners\b/i, "Sooners", "Norman", ["oklahoma"]],
+    [/\bvols\b|\bvolunteers\b/i, "Volunteers", "Knoxville", ["tennessee"]],
+    [/\bclemson\b/i, "Tigers", "Clemson", ["clemson"]],
+    [/\bseminoles\b|\bflorida state\b/i, "Seminoles", "Tallahassee", ["florida st.", "florida state"]],
+    [/\bmiami hurricanes\b/i, "Hurricanes", "Miami", ["miami (fl)", "miami"]],
+    [/\bUSC\b|\btrojans\b/, "Trojans", "Los Angeles", ["usc"]],
+    [/\bjayhawks\b/i, "Jayhawks", "Lawrence", ["kansas"]],
+  ];
+  for (const [re, nick, city, names] of college) out.push({ re, nick, city, names: [...names, nick.toLowerCase()], league: ["NCAAF", "NCAAM"], homePerRound: 0.5 });
+  return out;
+}
 
 /** Teams named in a text, in order of first mention. */
 export function ownTeamsIn(text: string): OwnTeam[] {
@@ -217,7 +296,7 @@ export function stageWanted(text: string): FutureKind[] {
 
 // ---------- deterministic long-horizon risks ----------
 
-const CROWD = /\bbars?\b|\bpub\b|tavern|taphouse|\bgrill\b|\bwings?\b|watch part|sports|game nights?|game days?|restaurant|brewery|\brentals?\b|airbnb|vrbo|\bstays\b|hotel|merch|jerseys?/i;
+const CROWD = /\bbars?\b|\bpub\b|tavern|taphouse|\bgrill\b|\bwings?\b|watch part|sports|game nights?|game days?|restaurant|brewery|\brentals?\b|airbnb|vrbo|\bstays\b|hotel|merch|jerseys?|parking|tailgat|food truck|\binn\b/i;
 const r10 = (x: number) => Math.max(10, Math.round(x / 10) * 10);
 const usd = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 

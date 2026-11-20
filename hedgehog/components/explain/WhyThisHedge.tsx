@@ -86,7 +86,7 @@ export function WhyThisHedge({ line, risk, profile, children }: {
             <dt>What you hold</dt><dd>{ex.sideExplain}</dd>
             <dt>Market used</dt><dd>{c.eventTitle} · “{c.label}” on {VENUE_LABEL[c.venue] ?? c.venue}{line.tier ? ` · ${line.tier}` : ""}</dd>
             <dt>Price</dt><dd>{cents(line.pricePerContract)} per $1 of payout × {line.contracts.toLocaleString()} = {usd(line.premiumUsd, 2)}</dd>
-            {c.depthYes != null || c.depthNo != null ? <><dt>For sale now</dt><dd>~{(line.side === "yes" ? c.depthYes : c.depthNo)?.toLocaleString() ?? "—"} contracts near this price{line.maxCoverable != null ? ` (max for you: ${Math.floor(line.maxCoverable).toLocaleString()})` : ""}</dd></> : null}
+            {c.depthYes != null || c.depthNo != null ? <><dt>For sale now</dt><dd>{line.maxCoverable != null ? `Up to ${Math.floor(line.maxCoverable).toLocaleString()} contracts at about this price` : `~${(line.side === "yes" ? c.depthYes : c.depthNo)?.toLocaleString() ?? "—"} contracts near this price`}</dd></> : null}
             {risk?.evidence && <><dt>Backtest</dt><dd>{risk.evidence}</dd></>}
             {risk?.causalStory && risk.kind !== "proxy" && <><dt>Cause → effect</dt><dd>{risk.causalStory}</dd></>}
             {risk?.correlation && <><dt>Link strength</dt><dd>{risk.correlation}</dd></>}

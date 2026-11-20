@@ -8,7 +8,7 @@ import { IconArrowRight } from "@/components/Icons";
 import s from "@/components/markets/markets.module.css";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Markets · Hedgehog", description: "Live prediction markets across Gemini, Kalshi and Polymarket, grouped by business risk." };
+export const metadata = { title: "Markets — Hedgehog", description: "Live prediction markets across Gemini, Kalshi and Polymarket, grouped by business risk." };
 
 type SP = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);

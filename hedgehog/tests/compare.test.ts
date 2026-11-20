@@ -70,3 +70,17 @@ test("explorer: one row per game across three venues, outcomes aligned by team",
   assert.equal(sas.cells.polymarket?.s, "no");
   assert.equal(e.spreadPts, 9);
 });
+
+test("explorer: 'markets agree' needs 2+ outcomes quoted on 2+ venues (QA: misaligned temp buckets)", () => {
+  const t = (venue: "gemini" | "kalshi" | "polymarket", lo: number, p: number) => {
+    const c = mk({ id: `${venue}:ATL-HI-${lo}`, venue, eventTitle: "Highest temperature in Atlanta on Nov 21, 2026?", label: `${lo}° to ${lo + 1}°`, peril: "heat", location: "Atlanta", yesAsk: p, yesBid: p - 0.02, noAsk: 1 - p + 0.02, noBid: 1 - p, expiry: "2026-11-22T05:00:00Z" });
+    setMeta(c.id, { eventDate: "2026-11-21", bounds: { lo, hi: lo + 1, unit: "°F" } });
+    return c;
+  };
+  const now = Date.parse("2026-11-20T12:00:00Z");
+  const one = buildExplorer([t("gemini", 69, 0.3), t("kalshi", 69, 0.31), t("polymarket", 68, 0.2), t("polymarket", 70, 0.25)], now);
+  assert.equal(one.events.length, 1);
+  assert.equal(one.events[0].spreadPts, undefined);
+  const two = buildExplorer([t("gemini", 69, 0.3), t("kalshi", 69, 0.31), t("gemini", 71, 0.2), t("kalshi", 71, 0.22)], now);
+  assert.equal(two.events[0].spreadPts, 2);
+});

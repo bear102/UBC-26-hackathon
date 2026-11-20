@@ -18,7 +18,9 @@ export function shortDate(iso?: string) {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  // a date far from today names its year ("Fri, Jun 29" alone reads as next June)
+  const far = Math.abs(d.getTime() - Date.now()) > 200 * 86_400_000;
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", ...(far ? { year: "numeric" } : {}) });
 }
 
 export function timeAgo(iso: string) {

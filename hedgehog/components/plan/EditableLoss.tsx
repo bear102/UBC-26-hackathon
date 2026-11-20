@@ -30,6 +30,9 @@ export function EditableLoss({ value, original, onChange }: {
             AI said {usd(original)}
           </button>
         )}
+        {original != null && Math.round(original) !== Math.round(value) && (
+          <span className="xs muted" style={{ flexBasis: "100%" }}>Your budget is shared, so other risks may resize.</span>
+        )}
       </span>
     );
   }

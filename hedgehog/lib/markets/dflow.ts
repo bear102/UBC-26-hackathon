@@ -185,12 +185,25 @@ async function dflowUsable(): Promise<boolean> {
 const kalshiUrl = (series: string) => `https://kalshi.com/markets/${series.toLowerCase()}`;
 const MON: Record<string, number> = { JAN: 1, FEB: 2, MAR: 3, APR: 4, MAY: 5, JUN: 6, JUL: 7, AUG: 8, SEP: 9, OCT: 10, NOV: 11, DEC: 12 };
 
-/** "KXHIGHAUS-26NOV19" -> {date:"2026-11-19"}; "KXRAINAUSM-26NOV" -> {month:"2026-11"}. */
-export function kalshiTickerDate(eventTicker: string): { date?: string; month?: string } {
+/** "KXHIGHAUS-26NOV19" -> {date:"2026-11-19"}; "KXRAINAUSM-26NOV" -> {month:"2026-11"}.
+ *  Some series use DDMMMYY ("KXRAINDAUS-14FEB27" = Feb 14, 2027): when the title names that date, it wins. */
+export function kalshiTickerDate(eventTicker: string, title?: string): { date?: string; month?: string } {
   const m = eventTicker.match(/-(\d{2})([A-Z]{3})(\d{2})?/);
   if (!m || !MON[m[2]]) return {};
-  const ym = `20${m[1]}-${String(MON[m[2]]).padStart(2, "0")}`;
+  const mm = String(MON[m[2]]).padStart(2, "0");
+  if (m[3] && title) {
+    const dmy = `20${m[3]}-${mm}-${m[1]}`;
+    if (titleDates(title).includes(dmy) && !titleDates(title).includes(`20${m[1]}-${mm}-${m[3]}`)) return { date: dmy, month: dmy.slice(0, 7) };
+  }
+  const ym = `20${m[1]}-${mm}`;
   return m[3] ? { date: `${ym}-${m[3]}`, month: ym } : { month: ym };
+}
+
+/** "Rain in Austin on Feb 14, 2027?" -> ["2027-02-14"]. */
+function titleDates(title: string): string[] {
+  return [...title.matchAll(/\b([A-Z][a-z]{2})[a-z]*\.?\s+(\d{1,2}),?\s+(20\d{2})\b/g)]
+    .filter((x) => MON[x[1].toUpperCase()])
+    .map((x) => `${x[3]}-${String(MON[x[1].toUpperCase()]).padStart(2, "0")}-${x[2].padStart(2, "0")}`);
 }
 
 /** All DDMMMYY dates in a ticker: "KXSNOWDAYS-01DEC26-01APR27" -> ["2026-12-01","2027-04-01"]. */
@@ -230,7 +243,7 @@ function toContract(c: Common, spec: SeriesSpec): MarketContract {
   const peril: Peril = (spec.peril === "heat" || spec.peril === "cold") && !spec.fixedPeril ? tempPeril(bounds, !!spec.low) : spec.peril;
   const location = spec.location === "subtitle" ? c.label.split(" · ")[0].trim()
     : spec.location === "title" ? cityFromTitle(c.eventTitle) : spec.location;
-  const td = kalshiTickerDate(c.eventTicker);
+  const td = kalshiTickerDate(c.eventTicker, c.eventTitle);
   let eventDate: string | undefined, eventEnd: string | undefined;
   if (spec.period === "range") {
     // observation window: two DDMMMYY dates = start/end; one date = start (or the end when it is the close day); else open..close

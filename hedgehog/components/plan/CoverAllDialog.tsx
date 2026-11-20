@@ -8,6 +8,7 @@ import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { coverBuyPlan, coverConfirm, devnetFaucet, sleep, type DeskHedge } from "@/lib/client/api";
 import { isMock } from "@/lib/client/mode";
 import { signAllAndSend, walletErrorMessage } from "@/lib/client/tx";
+import { plainError } from "@/lib/client/errors";
 import { explorerTx, shortAddr, usd } from "@/lib/client/format";
 import { setLastOwner } from "@/lib/client/storage";
 import { DEMO_OWNER } from "@/lib/fixtures";
@@ -78,7 +79,7 @@ export function CoverAllDialog({ items: initial, businessId, budgetUsd, onClose,
       }));
       setStage("done");
     } catch (e) {
-      setErr(walletErrorMessage(e)); setStage("error");
+      setErr(plainError(e, walletErrorMessage)); setStage("error");
     } finally { running.current = false; }
   }, [publicKey, signTransaction, signAllTransactions, mock, items, businessId, budgetUsd, premium, onDone]);
 
@@ -90,6 +91,7 @@ export function CoverAllDialog({ items: initial, businessId, budgetUsd, onClose,
   }, [busy, onClose]);
 
   const priceMoved = !!err && /price moved/i.test(err);
+  const noRetry = !!err && /budget|can't take on/i.test(err); // retrying the same plan fails the same way
   async function refresh() {
     if (!onRefresh) return;
     setRefreshing(true);
@@ -99,7 +101,7 @@ export function CoverAllDialog({ items: initial, businessId, budgetUsd, onClose,
       setItems(fresh);
       setMoved({ before, after: fresh.reduce((a, i) => a + i.line.premiumUsd, 0) });
       setErr(null); setStage("review");
-    } catch (e) { setErr(walletErrorMessage(e)); }
+    } catch (e) { setErr(plainError(e, walletErrorMessage)); }
     finally { setRefreshing(false); }
   }
 
@@ -156,7 +158,7 @@ export function CoverAllDialog({ items: initial, businessId, budgetUsd, onClose,
               <button className="btn btn-ghost" onClick={onClose}>Close</button>
               {priceMoved && onRefresh
                 ? <button className="btn btn-primary" onClick={refresh} disabled={refreshing}>{refreshing ? <><span className="spinner" /> Refreshing…</> : "Refresh prices"}</button>
-                : <button className="btn btn-primary" onClick={start}>Try again</button>}
+                : noRetry ? null : <button className="btn btn-primary" onClick={start}>Try again</button>}
             </div>
           </>
         )}

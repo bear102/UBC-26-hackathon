@@ -141,6 +141,11 @@ test("normalizeKalshiEvent: NFL game teams", () => {
 test("kalshiTickerDate", () => {
   assert.deepEqual(kalshiTickerDate("KXHIGHAUS-26NOV19"), { date: "2026-11-19", month: "2026-11" });
   assert.deepEqual(kalshiTickerDate("KXRAINAUSM-26NOV"), { month: "2026-11" });
+  // DDMMMYY series: the title decides (QA #3: KXRAINDAUS-14FEB27 is Feb 14, 2027, not 2014-02-27)
+  assert.deepEqual(kalshiTickerDate("KXRAINDAUS-14FEB27", "Rain in Austin on Feb 14, 2027?"), { date: "2027-02-14", month: "2027-02" });
+  assert.deepEqual(kalshiTickerDate("KXHIGHAUS-26NOV19", "Highest temperature in Austin on Nov 19, 2026?"), { date: "2026-11-19", month: "2026-11" });
+  assert.deepEqual(kalshiTickerDate("KXRAIN-26NOV19-NYC", "Where will it rain on Nov 19, 2026?"), { date: "2026-11-19", month: "2026-11" });
+  assert.deepEqual(kalshiTickerDate("KXRAINWKND-26NOV21", "Rain this weekend?"), { date: "2026-11-21", month: "2026-11" });
 });
 
 // ---------- helpers ----------

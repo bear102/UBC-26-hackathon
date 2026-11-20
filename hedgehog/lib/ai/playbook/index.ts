@@ -4,6 +4,7 @@ import type { BusinessProfile, MarketContract } from "../../types";
 import { INDUSTRIES, PLAYBOOK, REJECTED, type HedgeIdea, type Industry, type MarketQuery } from "./industries";
 import { futureLeague } from "../../markets/futures";
 import { contractMeta } from "../../markets/normalize";
+import { OWN_TEAMS } from "../horizon";
 
 export { INDUSTRIES, PLAYBOOK, REJECTED };
 export type { HedgeIdea, Industry, MarketQuery };
@@ -68,6 +69,8 @@ const TEAMS: { re: RegExp; label: string[]; league: string[] }[] = [
   { re: /\baggies\b|texas a&m/i, label: ["texas a&m"], league: ["NCAAF", "NCAAM"] },
   { re: /\baustin fc\b/i, label: ["austin", "austin fc"], league: ["MLS"] },
   { re: /\bstars\b/i, label: ["dallas"], league: ["NHL"] },
+  // every other pro team + big college programs (lib/ai/horizon.ts OWN_TEAMS)
+  ...OWN_TEAMS.filter((t) => !/^(Spurs|Rockets|Mavericks|Texans|Cowboys|Longhorns|Stars|Aggies)$/.test(t.nick)).map((t) => ({ re: t.re, label: t.names, league: t.league })),
 ];
 function leagueOf(c: MarketContract): string {
   const s = seriesOf(c);
@@ -174,7 +177,11 @@ function triggerText(e: HedgeIdea, best: ResolvedCandidate, profileText = ""): s
   const when = shortDate(c.expiry);
   if (e.marketQuery.hurtWhen === "team-loses") return `${c.label} beats our team (${c.eventTitle}, ${when})`;
   if (e.marketQuery.hurtWhen === "team-misses") {
-    const nick = TEAMS.map((t) => profileText.match(t.re)?.[0]).find((x) => x) ?? "Our team";
+    // the team this contract is about (league + label): "Boston" on an NHL future is the Bruins, not the Celtics (QA cycle 1)
+    const lg = futureLeague(c.venue === "kalshi" ? c.eventTicker : c.eventTicker || c.symbol);
+    const lab = c.label.trim().toLowerCase();
+    const mine = TEAMS.filter((t) => (!lg || t.league.includes(lg)) && t.label.some((n) => lab === n || lab.startsWith(`${n} `)));
+    const nick = mine.map((t) => profileText.match(t.re)?.[0]).find((x) => x) ?? TEAMS.map((t) => profileText.match(t.re)?.[0]).find((x) => x) ?? "Our team";
     return `${nick} fall short of "${c.label}" (${c.eventTitle}, settles ${when}): NO pays`;
   }
   if (e.marketQuery.hurtWhen === "event") return `${c.eventTitle.replace(/\?$/, "")}: ${c.label} (settles ${when})`;
@@ -194,10 +201,13 @@ export function playbookIdeas(profile: BusinessProfile, markets: MarketContract[
   if (!matches.length) return [];
   const text = `${profile.name} ${profile.description}`;
   const scoreOf = new Map(matches.map((m) => [m.industry.id, m.score]));
+  // an idea needs one of its OWN keywords in the owner's words (or city): the industry match alone sold an electrician's
+  // copper-wire hedge to a roofer and a rooftop bar (QA cycle 2)
+  const kwText = `${text} ${profile.city ?? ""}`;
   const scored = PLAYBOOK.filter((e) => scoreOf.has(e.industry)).map((e) => {
-    const kw = e.keywords.filter((k) => re(k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).test(text)).length;
-    return { e, s: (scoreOf.get(e.industry) ?? 0) + 2 * kw - STRENGTH[e.correlation] };
-  }).sort((a, b) => b.s - a.s);
+    const kw = e.keywords.filter((k) => re(`\\b${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(kwText)).length;
+    return { e, kw, s: (scoreOf.get(e.industry) ?? 0) + 2 * kw - STRENGTH[e.correlation] };
+  }).filter((x) => x.kw > 0 || !x.e.keywords.length).sort((a, b) => b.s - a.s);
 
   const out: PlaybookResult[] = [];
   const usedQueries = new Set<string>();

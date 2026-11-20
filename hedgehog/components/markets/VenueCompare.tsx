@@ -36,7 +36,7 @@ export function VenueCompare({ line, location }: { line: QuoteLine; location?: s
     <div className={s.cmp}>
       <div className={s.cmpHead}>
         <span className="eyebrow">Where the price comes from</span>
-        <VenueBadge venue={c.venue} />
+        <VenueBadge venue={c.venue} role={false} />
       </div>
       <p className={s.buy}>You hold <b>{what}</b>{c.eventTitle ? <span className="muted"> · {c.eventTitle}</span> : null}</p>
 
@@ -67,14 +67,14 @@ export function VenueCompare({ line, location }: { line: QuoteLine; location?: s
                 {cmp.rows.map((r) => (
                   <tr key={r.venue} className={[r.used ? s.usedRow : "", r.role === "reference" && !r.used ? "ref" : ""].filter(Boolean).join(" ") || undefined}>
                     <td>
-                      <VenueBadge venue={r.venue} />
+                      <VenueBadge venue={r.venue} role={false} />
                       <div className="xs muted" style={{ marginTop: 3 }}>
                         {r.side === "yes" ? "Yes" : "No"} on “{r.label}”{r.match === "similar" && <> · <i>similar{r.matchNote ? `: ${r.matchNote}` : ""}</i></>}
                         {r.match === "same" && r.matchNote && <> · {r.matchNote}</>}
                       </div>
                       <div className={s.tags}>
                         {r.used && <span className="badge badge-brand">What we use</span>}
-                        {r.best && <span className="badge badge-good">Best price</span>}
+                        {r.best && cmp.rows.filter((x) => x.ask != null).length > 1 && <span className="badge badge-good">Best price</span>}
                       </div>
                     </td>
                     <td className="num">{fmtChance(r.prob)}</td>

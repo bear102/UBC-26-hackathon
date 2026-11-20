@@ -14,6 +14,7 @@ import { defaultGetContract, VenueError } from "@/lib/venue";
 import { errorResponse } from "@/lib/venue/http";
 import { priceBuy } from "@/lib/venue/pricing";
 import { checkBacking, checkPriceMoved } from "@/lib/venue/risk";
+import { assertNotCovered, ownerPolicies } from "@/lib/venue/dupes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,7 +27,7 @@ const Line = z.object({
   contracts: z.number().int().min(1).max(10_000),
   trigger: z.string().min(1).max(500),
   premiumUsd: z.number().positive().optional(),
-  peril: z.enum(ALL_PERILS).optional(),
+  peril: z.enum(ALL_PERILS).optional(), // ignored: the contract decides the peril
 });
 const Body = z.object({
   owner: z.string().min(32).max(44),
@@ -42,6 +43,8 @@ export async function POST(req: Request) {
   try {
     let owner: PublicKey;
     try { owner = new PublicKey(b.owner); } catch { throw new VenueError("invalid owner pubkey"); }
+    const mine = await ownerPolicies(() => coverClient().listPolicies(owner));
+    if (new Set(b.lines.map((l) => l.marketRef)).size < b.lines.length) throw new VenueError("the same market is listed twice", 400, "bad_request");
     const priced: { l: z.infer<typeof Line>; contract: NonNullable<Awaited<ReturnType<typeof defaultGetContract>>>; price: ReturnType<typeof priceBuy>; expiry: number }[] = [];
     for (const [i, l] of b.lines.entries()) {
       const tag = `line ${i + 1} (${l.marketRef})`;
@@ -49,6 +52,7 @@ export async function POST(req: Request) {
       if (!contract) throw new VenueError(`${tag}: unknown market`, 404, "not_found");
       if (!isCoverable(contract)) throw new VenueError(`${tag}: ${contract.venue} markets are read-only context`, 400, "not_tradable");
       try {
+        assertNotCovered(mine, { businessId: b.businessId, marketRef: contract.id });
         const price = priceBuy(contract, l.side, l.contracts);
         checkPriceMoved(price.marketCostUsd, l.premiumUsd);
         checkBacking(contract.id);
@@ -65,14 +69,14 @@ export async function POST(req: Request) {
     const r = await coverClient().buildBuyBatchTxs({
       owner, monthlyBudgetUsd: b.monthlyBudgetUsd, quoter: loadKeypair("attestor"),
       items: priced.map(({ l, contract, price, expiry }) => ({
-        peril: l.peril ?? contract.peril, marketRef: contract.id, trigger: l.trigger, premiumUsd: price.costUsd, payoutUsd: l.contracts, expiry,
+        peril: contract.peril, marketRef: contract.id, trigger: l.trigger, premiumUsd: price.costUsd, payoutUsd: l.contracts, expiry,
       })),
     });
     const now = new Date().toISOString();
     const policies = r.policies.map((p) => {
       const { l, contract, price, expiry } = priced[p.index];
       store.upsert("policies", {
-        id: p.policyPda, policyId: p.policyId, owner: b.owner, businessId: b.businessId ?? null, peril: l.peril ?? contract.peril,
+        id: p.policyPda, policyId: p.policyId, owner: b.owner, businessId: b.businessId ?? null, peril: contract.peril,
         marketRef: contract.id, trigger: l.trigger, premiumUsd: price.costUsd, payoutUsd: l.contracts, side: l.side,
         marketCostUsd: price.marketCostUsd, feeUsd: price.feeUsd, ask: price.ask,
         expiry: new Date(expiry * 1000).toISOString(), marketExpiry: contract.expiry, status: "pending", createdAt: now,

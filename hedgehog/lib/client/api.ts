@@ -86,7 +86,7 @@ export type HedgeBuyRes = { positionId: string; txBase64: string; network: "devn
 export const hedgeBuy = (b: HedgeBuyReq) => call<HedgeBuyRes>("/api/hedge/buy", post(b));
 /** The desk's backing order on Gemini for a Gemini-priced sale (dry-run unless the server runs HEDGE_LIVE=1). */
 export type DeskHedge = {
-  id: string; kind: "position" | "policy"; refId: string; owner?: string; contractId: string; eventTitle?: string; label?: string; url?: string;
+  venue?: "gemini" | "kalshi" | "polymarket"; id: string; kind: "position" | "policy"; refId: string; owner?: string; contractId: string; eventTitle?: string; label?: string; url?: string;
   symbol: string; outcome: "yes" | "no"; quantity: number; limitPrice: number; refAsk: number; notionalUsd: number;
   soldForUsd?: number; marginUsd?: number; mode: "dry-run" | "live"; status: string; orderId?: string; error?: string; createdAt: string;
 };
@@ -95,7 +95,7 @@ export const getBacking = (owner: string) =>
   withFallback<{ live: boolean; hedges: DeskHedge[] }>("backing", () => call(`/api/hedge/backing?owner=${encodeURIComponent(owner)}`), () => ({ live: false, hedges: [] }));
 
 export type CoverBuyReq = { owner: string; businessId: string; peril: string; marketRef: string; trigger: string; premiumUsd: number; payoutUsd: number; expiry: string; side?: "yes" | "no" };
-export type CoverBuyRes = { policyId: string; policyPda: string; txBase64: string };
+export type CoverBuyRes = { policyId: string; policyPda: string; txBase64: string; premiumUsd?: number; payoutUsd?: number };
 export const coverBuy = (b: CoverBuyReq) => call<CoverBuyRes>("/api/cover/buy", post(b));
 export type CoverPlanLine = { marketRef: string; side: "yes" | "no"; contracts: number; trigger: string; premiumUsd?: number; peril?: string };
 export type CoverPlanRes = { txs: string[]; policies: { index: number; policyId: number; policyPda: string; tx: number; marketRef: string; premiumUsd: number; payoutUsd: number }[]; warnings: string[]; quoteExpiresAt: string };

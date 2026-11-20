@@ -110,7 +110,7 @@ export default function HowItWorks() {
             <span className="muted small">Example: the patio bar at 50% coverage.</span>
           </div>
           <div className={`card ${s.dayCard}`}>
-            <DayBars normalUsd={3200} lossUsd={1100} payoutUsd={550} premiumUsd={154} normalLabel="Normal day" badLabel="Rainy Saturday" />
+            <DayBars normalUsd={4200} lossUsd={1100} payoutUsd={550} premiumUsd={154} normalLabel="Normal day" badLabel="Rainy Saturday" />
           </div>
         </section>
 

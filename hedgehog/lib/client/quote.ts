@@ -28,15 +28,31 @@ export function rescaleQuote(q: Quote, pct: Coverage): Quote {
   const proxy = (l: QuoteLine) => (risks.get(l.riskId)?.kind === "proxy" ? 1 : 0);
   const order = [...sized].sort((a, b) => proxy(a) - proxy(b) || a.pricePerContract - b.pricePerContract);
   const out = new Map<QuoteLine, QuoteLine>();
+  // same split as the quote engine (lib/markets/quote.ts sizeQuote): pass 1 caps one line at 60% of the budget while others
+  // wait, pass 2 hands the rest back in order; a scaled line paying under $25 is noise and stays unfunded
+  const buyable = order.filter((l) => l.action !== "read-only");
+  const cap = buyable.length > 1 ? left * 0.6 : left;
+  const fit = (l: QuoteLine, money: number) => {
+    const n = Math.min(l.contracts, Math.floor((money + 1e-9) / Math.max(l.pricePerContract, 0.01)));
+    return n >= 1 && n >= Math.min(l.contracts, 25) ? n : 0;
+  };
   for (const l of order) {
     if (l.action === "read-only") { out.set(l, l); continue; }
-    if (l.premiumUsd <= left + 1e-9) { left -= l.premiumUsd; out.set(l, l); continue; }
-    const fit = Math.floor(left / Math.max(l.pricePerContract, 0.01));
-    if (fit < 1) { out.set(l, { ...l, contracts: 0, premiumUsd: 0, payoutUsd: 0 }); continue; }
-    const prem = round2(fit * l.pricePerContract);
-    const nl = { ...l, contracts: fit, premiumUsd: prem, payoutUsd: fit };
+    const allow = Math.min(left, cap);
+    if (l.premiumUsd <= allow + 1e-9) { left -= l.premiumUsd; out.set(l, l); continue; }
+    const n = fit(l, allow);
+    const prem = round2(n * l.pricePerContract);
     left -= prem;
-    out.set(l, nl);
+    out.set(l, { ...l, contracts: n, premiumUsd: prem, payoutUsd: n });
+  }
+  for (const l of order) {
+    const cur = out.get(l)!;
+    if (l.action === "read-only" || cur.contracts >= l.contracts) continue;
+    const n = fit(l, cur.premiumUsd + left);
+    if (n <= cur.contracts) continue;
+    const prem = round2(n * l.pricePerContract);
+    left -= prem - cur.premiumUsd;
+    out.set(l, { ...l, contracts: n, premiumUsd: prem, payoutUsd: n });
   }
   const lines = sized.map((l) => out.get(l)!);
   const counted = lines.filter((l) => l.action !== "read-only");

@@ -5,7 +5,7 @@ import type { BusinessProfile, HedgeLeg, MarketContract, NaturalHedge, Peril, Qu
 import { rescaleQuote, type Coverage } from "../client/quote";
 import { riskHorizon } from "./horizon";
 import { isLongContract, lineScore, settleDay, teamFutures } from "./longContext";
-import { contractMeta } from "../markets/normalize";
+import { contractMeta, staleSameDay } from "../markets/normalize";
 
 const PERILS = ["heat", "cold", "rain", "game", "oil", "gas", "fed", "cpi", "crypto", "other", "snow", "power", "water", "quake", "storm", "natgas", "metals", "flood", "smoke", "hail", "wildfire"] as const satisfies readonly Peril[];
 const TZ = "America/Chicago";
@@ -165,15 +165,15 @@ export const brainstormSchema = z.object({
 });
 export type BrainstormOut = z.infer<typeof brainstormSchema>;
 
-export const BRAINSTORM_SYSTEM = `You are Hedgehog's creative hedging strategist (second-order exposures) for small businesses in Austin, TX.
+export const BRAINSTORM_SYSTEM = `You are Hedgehog's creative hedging strategist (second-order exposures) for US small businesses (the owner's city is in the profile).
 The owner's OBVIOUS risks (weather at their own site, their own named teams) are handled by another analyst. Your job: scan the LIVE MARKET CATALOG and find markets with a real but non-obvious economic link to this business that the owner would not think of. Think about:
 - costs: fuel (WTI/Brent crude, US gas), natural gas (kitchen burners, propane, electricity), metals (silver/gold/copper for jewelers, contractors, electricians), food inflation (CPI);
 - financing: variable-rate loans or credit lines (Fed decisions, funds rate);
-- demand drivers: customers' disposable income (gas prices, CPI), crypto wealth for crypto-paid merchants (BTC/SOL), weather in feeder cities for tourism, cold snaps for outdoor trade, rival/neighbor team games (college football Saturdays, Texas teams) that pull crowds away or bring them in.
+- demand drivers: customers' disposable income (gas prices, CPI), crypto wealth for crypto-paid merchants (BTC/SOL), weather in feeder cities for tourism, cold snaps for outdoor trade, rival/neighbor team games (college football Saturdays, local teams) that pull crowds away or bring them in.
 Rules:
 - Return 2 to 4 ideas, strongest correlation first. Each MUST use one catalogKey from the catalog (copy it exactly), at most one idea per catalogKey, and describe a trigger that a contract in that line can settle (use the strikes/dates shown; prefer contracts priced 5-60 cents).
 - Start from what the owner actually told you: every cost, input, loan or customer group they mention is a lead (fuel -> Brent/WTI/gas, kitchen or heating -> natural gas, metal -> silver/gold/copper, a credit line -> Fed, menu prices -> CPI). Cost-side proxies with a clear mechanism beat demand stories.
-- Sports only when the business's own crowd or orders swing with that game (bars, venues, game-day retail), never as a generic "distraction". Never a game nobody in Austin cares about.
+- Sports only when the business's own crowd or orders swing with that game (bars, venues, game-day retail), never as a generic "distraction". Never a game nobody in the owner's city cares about.
 - Think past this week too: a season-futures stage for the crowd's team (playoffs -> conference finals -> title, or a wins rung), monthly totals (rain, month-end diesel, ERCOT power), a rate path to the meeting before a loan reprices, a shutdown for government-paid customers, recession for discretionary spending. Write the window as the catalog's "settles" period ("December", "through the 2026-27 NBA playoffs").
 - Quantify lossUsd with arithmetic from the owner's numbers (keep it modest; a one-off proxy rarely costs more than one day of revenue; a month / season proxy = the extra loss over that period). Be honest: correlation "weak" if the link is loose.
 - causalStory: the chain from market to P&L ("Brent leads diesel by ~2 weeks; 4 vans x 3,000 mi/week ...").
@@ -318,16 +318,19 @@ const KEYWORD_IDEAS: { re: RegExp; idea: (p: BusinessProfile) => FallbackIdea }[
   { re: /crypto|bitcoin|btc|solana|\bsol\b|web3/i, idea: (p) => ({ kind: "proxy", peril: "crypto", title: "Crypto drawdown cuts crypto-paid sales", trigger: "BTC below this month's lower strikes on Nov 30", location: "US", window: "Nov 30",
       lossUsd: Math.max(20, Math.round(p.avgDailyRevenueUsd * 0.2 / 10) * 10), lossReasoning: "Assumes ~20% of a day's sales come from crypto-rich customers who pull back after a drop.", confidence: 0.3, hint: "BTC price",
       correlation: "medium", causalStory: "Crypto-paying customers spend from crypto wealth; a drawdown hits both demand and coins held as revenue.", worthIt: "Only if a real share of revenue is paid or held in crypto." }) },
-  { re: /jewel|silver|gold|metal|electric|wire|plumb|contractor/i, idea: (p) => ({ kind: "proxy", peril: "metals", title: "Metal input costs spike", trigger: `${/silver/i.test(p.description) ? "Silver" : /gold|jewel/i.test(p.description) ? "Gold" : "Copper"} closes above this month's upper strike`, location: "US", window: "Nov 30",
+  { re: /jewel|silversmith|goldsmith|\b(gold|silver)\b[^.]{0,30}\b(rings?|chains?|casting|scrap|ounces?|bullion)\b|\bmetal(s|work|smith)?\b|electrician|electrical contract|\bwir(e|ing)\b|plumb|contractor/i, idea: (p) => ({ kind: "proxy", peril: "metals", title: "Metal input costs spike", trigger: `${/silver/i.test(p.description) ? "Silver" : /gold|jewel/i.test(p.description) ? "Gold" : "Copper"} closes above this month's upper strike`, location: "US", window: "Nov 30",
       lossUsd: Math.max(20, Math.round(p.avgDailyRevenueUsd * 0.1 / 10) * 10), lossReasoning: "Assumes metal is ~10% of a day's cost base.", confidence: 0.35, hint: /silver/i.test(p.description) ? "Silver price" : /gold|jewel/i.test(p.description) ? "Gold price" : "Copper price",
       correlation: "strong", causalStory: "Raw metal is priced off the same futures the market settles on.", worthIt: "Worth it when quotes to customers are fixed before you buy metal." }) },
   { re: /\bloans?\b|credit line|line of credit|\bdebt|mortgage|financ|\blease/i, idea: () => ({ kind: "proxy", peril: "fed", title: "Rate hike on a variable loan", trigger: "The Fed hikes 25bps at the next meeting", location: "US", window: "next FOMC meeting",
       lossUsd: 50, lossReasoning: "A 0.25% move on a ~$100k variable balance is ~$21/month.", confidence: 0.35, hint: "Fed decision", labelRe: /hike 25/i,
       correlation: "strong", causalStory: "Variable loans reprice off prime, which moves with the Fed.", worthIt: "Small dollars; worth it on large balances." }) },
-  { re: /patio|outdoor|park|trail|tour|boat|lake|garden|nursery|yoga|market/i, idea: (p) => ({ kind: "proxy", peril: "cold", title: "Cold front keeps customers home", trigger: "Austin daily high at or below the low end of this week's range", location: "Austin", window: "next 7 days",
-      lossUsd: Math.max(20, Math.round(p.avgDailyRevenueUsd * 0.15 / 10) * 10), lossReasoning: `Assumes a cold day cuts ~15% of a ${usd(p.avgDailyRevenueUsd)} day.`, confidence: 0.35, hint: "Highest temperature in Austin",
-      correlation: "medium", causalStory: "November fronts drop Austin highs fast; outdoor trade falls with the temperature.", worthIt: "Cheap tail cover when no front is forecast." }) },
+  // the owner's own city (QA cycle 1: this idea hard-coded Austin and hedged Miami / Kansas City / Seattle shops on Austin weather);
+  // never for businesses that cold weather helps (ski / snow shops)
+  { re: /^(?![\s\S]*(?<!jet[ -])\b(ski|skis|skiing|snowboard|snow ?shoe|sled|ice rink|hot cocoa)\b)[\s\S]*(patio|outdoor|park|trail|tour|boat|lake|garden|nursery|yoga|market)/i, idea: (p) => { const city = cityOf(p); return { kind: "proxy", peril: "cold", title: "Cold front keeps customers home", trigger: `${city} daily high at or below the low end of this week's range on a busy day`, location: city, window: "next 7 days",
+      lossUsd: Math.max(20, Math.round(p.avgDailyRevenueUsd * 0.15 / 10) * 10), lossReasoning: `Assumes a cold day cuts ~15% of a ${usd(p.avgDailyRevenueUsd)} day.`, confidence: 0.35, hint: `Highest temperature in ${city}`,
+      correlation: "medium", causalStory: `A cold front drops ${city} highs fast; outdoor trade falls with the temperature.`, worthIt: "Cheap tail cover when no front is forecast." }; } },
 ];
+const cityOf = (p: BusinessProfile) => p.city.split(",")[0].trim() || "Austin";
 
 const GENERIC_IDEA = (p: BusinessProfile): FallbackIdea => ({ kind: "proxy", peril: "gas", title: "Gas prices squeeze customer spending", trigger: "US average gas price above this week's top strike", location: "US", window: "this week",
   lossUsd: Math.max(20, Math.round(p.avgDailyRevenueUsd * 0.03 / 10) * 10), lossReasoning: `Assumes a pump-price jump trims ~3% of a ${usd(p.avgDailyRevenueUsd)} day of discretionary spend.`, confidence: 0.2, hint: "gas price",
@@ -368,7 +371,7 @@ export function sameExposure(a: Risk, b: Risk, teamWords: (t: string) => string[
 /** Candidates for a proxy idea: filtered to its catalog series (hint) when we know it. */
 export function filterIdeaCandidates(idea: Idea, cands: MarketContract[], universe: MarketContract[], nowMs = Date.now()): MarketContract[] {
   const now = nowMs;
-  const ok = (c: MarketContract) => c.status === "open" && !(Date.parse(c.expiry) <= now) && (c.yesAsk !== null || c.noAsk !== null);
+  const ok = (c: MarketContract) => c.status === "open" && !(Date.parse(c.expiry) <= now) && (c.yesAsk !== null || c.noAsk !== null) && !staleSameDay(c, new Date(now));
   const h = idea.hint?.toLowerCase();
   const city = WEATHER.includes(idea.risk.peril) ? (idea.risk.location ?? "").split(",")[0].trim().toLowerCase() : "";
   const match = (c: MarketContract) => (!h || c.eventTitle.toLowerCase().includes(h)) && (!idea.labelRe || idea.labelRe.test(c.label))
@@ -510,8 +513,9 @@ export function buildPackages(q: Quote, coveragePct: number): QuotePackage[] {
     { id: "essentials", name: "Essentials", blurb: "Only your direct risks, cheap-tail strike where one exists: smallest premium, pays in the bad tail.",
       pick: (o) => (risk.get(o.riskId)?.kind === "proxy" ? undefined : cheapest(o.choices)) },
     { id: "balanced", name: "Balanced", blurb: "The AI's recommended strike for each direct risk, plus creative hedges with a strong or medium link.",
-      pick: (o) => (risk.get(o.riskId)?.kind === "proxy" && strength(o.riskId) < 2 ? undefined : rec(o.choices)) },
-    { id: "max", name: "Max protection", blurb: "Broader strikes where available and every creative hedge. Pays most often; costs the most.",
+      // a creative hedge priced near a coin flip is a wager, not cover: the default plan leaves it out, so Balanced does too
+      pick: (o) => (risk.get(o.riskId)?.kind === "proxy" && (strength(o.riskId) < 2 || (rec(o.choices)?.impliedProb ?? 0) > 0.4) ? undefined : rec(o.choices)) },
+    { id: "max", name: "Broadest triggers", blurb: "Broader strikes where available and every creative hedge. Pays out most often, but each dollar buys less payout.",
       pick: (o) => broadest(o.choices) },
   ];
   const out: QuotePackage[] = [];
@@ -522,7 +526,10 @@ export function buildPackages(q: Quote, coveragePct: number): QuotePackage[] {
       .sort((a, b) => q.risks.findIndex((r) => r.id === a.riskId) - q.risks.findIndex((r) => r.id === b.riskId));
     if (!lines.length) continue;
     const sized = rescaleQuote({ ...q, lines }, coveragePct as Coverage);
-    out.push({ id: d.id, name: d.name, blurb: d.blurb, picks: lines.map((l) => ({ riskId: l.riskId, contractId: l.contractId })),
+    // picks = exactly the funded set (QA cycle 1: packages listed legs the budget left at 0 contracts, totals unchanged)
+    const funded = sized.lines.filter((l) => l.action !== "read-only" && l.contracts > 0);
+    if (!funded.length) continue;
+    out.push({ id: d.id, name: d.name, blurb: d.blurb, picks: funded.map((l) => ({ riskId: l.riskId, contractId: l.contractId })),
       totalPremiumUsd: r2(sized.totalPremiumUsd), totalPayoutUsd: r2(sized.totalPayoutUsd) });
   }
   // drop packages identical to an earlier one

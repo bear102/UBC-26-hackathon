@@ -11,7 +11,7 @@ export async function GET(req: Request) {
   const u = new URL(req.url);
   const s = u.searchParams.get("since");
   const sinceMs = !s ? 0 : /^\d+$/.test(s) ? Number(s) : Date.parse(s) || 0;
-  const limit = Math.min(Number(u.searchParams.get("limit")) || 200, 500);
+  const limit = Math.max(1, Math.min(Math.floor(Number(u.searchParams.get("limit"))) || 200, 500));
   const viewer = u.searchParams.get("owner");
   const idx = showTest() ? null : feedIndex({ positions: store.list("positions"), policies: store.list("policies") as Parameters<typeof feedIndex>[0]["policies"], hedges: store.list("hedges") }, viewer);
   const rows = store.list("feed")

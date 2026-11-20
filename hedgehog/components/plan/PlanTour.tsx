@@ -49,7 +49,10 @@ export function PlanTour({ onClose }: { onClose: () => void }) {
   }, [measure]);
 
   const close = useCallback(() => { markDone(); onClose(); }, [onClose]);
-  const next = useCallback(() => (i + 1 < steps.length ? setI(i + 1) : close()), [i, steps.length, close]);
+  const next = useCallback(() => {
+    if (i + 1 < steps.length) return setI(i + 1);
+    close(); window.scrollTo({ top: 0, behavior: "smooth" }); // back to the quote, not left mid-page
+  }, [i, steps.length, close]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") close();

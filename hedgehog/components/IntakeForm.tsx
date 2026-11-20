@@ -3,13 +3,16 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import type { BusinessProfile } from "@/lib/types";
 import { getPresets } from "@/lib/client/api";
-import { loadProfile, saveProfile, setLastBusiness } from "@/lib/client/storage";
+import { clearQuotes, loadProfile, saveProfile, setLastBusiness } from "@/lib/client/storage";
+import { cityForZip } from "@/lib/client/zipCity";
 import { FIXTURE_PRESETS } from "@/lib/fixtures";
 import { Seal } from "./Engraving";
 import { IconArrowRight } from "./Icons";
 import s from "./IntakeForm.module.css";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const profileKey = (p: BusinessProfile) =>
+  JSON.stringify([p.name, p.description, p.city, p.zip ?? "", p.avgDailyRevenueUsd, p.busyDays, p.monthlyBudgetUsd]);
 const slug = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 32) || "business";
 
 export function IntakeForm() {
@@ -52,10 +55,15 @@ export function IntakeForm() {
     if (!(bud > 0)) return setErr("Monthly hedge budget must be a positive number.");
     setErr(null);
     const id = base?.id ?? `${slug(name)}-${Math.random().toString(36).slice(2, 7)}`;
+    const z = zip.trim();
+    const city = cityForZip(z) ?? (base && (base.zip ?? "") === z ? base.city : z ? "" : base?.city ?? "Austin, TX");
     const profile: BusinessProfile = {
-      id, name: name.trim(), description: description.trim(), city: base?.city ?? "Austin, TX", zip: zip.trim() || undefined,
+      id, name: name.trim(), description: description.trim(), city, zip: z || undefined,
       avgDailyRevenueUsd: rev, busyDays: DAYS.filter((d) => busy.includes(d)), monthlyBudgetUsd: bud, presetId: base?.presetId ?? base?.id,
     };
+    // Edited details: the cached quotes were built for the old profile, so the plan must re-run the AI.
+    const prev = loadProfile(id) ?? base;
+    if (prev && profileKey(prev) !== profileKey(profile)) clearQuotes(id);
     saveProfile(profile); setLastBusiness(id);
     router.push(`/plan?b=${encodeURIComponent(id)}&c=${coverage}`);
   }

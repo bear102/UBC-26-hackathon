@@ -16,7 +16,7 @@ import s from "./CheckoutDialog.module.css";
 
 export type CheckoutKind = "hedge" | "cover";
 type Stage = "review" | "connect" | "build" | "signing" | "sending" | "confirming" | "record" | "done" | "error";
-export type CheckoutResult = { kind: CheckoutKind; signature: string; network: Network; position?: Position; policyId?: string; policyPda?: string; simulated?: boolean; backing?: DeskHedge };
+export type CheckoutResult = { kind: CheckoutKind; signature: string; network: Network; position?: Position; policyId?: string; policyPda?: string; simulated?: boolean; backing?: DeskHedge; paidUsd?: number /* actually charged, when known */ };
 
 const ORDER: Stage[] = ["connect", "build", "signing", "sending", "confirming", "record", "done"];
 
@@ -69,7 +69,7 @@ export function CheckoutDialog({ kind, line: initialLine, risk, businessId, onCl
         const sig = await signAndSend(signTransaction, r.txBase64, "devnet", (s) => go(s));
         let backing: DeskHedge | undefined;
         try { backing = (await coverConfirm(r.policyPda, sig))?.backing; } catch (e) { console.warn("cover confirm failed", e); }
-        const res: CheckoutResult = { kind, signature: sig, network: "devnet", policyId: r.policyId, policyPda: r.policyPda, backing };
+        const res: CheckoutResult = { kind, signature: sig, network: "devnet", policyId: r.policyId, policyPda: r.policyPda, backing, paidUsd: r.premiumUsd };
         setResult(res); go("done"); onDone(res);
       } else {
         // maxCostUsd = what the owner was shown; the server refuses (409 price_moved) if the live price is higher.
@@ -79,7 +79,7 @@ export function CheckoutDialog({ kind, line: initialLine, risk, businessId, onCl
         go("record");
         let position: Position | undefined, backing: DeskHedge | undefined;
         try { const p = await hedgeConfirm(r.positionId, sig); backing = p.backing; position = p; } catch (e) { console.warn("confirm failed", e); }
-        const res: CheckoutResult = { kind, signature: sig, network: net, position, backing };
+        const res: CheckoutResult = { kind, signature: sig, network: net, position, backing, paidUsd: position?.costUsd };
         setResult(res); go("done"); onDone(res);
       }
     } catch (e) {
@@ -202,7 +202,7 @@ export function CheckoutDialog({ kind, line: initialLine, risk, businessId, onCl
                   </p>
                   <div className="terms">
                     <div className="term pay"><span className="lab">Pays if it happens</span><span className={`amt ${s.amt}`}>{usd(line.payoutUsd)}</span></div>
-                    <div className="term cost"><span className="lab">Premium paid</span><span className={`amt ${s.amt}`}>{usd(line.premiumUsd, 2)}</span></div>
+                    <div className="term cost"><span className="lab">Premium paid</span><span className={`amt ${s.amt}`}>{usd(result.paidUsd ?? line.premiumUsd, 2)}</span></div>
                   </div>
                 </div>
                 <GuillocheBand tone="red" />
@@ -216,7 +216,7 @@ export function CheckoutDialog({ kind, line: initialLine, risk, businessId, onCl
               {result.policyPda && <><dt>Policy account</dt><dd className="mono">{shortAddr(result.policyPda, 6)}</dd></>}
               {result.position?.mint && !result.simulated && <><dt>Token mint</dt><dd className="mono">{shortAddr(result.position.mint, 6)}</dd></>}
               {(result.backing || (gemini && result.simulated)) && <>
-                <dt>Backed on Gemini</dt>
+                <dt>Backed on {VENUE_LABEL[result.backing?.venue ?? line.contract.venue] ?? "Gemini"}</dt>
                 <dd className="small">
                   {result.backing
                     ? <><span className="mono">{orderText(result.backing)}</span> <span className="badge badge-gemini">{result.backing.mode === "live" ? result.backing.status : "dry-run"}</span>{result.backing.error ? <span className="muted"> · {result.backing.error}</span> : null}</>

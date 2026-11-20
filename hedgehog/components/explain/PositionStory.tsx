@@ -36,7 +36,7 @@ export function PolicyStory({ status, payoutUsd, premiumUsd, trigger, expiry }: 
       {paid ? <p className={s.head}>The trigger hit. Hedgehog paid you {usd(payoutUsd)}.</p>
         : open ? <p className={s.head}>You&apos;re covered{expiry ? ` ${untilPhrase(expiry)}` : ""}.</p>
         : <p className={s.head}>The trigger didn&apos;t hit: a good day for the business.</p>}
-      {open && <p>If {trigger ? <>“{trigger}”</> : "the trigger hits"}, you get {usd(payoutUsd)} in your wallet. You paid {usd(premiumUsd, 2)}.</p>}
+      {open && <p>{trigger ? <>Trigger: “{trigger}”. If it happens, you get</> : "If the trigger hits, you get"} {usd(payoutUsd)} in your wallet. You paid {usd(premiumUsd, 2)}.</p>}
       {!open && !paid && <p>The {usd(premiumUsd, 2)} premium was the cost of being covered.</p>}
     </div>
   );

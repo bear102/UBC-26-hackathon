@@ -14,9 +14,9 @@ export function PlanExplainer({ quote, profile }: { quote: Quote; profile?: Pick
         <span className="eyebrow">In plain English</span>
         {pe.premiumUsd > 0 ? (
           <p className={s.planLead}>
-            You pay <b className="cost">{money(pe.premiumUsd)}</b> once
+            You pay <b className="cost">{money(pe.premiumUsd)}</b> once, at purchase
             {pe.dayShare != null ? <> (about <b>{fmtPct(pe.dayShare)}</b> of a normal day&apos;s sales)</> : null}.
-            {w?.ex ? <> If your worst day comes (<b>{w.risk.title.charAt(0).toLowerCase() + w.risk.title.slice(1)}</b>), the plan pays <b className="pay">{usd(w.ex.payoutUsd)}</b> toward a ~<b className="bad">{usd(w.risk.lossUsd)}</b> loss.</> : null}
+            {w?.ex ? <> If your worst day comes (<b>{w.risk.title}</b>), the plan pays <b className="pay">{usd(w.ex.payoutUsd)}</b> toward a ~<b className="bad">{usd(w.risk.lossUsd)}</b> loss.</> : null}
             {" "}If none of it happens, that premium is the whole cost.
           </p>
         ) : (

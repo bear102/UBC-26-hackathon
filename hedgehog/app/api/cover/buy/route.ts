@@ -17,6 +17,7 @@ import { defaultGetContract, VenueError } from "@/lib/venue";
 import { errorResponse } from "@/lib/venue/http";
 import { priceBuy } from "@/lib/venue/pricing";
 import { checkBacking, checkPriceMoved } from "@/lib/venue/risk";
+import { assertNotCovered, ownerPolicies } from "@/lib/venue/dupes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,7 +29,7 @@ const RESOLUTION_BUFFER_H = () => Number(process.env.COVER_RESOLUTION_BUFFER_H) 
 const Body = z.object({
   owner: z.string().min(32).max(44),
   businessId: z.string().min(1).max(100).optional(),
-  peril: z.enum(ALL_PERILS).optional(),
+  peril: z.enum(ALL_PERILS).optional(), // ignored: the contract decides the peril
   marketRef: z.string().min(1).refine((s) => Buffer.byteLength(s, "utf8") <= 64, "marketRef must be <= 64 bytes"),
   trigger: z.string().min(1).max(500),
   side: z.enum(["yes", "no"]).default("yes"), // which outcome of marketRef pays the policy
@@ -51,6 +52,7 @@ export async function POST(req: Request) {
     const contract = await defaultGetContract(b.marketRef);
     if (!contract) throw new VenueError(`unknown market ${b.marketRef}`, 404, "not_found");
     if (!isCoverable(contract)) throw new VenueError(`${contract.venue} markets are read-only context (cannot price cover)`, 400, "not_tradable");
+    assertNotCovered(await ownerPolicies(() => coverClient().listPolicies(owner)), { businessId: b.businessId, marketRef: contract.id });
     const price = priceBuy(contract, b.side, contracts); // open, not expired, ask <= MAX_ASK, fee applied
     checkPriceMoved(price.marketCostUsd, b.premiumUsd);
     checkBacking(contract.id);
@@ -60,12 +62,12 @@ export async function POST(req: Request) {
     const expiry = marketExpiry + RESOLUTION_BUFFER_H() * 3600;
 
     const r = await coverClient().buildBuyTx({
-      owner, peril: b.peril ?? contract.peril, marketRef: contract.id, trigger: b.trigger,
+      owner, peril: contract.peril, marketRef: contract.id, trigger: b.trigger,
       premiumUsd: price.costUsd, payoutUsd: contracts, expiry, monthlyBudgetUsd: b.monthlyBudgetUsd,
       quoter: loadKeypair("attestor"),
     });
     store.upsert("policies", {
-      id: r.policyPda, policyId: r.policyId, owner: b.owner, businessId: b.businessId ?? null, peril: b.peril ?? contract.peril,
+      id: r.policyPda, policyId: r.policyId, owner: b.owner, businessId: b.businessId ?? null, peril: contract.peril,
       marketRef: contract.id, trigger: b.trigger, premiumUsd: price.costUsd, payoutUsd: contracts, side: b.side,
       marketCostUsd: price.marketCostUsd, feeUsd: price.feeUsd, ask: price.ask,
       expiry: new Date(expiry * 1000).toISOString(), marketExpiry: contract.expiry, status: "pending", createdAt: new Date().toISOString(),

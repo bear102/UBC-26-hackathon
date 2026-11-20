@@ -59,10 +59,31 @@ export const sideAsk = (c: MarketContract, side: "yes" | "no") => (side === "yes
 const sideDepth = (c: MarketContract, side: "yes" | "no") => (side === "yes" ? c.depthYes : c.depthNo) ?? null;
 const lc = (s: string | undefined) => (s ?? "").toLowerCase().trim();
 
+const MONTHS3 = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+/** "Where will it rain on November 20?" -> 2026-11-20 (year from the expiry); "" when the title names no single day. */
+function titleDay(c: MarketContract): string {
+  const m = c.eventTitle.match(/\bon (jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.? (\d{1,2})\b(?:,? (20\d\d))?/i);
+  if (!m) return "";
+  const y = Number(m[3]) || (Number.isFinite(Date.parse(c.expiry)) ? new Date(c.expiry).getUTCFullYear() : new Date().getUTCFullYear());
+  return `${y}-${String(MONTHS3.indexOf(m[1].toLowerCase()) + 1).padStart(2, "0")}-${m[2].padStart(2, "0")}`;
+}
+
 export function eventDay(c: MarketContract): string {
   const m = contractMeta(c.id);
   if (m?.eventDate) return m.eventDate;
+  // a daily market's own date beats its venue expiry (Polymarket closes the Nov 20 rain market on Nov 21 at 19:00Z)
+  const t = titleDay(c);
+  if (t) return t;
   return c.expiry && Number.isFinite(Date.parse(c.expiry)) ? centralDate(c.expiry) : "";
+}
+
+/** Last day the contract observes: meta.eventEnd, a weekend title's Sunday, else its event day. */
+export function eventLastDay(c: MarketContract): string {
+  const m = contractMeta(c.id);
+  if (m?.eventEnd) return m.eventEnd;
+  const d = eventDay(c);
+  if (d && /weekend/i.test(c.eventTitle)) { const x = new Date(`${d}T12:00:00Z`); x.setUTCDate(x.getUTCDate() + 1); return x.toISOString().slice(0, 10); }
+  return d;
 }
 
 /** Peril family: cold and heat are the same daily-temperature ladders. */
@@ -187,6 +208,8 @@ export function findEquivalent(c: MarketContract, side: "yes" | "no", pool: Mark
     const od = eventDay(o);
     const dayGap = day && od ? Math.abs(daysBetween(day, od)) : 99;
     if (weather ? dayGap !== 0 : dayGap > 3) continue;
+    // a weather market observes a period: a one-day market is never "the same" as a weekend / month (QA: Nov 20 rain != Nov 21-22 weekend)
+    if (weather && eventLastDay(o) !== eventLastDay(c)) continue;
     const ob = boundsOf(o);
     if (!b || !ob) {
       // no numeric bounds (e.g. "Will it rain in Austin?"): same day + place + same yes/no question

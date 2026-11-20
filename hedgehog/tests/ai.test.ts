@@ -185,7 +185,8 @@ test("advise: risk map || brainstorm -> one batched match -> ladders, options, p
 
   assert.ok(calls.length <= 4, `LLM calls: ${calls.join(",")}`);
   assert.equal(calls.filter((c) => c === "match").length, 1, "matching is batched into one call");
-  // direct risks r1-r3, creative ideas r4 (Brent, strong) + r5 (gas, weak); invented catalog key dropped
+  // direct risks r1-r3, creative ideas r4 (Brent, strong) + r5 (fallback cold front: the weak "pump prices squeeze bar tabs"
+  // idea has no fuel hook in the owner's words, QA cycle 2); invented catalog key dropped
   assert.deepEqual(q.risks.map((r) => `${r.id}:${r.kind}`), ["r1:direct", "r2:direct", "r3:direct", "r4:proxy", "r5:proxy"]);
   assert.ok(!q.risks.some((r) => /Invented/.test(r.title)));
   assert.equal(q.risks[3].correlation, "strong");
@@ -203,16 +204,19 @@ test("advise: risk map || brainstorm -> one batched match -> ladders, options, p
   assert.deepEqual(q.options!.find((o) => o.riskId === "r2")!.choices.map((c) => `${c.contractId}:${c.side}`), ["gemini:SPURS:no", "gemini:LAKERS:yes"]);
   assert.ok(q.options!.some((o) => o.riskId === "r5"));
   // rain had no market
-  assert.equal(q.uncovered.length, 1);
-  assert.equal(q.uncovered[0].riskId, "r3");
+  // rain had no market; the 47c cold proxy is a coin flip (QA cycle 2): an option, not a plan line
+  assert.deepEqual(q.uncovered.map((u) => u.riskId), ["r3", "r5"]);
+  assert.match(q.uncovered[1].reason, /coin flip/);
   // packages
   assert.deepEqual(q.packages!.map((p) => p.id), ["essentials", "balanced", "max"]);
   const [ess, bal, max] = q.packages!;
   assert.ok(ess.totalPremiumUsd < bal.totalPremiumUsd && bal.totalPremiumUsd <= max.totalPremiumUsd + 1); // Balanced and Max can both hit the cap
   for (const p of q.packages!) assert.ok(p.totalPremiumUsd <= q.budgetUsd + 1e-9, `${p.name} ${p.totalPremiumUsd} over budget ${q.budgetUsd}`);
   assert.ok(!ess.picks.some((p) => p.riskId === "r4" || p.riskId === "r5"));
-  assert.ok(max.picks.some((p) => p.riskId === "r5"));
-  assert.deepEqual(bal.picks.map((p) => p.contractId).sort(), q.lines.map((l) => l.contractId).sort());
+  // packages list only funded legs (QA cycle 1): Max offers r5 only when the budget leaves room for it
+  assert.ok(max.picks.length >= bal.picks.length);
+  // Balanced = the plan's lines that the budget actually funds (the stub sizer here ignores the budget)
+  assert.ok(bal.picks.length >= 2 && bal.picks.every((p) => q.lines.some((l) => l.contractId === p.contractId)));
   // natural hedge + backtest evidence for the heat strike
   assert.equal(q.naturalHedges![0].advice, "dont-hedge");
   assert.match(q.risks[0].evidence ?? "", /78°F or more on 3 of the last 29/);
@@ -249,8 +253,9 @@ test("advise: matcher failure -> heuristic pick + ladder; non-preset profile get
   // business-aware fallback map (eval iter 5): outdoor yoga gets rain + cold, no 90°F heat risk in a description without heat
   assert.deepEqual(q2.risks.filter((r) => r.kind === "direct").map((r) => r.peril), ["rain", "cold"]);
   assert.equal(q2.uncovered.filter((u) => q2.risks.find((r) => r.id === u.riskId)?.kind === "direct").length, 2);
-  // keyword idea (cold) duplicates the generic cold risk, so the generic gas idea fills the section
-  assert.deepEqual(q2.risks.filter((r) => r.kind === "proxy").map((r) => r.peril), ["gas"]);
+  // keyword idea (cold) duplicates the generic cold risk; the generic "gas squeezes spending" filler has no fuel hook in the
+  // owner's words and is a weak link, so it is dropped (QA cycle 2)
+  assert.deepEqual(q2.risks.filter((r) => r.kind === "proxy").map((r) => r.peril), []);
 });
 
 test("advise: lossUsd is clamped to 7 days of revenue and rounded", async () => {

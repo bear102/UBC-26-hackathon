@@ -4,13 +4,13 @@ import type { BusinessProfile, MarketContract, Peril, QuoteLine, Risk, VenueId }
 import { ALL_PERILS as PERIL_LIST } from "../types";
 import { activeEventsByCategory, eventByTicker, settledEvents } from "./geminiPm";
 import { getKalshiContract, kalshiSource, listKalshiMarkets, settledKalshi } from "./dflow";
-import { addDays, centralDate, contractMeta, daysBetween, normalizeGeminiEvents, parseBounds, type Bounds, type ContractMeta } from "./normalize";
+import { addDays, centralDate, contractMeta, daysBetween, normalizeGeminiEvents, parseBounds, staleSameDay, type Bounds, type ContractMeta } from "./normalize";
 import { getBook } from "./book";
 import { geminiFutures } from "./futuresFetch";
 import { crossCheckLine, getPolymarket, listPolymarkets, type CrossCheck } from "./polymarket";
 import { getParametric, isParametricPeril, parametricCandidates } from "./parametric";
 import { isNationalPlace, parametricEnabled, PROXIES, proxyFits, proxyNote, proxyPerils, sameState, stormKindScore } from "./proxies";
-import { horizonFit, leagueIn, ownTeamsIn, parseHorizon, stageWanted, type HorizonKind } from "../ai/horizon";
+import { OWN_TEAMS, horizonFit, leagueIn, ownTeamsIn, parseHorizon, stageWanted, type HorizonKind } from "../ai/horizon";
 
 export { contractMeta, parseBounds, getBook, kalshiSource };
 export type { Bounds, ContractMeta, CrossCheck };
@@ -125,6 +125,8 @@ export const TEAMS: { re: RegExp; names: string[]; league: string[] }[] = [
   { re: /\blonghorns\b|\bUT Austin\b|\btexas football\b/i, names: ["Texas", "Texas Longhorns", "Longhorns"], league: ["NCAAF", "NCAAM"] },
   { re: /\baustin fc\b/i, names: ["Austin", "Austin FC"], league: ["MLS"] },
   { re: /\bstars\b/i, names: ["Dallas", "Dallas Stars", "Stars"], league: ["NHL"] },
+  // every other pro team + big college programs (lib/ai/horizon.ts OWN_TEAMS): a Boston pub's Celtics, a KC lot's Chiefs
+  ...OWN_TEAMS.filter((t) => !/^(Spurs|Rockets|Mavericks|Texans|Cowboys|Longhorns|Stars)$/.test(t.nick)).map((t) => ({ re: t.re, names: t.names, league: t.league })),
 ];
 
 export function teamsIn(text: string): { names: string[]; league: string[] }[] {
@@ -145,9 +147,13 @@ function teamMatch(c: MarketContract, meta: ContractMeta | undefined, wanted: { 
 // ---------- findCandidates ----------
 
 const LOC_ALIASES: Record<string, string[]> = {
-  "new york": ["nyc", "new york", "new york city"], "washington": ["washington dc", "washington", "dc"],
+  "new york": ["nyc", "new york", "new york city", "brooklyn", "queens", "manhattan", "bronx"], "washington": ["washington dc", "washington", "dc"],
   "los angeles": ["la", "los angeles"], "dallas": ["dallas", "dfw", "dallas-fort worth", "dallas–fort worth"], "san antonio": ["san antonio", "satx"],
-  "st. louis": ["st. louis", "st louis", "saint louis"], "minneapolis": ["minneapolis", "minneapolis-st. paul", "st. paul"],
+  "st. louis": ["st. louis", "st louis", "saint louis"], "minneapolis": ["minneapolis", "minneapolis-st. paul", "st. paul", "bloomington"],
+  // satellite cities -> the station city a market settles on (QA cycle 2: "no snow market in Ann Arbor" next to Detroit's ladder)
+  "detroit": ["detroit", "ann arbor", "dearborn", "royal oak"], "chicago": ["chicago", "evanston", "oak park"],
+  "boston": ["boston", "cambridge", "somerville", "brookline"], "miami": ["miami", "miami beach", "coral gables"],
+  "denver": ["denver", "boulder", "aurora", "lakewood"], "seattle": ["seattle", "bellevue", "redmond"],
 };
 /** Regional markets (a state grid, a lake, a fault zone, a ski town) and the customer cities they cover. */
 export const REGIONS: Record<string, string[]> = {
@@ -245,7 +251,13 @@ export function rankCandidates(risk: Risk, profile: BusinessProfile, universe: M
   const local = !NATIONAL_PERILS.includes(risk.peril);
   const loc = normLoc(risk.location || profile.city);
   const text = `${risk.title} ${risk.trigger} ${risk.lossReasoning ?? ""} ${profile.description}`;
-  const wantTeams = risk.peril === "game" ? teamsIn(`${risk.title} ${risk.trigger}`).length ? teamsIn(`${risk.title} ${risk.trigger}`) : teamsIn(text) : [];
+  // the nickname names the league ("Eagles" = NFL): a Philadelphia NBA game is not the Eagles' (QA cycle 2)
+  const cityName = (risk.location || profile.city).split(",")[0].trim();
+  const riskOwn = risk.peril === "game" ? (ownTeamsIn(`${risk.title} ${risk.trigger}`).length ? ownTeamsIn(`${risk.title} ${risk.trigger}`)
+    : ownTeamsIn(`${cityName} ${risk.title}. ${cityName} ${risk.trigger}`)) : []; // "Eagles" is ambiguous alone, "Philadelphia Eagles" is not
+  const lgOf = (riskOwn.length ? [...new Set(riskOwn.flatMap((t) => t.league))] : (leagueIn(`${risk.title} ${risk.trigger}`) ? [leagueIn(`${risk.title} ${risk.trigger}`)!] : []));
+  const wantTeams = risk.peril === "game" && riskOwn.length && !teamsIn(`${risk.title} ${risk.trigger}`).length ? riskOwn.map((t) => ({ names: t.names, league: t.league }))
+    : risk.peril === "game" ? teamsIn(`${risk.title} ${risk.trigger}`).length ? teamsIn(`${risk.title} ${risk.trigger}`) : teamsIn(text) : [];
   const target = triggerNumber(risk.trigger);
   const wantU = !["heat", "cold", "rain", "game"].includes(risk.peril) ? underlyings(`${risk.title} ${risk.trigger}`) : [];
   // "other" spans shutdowns, recessions, stock indexes...: the risk's own distinctive words pick the event ("Government shutdown on Dec 12")
@@ -259,6 +271,8 @@ export function rankCandidates(risk: Risk, profile: BusinessProfile, universe: M
     const exp = Date.parse(c.expiry);
     if (Number.isFinite(exp) && exp <= now) continue;
     if (c.yesAsk === null && c.noAsk === null) continue;
+    if (staleSameDay(c, nowDate)) continue; // today's weather after 10 am: already mostly observed
+    if (offSeasonHurricane(c, nowDate)) continue;
     // place: city / region match; a statewide market ("Texas" hurricane landfall) covers the state's cities; a nationwide
     // market (US tornado count) only counts for national perils (incl. the storm proxy for hail)
     if (isNationalPlace(c.location) ? local && !NATIONAL_PERILS.includes(c.peril) : !locMatches(c.location, loc) && !sameState(c.location, risk.location || profile.city) && !sameState(c.location, profile.city)) continue;
@@ -294,6 +308,7 @@ export function rankCandidates(risk: Risk, profile: BusinessProfile, universe: M
       if (have.some((h) => wantU.some((w) => w.key === h.key))) s += 1;                       // WTI risk: WTI before Brent
     }
     if (risk.peril === "game") {
+      if (lgOf.length && meta?.league && !lgOf.includes(meta.league)) continue;
       const tm = wantTeams.length ? teamMatch(c, meta, wantTeams) : null;
       if (wantTeams.length && !tm) continue;
       if (tm === "self") s += 3; else if (tm === "opponent") s += 2;
@@ -329,6 +344,22 @@ export function rankCandidates(risk: Risk, profile: BusinessProfile, universe: M
   scored.sort((a, b) => b.s - a.s || a.exp - b.exp);
   if (named.size) return scored.filter((x) => named.has(x.c.id)).slice(0, limit).map((x) => ({ ...x.c })); // a shutdown risk never gets the NASDAQ
   return scored.slice(0, limit).map((x) => { const note = proxyNote(risk.peril, x.c); return note ? { ...x.c, proxyNote: note } : { ...x.c }; });
+}
+
+/**
+ * Atlantic hurricane / landfall contracts observed only between mid-November and May: the season is over, the true chance is
+ * ~0 whatever the ask, so they are not insurance (QA cycle 1: 52% of a Miami marina's budget on a Cat 4 landfall by Dec 31).
+ */
+export function offSeasonHurricane(c: MarketContract, now = new Date()): boolean {
+  if (!/hurricane|landfall|tropical storm|named storm/i.test(`${c.eventTitle} ${c.label}`)) return false;
+  const today = centralDate(now);
+  const m = contractMeta(c.id);
+  const end = m?.eventEnd ?? (Number.isFinite(Date.parse(c.expiry)) ? centralDate(c.expiry) : "");
+  if (!end) return false;
+  const inSeason = (ymd: string) => { const md = ymd.slice(5); return md >= "06-01" && md <= "11-15"; };
+  // any in-season day between today and the end of observation keeps it
+  for (let d = today, i = 0; d <= end && i < 400; d = addDays(d, 1), i++) if (inSeason(d)) return false;
+  return true;
 }
 
 /** Perils where Polymarket adds candidates (read-only context lines). */

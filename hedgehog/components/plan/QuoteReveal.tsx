@@ -1,5 +1,5 @@
 "use client";
-// "Your cover is ready": a formal issuing moment when the AI finishes a quote. The certificate is lifted from flat
+// "Your quote is ready": a formal issuing moment when the AI finishes a quote. The certificate is lifted from flat
 // to upright (CSS 3D), its title rules draw, the amount counts up, each risk is entered as a ledger line, the
 // underwriter signs and the seal is pressed, then it hands over to the plan. Click / Enter / Esc skips.
 // prefers-reduced-motion: no 3D, everything shown at once, short hold.
@@ -53,20 +53,20 @@ export function QuoteReveal({ name, payoutUsd, lines, onDone }: {
   const amount = useCount(payoutUsd, counting && !reduced);
 
   return (
-    <div className={`${s.overlay} ${out ? s.out : ""} ${reduced ? s.reduced : ""}`} role="dialog" aria-modal="true" aria-label="Your cover is ready" onClick={finish}>
+    <div className={`${s.overlay} ${out ? s.out : ""} ${reduced ? s.reduced : ""}`} role="dialog" aria-modal="true" aria-label="Your quote is ready" onClick={finish}>
       <div className={s.lines} aria-hidden="true" />
       <Rosette className={s.watermark} density={22} steps={360} />
       <div className={s.stage}>
-        <p className={s.issuing} aria-hidden="true">Issuing your cover</p>
+        <p className={s.issuing} aria-hidden="true">Your quote is ready</p>
         <div className={s.card3d}>
           <div className={s.paper}>
             <div className={s.border} aria-hidden="true" />
             <div className={s.sheen} aria-hidden="true" />
-            <div className={s.head}><span className={s.rule} /><span>Certificate of Cover</span><span className={s.rule} /></div>
-            <p className={s.issued}>Issued to</p>
+            <div className={s.head}><span className={s.rule} /><span>Proposed cover</span><span className={s.rule} /></div>
+            <p className={s.issued}>Prepared for</p>
             <h2 className={s.name}>{name}</h2>
             <div className={s.amountBox}>
-              <span>We pay you up to</span>
+              <span>Pays you up to</span>
               <b>{usd(reduced || !counting ? (reduced ? payoutUsd : 0) : amount)}</b>
             </div>
             <ul className={s.ledger}>

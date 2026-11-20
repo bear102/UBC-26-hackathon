@@ -45,7 +45,7 @@ export function QuoteTable({ quote }: { quote: Quote }) {
         <tfoot>
           <tr>
             <td className={s.sp} />
-            <td colSpan={3} className={s.lbl}>Total <span className="xs muted">· budget {usd(quote.budgetUsd)}/mo</span></td>
+            <td colSpan={3} className={s.lbl}>Total <span className="xs muted">· monthly budget {usd(quote.budgetUsd)}</span></td>
             <td className={`right num pay ${s.payc}`} data-l="Pays up to">{usd(quote.totalPayoutUsd)}</td>
             <td className={`right num cost ${s.costc}`} data-l="Premium">{usd(quote.totalPremiumUsd, 2)}</td>
             <td className="right num" data-l="Pays / prem.">{ratio(quote.totalPayoutUsd, quote.totalPremiumUsd)}</td>

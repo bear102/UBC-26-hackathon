@@ -4,24 +4,24 @@ import { rescaleQuote, type Coverage } from "@/lib/client/quote";
 
 export type Preset = BusinessProfile & { tagline: string };
 
-export const FIXTURE_PRESETS: Preset[] = [
+export const FIXTURE_PRESETS: Preset[] = [  // keep in sync with /api/presets (lib/ai/presets) so ?mock=1 shows the card that was clicked
   {
-    id: "rainey-patio-bar", presetId: "rainey-patio-bar", name: "Lazy Heron Patio Bar",
-    tagline: "Rainey St patio bar. A wet Saturday or a Spurs loss empties the deck.",
-    description: "We're a patio bar on Rainey Street. Most of our seats are outside, and Spurs game nights and Saturdays are our big days.",
-    city: "Austin, TX", zip: "78701", avgDailyRevenueUsd: 3200, busyDays: ["Thu", "Fri", "Sat"], monthlyBudgetUsd: 300,
+    id: "rainey-patio-bar", presetId: "rainey-patio-bar", name: "The Prickly Porch (Rainey St)",
+    tagline: "Patio bar in a Rainey St bungalow. Lives and dies by the weather and game nights.",
+    description: "We're a patio bar in an old bungalow on Rainey Street, about 80% of our seats are outside. Thursday to Sunday nights and Spurs/Texans game nights are our money makers. A scorching afternoon, a rainy Friday, or the Spurs losing a home game and everyone going home early kills the night.",
+    city: "Austin, TX", zip: "78701", avgDailyRevenueUsd: 4200, busyDays: ["Thu", "Fri", "Sat", "Sun"], monthlyBudgetUsd: 300,
   },
   {
-    id: "east-austin-food-truck", presetId: "east-austin-food-truck", name: "Cielo Taco Truck",
-    tagline: "East Austin food truck. Rain kills the lunch line; a cold snap halves it.",
-    description: "Taco truck on East Cesar Chavez. No indoor seating — when it rains at lunch, the line disappears.",
-    city: "Austin, TX", zip: "78702", avgDailyRevenueUsd: 1400, busyDays: ["Tue", "Wed", "Thu", "Fri", "Sat"], monthlyBudgetUsd: 150,
+    id: "east-austin-food-truck", presetId: "east-austin-food-truck", name: "Birria Bros (East Austin food truck)",
+    tagline: "Birria taco truck on E Cesar Chavez. Rain means no line; heat means short lines.",
+    description: "I run a birria taco truck in an East Austin trailer park lot on Cesar Chavez. No indoor seating at all. When it rains nobody comes out, and on really hot days the lunch line disappears. Weekends are most of my money.",
+    city: "Austin, TX", zip: "78702", avgDailyRevenueUsd: 1400, busyDays: ["Fri", "Sat", "Sun"], monthlyBudgetUsd: 120,
   },
   {
-    id: "austin-catering-delivery", presetId: "austin-catering-delivery", name: "Hill Country Catering Co.",
-    tagline: "Catering + delivery fleet. Fuel spikes eat the margin on fixed-price contracts.",
-    description: "We cater corporate lunches and weddings with four delivery vans. Our contracts are fixed-price, so fuel spikes come out of our margin.",
-    city: "Austin, TX", zip: "78745", avgDailyRevenueUsd: 4500, busyDays: ["Fri", "Sat", "Sun"], monthlyBudgetUsd: 400,
+    id: "austin-catering-delivery", presetId: "austin-catering-delivery", name: "Hill Country Table Catering",
+    tagline: "Corporate catering with 4 delivery vans. Fuel and food costs eat the margin.",
+    description: "We cater corporate lunches and events around Austin with four delivery vans doing about 3,000 miles a week. Fixed-price contracts mean when fuel or food costs spike we eat it. We also carry a $150k line of credit for equipment.",
+    city: "Austin, TX", zip: "78745", avgDailyRevenueUsd: 3000, busyDays: ["Mon", "Tue", "Wed", "Thu", "Fri"], monthlyBudgetUsd: 200,
   },
 ];
 
@@ -88,7 +88,7 @@ const SEEDS: Record<string, Seed> = {
 
 export function fixtureQuote(profile: BusinessProfile, coveragePct: Coverage = 50): Quote {
   const seed = SEEDS[profile.presetId ?? profile.id] ?? SEEDS["rainey-patio-bar"];
-  const scale = profile.avgDailyRevenueUsd > 0 ? profile.avgDailyRevenueUsd / (FIXTURE_PRESETS.find((p) => p.id === (profile.presetId ?? profile.id))?.avgDailyRevenueUsd ?? 3200) : 1;
+  const scale = profile.avgDailyRevenueUsd > 0 ? profile.avgDailyRevenueUsd / (FIXTURE_PRESETS.find((p) => p.id === (profile.presetId ?? profile.id))?.avgDailyRevenueUsd ?? 4200) : 1;
   const risks: Risk[] = [];
   const lines: QuoteLine[] = seed.lines.map((s) => {
     const risk = { ...s.risk, lossUsd: Math.round(s.risk.lossUsd * scale) };

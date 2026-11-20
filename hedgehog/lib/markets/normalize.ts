@@ -34,7 +34,11 @@ export interface ContractMeta {
   futureKind?: "playoffs" | "division" | "conference" | "round" | "title" | "wins"; // season-long sports futures (lib/markets/futures.ts)
 }
 
-const metaMap = new Map<string, ContractMeta>();
+// On globalThis like the market cache (lib/markets/index.ts srcCache): Next bundles route handlers and instrumentation
+// separately, so a module-level Map left a route with cached contracts but NO meta (no event dates, bounds, teams) when the
+// background warmer had fetched them (QA cycle 1: a Polymarket Nov 20 daily market fell back to its Nov 21 expiry day).
+const MG = globalThis as { __hhMetaMap?: Map<string, ContractMeta> };
+const metaMap: Map<string, ContractMeta> = (MG.__hhMetaMap ??= new Map());
 export function setMeta(id: string, m: ContractMeta) { metaMap.set(id, m); }
 /** Extra info for a contract id seen by any normalizer in this process (undefined if never seen). */
 export function contractMeta(id: string): ContractMeta | undefined { return metaMap.get(id); }
@@ -59,6 +63,19 @@ const MONTHS = ["january", "february", "march", "april", "may", "june", "july", 
 export function centralDate(iso: string | Date): string {
   const d = typeof iso === "string" ? new Date(iso) : iso;
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
+/**
+ * A one-day weather market for TODAY, after 10 am Central: the day is mostly observed already, so its price says what
+ * happened, not what might (QA cycle 1: "$0.04 for $1" lines on today's high sold as a cold-front hedge).
+ */
+export function staleSameDay(c: { id: string; peril: string; expiry: string }, now = new Date()): boolean {
+  if (!["heat", "cold", "rain"].includes(c.peril)) return false;
+  const m = metaMap.get(c.id);
+  const today = centralDate(now);
+  const start = m?.eventDate ?? (Number.isFinite(Date.parse(c.expiry)) ? centralDate(c.expiry) : "");
+  if (start !== today || (m?.eventEnd && m.eventEnd !== today)) return false;
+  const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", hour: "numeric", hourCycle: "h23" }).format(now));
+  return hour >= 10;
 }
 export function addDays(ymd: string, n: number): string {
   const d = new Date(`${ymd}T12:00:00Z`);

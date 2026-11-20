@@ -1,4 +1,4 @@
-// GET ?owner=<pubkey>[&businessId=] -> (Position & { markPrice, markValueUsd, pnlUsd, contract })[]
+// GET ?owner=<pubkey> (required)[&businessId=] -> (Position & { markPrice, markValueUsd, pnlUsd, contract })[]
 import { NextResponse } from "next/server";
 import { store } from "@/lib/store";
 import type { MarketContract } from "@/lib/types";
@@ -13,8 +13,9 @@ export async function GET(req: Request) {
   const u = new URL(req.url);
   const owner = u.searchParams.get("owner");
   const businessId = u.searchParams.get("businessId");
+  if (!owner) return NextResponse.json({ error: "owner is required", code: "bad_request" }, { status: 400 });
   const rows = store.list("positions")
-    .filter((p) => (!owner || p.owner === owner) && (!businessId || p.businessId === businessId))
+    .filter((p) => p.owner === owner && (!businessId || p.businessId === businessId))
     .filter((p) => !isTestRecord(p, owner)) // test / e2e / parametric rows (lib/visibility.ts); an owner always sees their own
     .filter((p) => p.txSig || Date.now() - Date.parse(p.createdAt) < 10 * 60_000) // hide abandoned unsigned buys
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));

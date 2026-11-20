@@ -28,6 +28,10 @@ export function sameContract(a: MarketContract, b: MarketContract): boolean {
 }
 
 export const MAX_INSURANCE_ASK = 0.85;
+/** A budget-scaled line paying less than this (in $) is dropped instead of shown as a dust line. */
+export const MIN_PAYOUT_USD = 25;
+/** First pass of the budget split: one line takes at most this share while other lines are still unfunded. */
+export const MAX_LINE_SHARE = 0.6;
 /** Don't walk the book more than this above the top ask (keeps the avg fill near the quoted price). */
 export const MAX_SLIPPAGE = 0.1;
 
@@ -112,6 +116,8 @@ export function coverMonths(c: MarketContract, now = new Date()): number {
 
 /** Gemini may cost at most this much more than Kalshi for the same contract and still win the route. */
 export const ROUTE_TOLERANCE = 0.01;
+/** Max price gap between "the same contract" on two venues before the match is treated as a different event. */
+export const MAX_ROUTE_GAP = 0.25;
 
 /**
  * Deterministic venue router ("priced & hedged on Gemini"): for each Kalshi leg, if `contracts` holds the SAME
@@ -141,6 +147,9 @@ export function routeToBest(legs: HedgeLeg[], contracts: Map<string, MarketContr
       const eq = findEquivalent(c, leg.side, pool.filter((p) => p.venue === v && !taken.has(p.id)));
       if (!eq || eq.match !== "same") continue;
       const a = askOf(eq.contract, eq.side);
+      // the same question can't be priced 25+ points apart on two venues: that "match" is a different event (QA cycle 1:
+      // a 10c Nov 20 daily rain market replaced a 76c Nov 21-22 weekend market)
+      if (own !== null && a !== null && Math.abs(a - own) > MAX_ROUTE_GAP) continue;
       if (a !== null && a <= MAX_INSURANCE_ASK) opts.push({ c: eq.contract, side: eq.side, ask: a });
     }
     if (!opts.length) return leg;
@@ -236,19 +245,40 @@ export async function sizeQuote(args: SizeArgs): Promise<SizeResult> {
     // cheapest protection first (payout per premium dollar): this week's cheap tails stay in; a season line takes what is left
     // direct risks are funded before creative (proxy) hedges, then best payout per premium dollar
     const proxy = (c: Cand) => (riskById.get(c.line.riskId)?.kind === "proxy" ? 1 : 0);
-    const order = [...cands].sort((a, b) => proxy(a) - proxy(b) || b.line.payoutUsd / b.line.premiumUsd - a.line.payoutUsd / a.line.premiumUsd);
+    // QA cycle 2: value alone funded a $1,500 diesel bet and a secondary snow month before the $18-30k core risk; weight
+    // value by the loss at stake (sqrt keeps a cheap tail competitive without letting it starve the main exposure)
+    const prio = (c: Cand) => (riskById.get(c.line.riskId)?.lossUsd ?? 0) * Math.sqrt(c.line.payoutUsd / Math.max(0.01, c.line.premiumUsd));
+    const order = [...cands].sort((a, b) => proxy(a) - proxy(b) || prio(b) - prio(a));
     let left = budgetUsd;
     const kept = new Set<Cand>();
+    // pass 1: no single line takes more than MAX_LINE_SHARE of the budget while other lines wait (QA cycle 1: 52-92% of a
+    // budget on one line while direct risks went unfunded); pass 2 hands what is left back in the same order
+    const cap = order.length > 1 ? budgetUsd * MAX_LINE_SHARE : budgetUsd;
+    const full = new Map<Cand, number>(); // contracts wanted before scaling
     for (const c of order) {
-      if (charge(c) <= left + 1e-9) { kept.add(c); left -= charge(c); continue; }
-      const { n, cost } = maxAffordable(c.ladder, c.want, left);
-      if (n >= 1) {
+      const allow = Math.min(left, cap);
+      if (charge(c) <= allow + 1e-9) { kept.add(c); left -= charge(c); continue; }
+      full.set(c, c.want);
+      const { n, cost } = maxAffordable(c.ladder, c.want, allow);
+      // a scaled line must still be worth having: "$0.04 for a $1 payout" is noise, not cover (QA cycle 1)
+      if (n >= Math.min(c.want, MIN_PAYOUT_USD)) {
         c.line = { ...c.line, contracts: n, payoutUsd: n, premiumUsd: r2(cost), pricePerContract: r4(cost / n) };
         kept.add(c); left -= cost;
-        uncovered.push({ riskId: c.line.riskId, reason: `budget: scaled ${c.line.contract.label} to ${n} of ${c.want} contracts` });
-      } else {
-        uncovered.push({ riskId: c.line.riskId, reason: `over budget: ${c.line.contract.label} needs $${c.line.premiumUsd.toFixed(2)}, $${Math.max(0, left).toFixed(2)} left of $${budgetUsd}` });
       }
+    }
+    for (const c of order) {
+      if (!full.has(c)) continue;
+      const had = kept.has(c) ? c.line.premiumUsd : 0;
+      const { n, cost } = maxAffordable(c.ladder, full.get(c)!, had + left);
+      if (n >= Math.min(full.get(c)!, MIN_PAYOUT_USD) && cost >= had - 1e-9) {
+        c.line = { ...c.line, contracts: n, payoutUsd: n, premiumUsd: r2(cost), pricePerContract: r4(cost / n) };
+        left -= cost - had; kept.add(c);
+      }
+    }
+    for (const c of order) {
+      if (!full.has(c)) continue;
+      if (kept.has(c)) uncovered.push({ riskId: c.line.riskId, reason: `budget: scaled ${c.line.contract.label} to ${c.line.contracts} of ${full.get(c)} contracts` });
+      else uncovered.push({ riskId: c.line.riskId, reason: `over budget: ${c.line.contract.label} needs $${c.line.premiumUsd.toFixed(2)}, $${Math.max(0, left).toFixed(2)} left of $${budgetUsd}` });
     }
     lines = cands.filter((c) => kept.has(c)).map((c) => c.line);
   }

@@ -2,10 +2,11 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useWallet } from "@solana/wallet-adapter-react";
 import type { BusinessProfile, ClarifyAnswer, ClarifyQuestion, Quote, QuoteLine, Risk } from "@/lib/types";
-import { advise, adviseQuestions, coverReprice, getPresets } from "@/lib/client/api";
+import { advise, adviseQuestions, coverReprice, getPolicies, getPresets } from "@/lib/client/api";
 import { rescaleQuote, type Coverage } from "@/lib/client/quote";
-import { clearQuotes, lastBusiness, lastQuotePct, loadClarify, loadProfile, loadQuote, saveClarify, saveProfile, saveQuote, setLastBusiness } from "@/lib/client/storage";
+import { clearQuotes, lastBusiness, lastOwner, lastQuotePct, loadClarify, loadProfile, loadQuote, saveClarify, saveProfile, saveQuote, setLastBusiness } from "@/lib/client/storage";
 import { FIXTURE_PRESETS } from "@/lib/fixtures";
 import { usd } from "@/lib/client/format";
 import { AdviseProgress } from "./AdviseProgress";
@@ -54,6 +55,24 @@ export function PlanView() {
   // Quick questions before the quote (null = not asking). `edit` = re-answering on an existing plan.
   const [asking, setAsking] = useState<{ questions: ClarifyQuestion[]; previous: ClarifyAnswer[]; edit: boolean } | null>(null);
   const [rebuilding, setRebuilding] = useState(false);
+
+  // Already covered (survives reload): this owner's open policies for this business, from the chain.
+  const { publicKey } = useWallet();
+  useEffect(() => {
+    const owner = publicKey?.toBase58() ?? lastOwner();
+    if (!owner || !profile) return;
+    let live = true;
+    getPolicies(owner).then((ps) => {
+      if (!live) return;
+      const have: Record<string, CheckoutResult> = {};
+      for (const p of ps) {
+        if (p.status !== "open" || p.businessId !== profile.id || !p.marketRef) continue;
+        have[`cover:${p.marketRef}`] = { kind: "cover", signature: p.txSig ?? "", network: "devnet", policyId: p.policyId, policyPda: p.policyPda };
+      }
+      setBought((b) => ({ ...have, ...b }));
+    }).catch(() => {});
+    return () => { live = false; };
+  }, [publicKey, profile]);
 
   // Resolve the business profile (URL → storage → presets).
   useEffect(() => {
@@ -218,7 +237,7 @@ export function PlanView() {
           <span className="eyebrow">Step 3</span>
           <h1 className={s.title}>{profile.name}</h1>
         </div>
-        <p className={s.meta}><button type="button" className={s.tourLink} onClick={() => setTouring(true)}>Show me around</button>{" · "}{profile.city}{profile.zip ? ` · ${profile.zip}` : ""} · {usd(profile.avgDailyRevenueUsd)}/day · busy {profile.busyDays.join(", ") || "—"}
+        <p className={s.meta}><button type="button" className={s.tourLink} onClick={() => setTouring(true)}>Show me around</button>{" · "}{[profile.city, profile.zip].filter(Boolean).join(" · ")} · {usd(profile.avgDailyRevenueUsd)}/day · busy {profile.busyDays.join(", ") || "—"}
           {" · "}<Link href={`/intake?preset=${encodeURIComponent(profile.id)}`}>Edit</Link></p>
       </section>
 

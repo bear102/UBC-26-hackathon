@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import { IconCheck } from "./Icons";
 
 const STAGES = [
-  { at: 0, label: "Mapping your risks", sub: "Reading your business and the Austin forecast" },
-  { at: 5, label: "Scanning Gemini + Kalshi markets", sub: "Weather, sports, commodity and macro contracts" },
+  { at: 0, label: "Mapping your risks", sub: "Reading your business and the local forecast" },
+  { at: 5, label: "Scanning Gemini, Kalshi + Polymarket", sub: "Weather, sports, commodity and macro contracts" },
   { at: 14, label: "Matching each risk to a contract", sub: "Picking the side that pays on your bad day" },
   { at: 22, label: "Sizing your cover", sub: "Fitting your budget" },
 ];

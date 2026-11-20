@@ -255,6 +255,8 @@ export function explainLine(line: QuoteLine, risk?: Risk | null, profile?: Pick<
   let payment: string;
   if (readOnly) payment = "Not sold here. Use it as a read on the odds.";
   else if (line.action === "open-on-gemini") payment = `You buy it in your Gemini account. If ${ifClause}, Gemini credits ${usd(payoutUsd)} there after it settles (${settle}).`;
+  // season futures: the venue's close is a placeholder years out (Kalshi says 2029); the result comes when the season ends
+  else if (c.expiry && Date.parse(c.expiry) - Date.now() > 270 * 86_400_000) payment = `If ${ifClause}, ${usd(payoutUsd)} lands in your wallet automatically once the official result is in. Nothing to file, no claim forms.`;
   else payment = `If ${ifClause}, ${usd(payoutUsd)} lands in your wallet automatically after the official result is in (around ${settle}). Nothing to file, no claim forms.`;
 
   const sideExplain = `You hold ${line.contracts.toLocaleString()} ${line.side.toUpperCase()} tokens on “${c.label}”. Each is worth $1 if ${ifClause}${when}, and $0 if not.`;
