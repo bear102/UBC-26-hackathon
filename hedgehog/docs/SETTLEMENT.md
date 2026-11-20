@@ -51,7 +51,22 @@ Everything except #1 should settle before the Devpost deadline (Nov 20 18:00Z). 
 
 ## Real-market settlements so far
 
-**None yet.** Every earlier settle tx is test data. Policy #7 is on a Hedgehog parametric market (`hedgehog:hail:…`), and `e2e:devnet-smoke` is an e2e fixture. The e2e "BTC YES paid" positions were settled against a mocked contract (the real `GEMI-BTC2611192200-HI63250` resolved NO at 22:00:08Z). Add the sigs here when tonight's games settle: `https://explorer.solana.com/tx/<sig>?cluster=devnet`.
+Checked 2026-11-20 ~04:50 UTC against `.data/worker.log` and devnet (`getTransaction`: each tx is a `SettlePolicy` on program `4H7Q…RbNe`, no error). Each policy was settled by the crank from the venue's official result.
+
+| # | Market | Side | Result | Settle tx (devnet) |
+|---|---|---|---|---|
+| 3 | gemini:GEMI-WXHIGH-LTAC-2611192059-15TO15 | YES | **Paid 3.00** (vault 10,783.53 → 10,780.53) | [2tB5…Mx2s](https://explorer.solana.com/tx/2tB5XkKf3MMhL3n7bwjS14Yh1MYsyUThPgTQaZS3A6pLFJFPNyDdDP54iBei2NuQUjmubTCNfHdPFknFgmMDMx2s?cluster=devnet) |
+| 5 | kalshi:KXNBAGAME-26NOV19GSWMEM-GSW | YES | Not hit, closed (no payout) | [5TWc…CoQG](https://explorer.solana.com/tx/5TWcixH25ZMezBSd7UXLwT41KvN5ZmGgWYbfHfzGZ49JLxCtk2eRZinQ6u4SxtxPPYacASrAXTEaydE5Hz3CgoQG?cluster=devnet) |
+| 0 | kalshi:KXNBAGAME-26NOV19LACSAS-SAS | NO | Not hit, closed | [42Lv…znvv](https://explorer.solana.com/tx/42LvKffEMzTWR9JVTiZtYo3JE8vnJ2ZZ4JtQVJdwvvMzrsy9DayXSUaifdE9cfXgDuD1zFNcr9HWqNPXvoFnznvv?cluster=devnet) |
+| 2 | gemini:GEMI-NBA-2611200100-LAC-SAS-M-LAC | YES | Not hit, closed | [5DHJ…Upj](https://explorer.solana.com/tx/5DHJrZ7WVLogUX9p9Sb6XHM7V634mDDpJ1VuXvJkkTpntozB6W8uFpQhxLb1GX2GpcEAZGx3uegdH1VgYH325Upj?cluster=devnet) |
+| 6 | polymarket:nba-gsw-mem-2026-11-19 | YES | Not hit, closed | [3PT1…2P6D](https://explorer.solana.com/tx/3PT1Rzu2RSJJZ8C9wktnXLjfvUnq1r4FgWJjrVPVKSVs2FZuY4qe2LXzJevxcAnrUypLutmV1tbKVBFqticq2P6D?cluster=devnet) |
+| 4 | gemini:GEMI-WXHIGH-EFHK-2611192159-5TO5 | YES | Not hit, closed | [5stP…4a7e](https://explorer.solana.com/tx/5stPibsqqx2VRYBo6on1qKy18iLEVfrKVxvHKQk6Zu23g4qx7voVj2Ta5mhj8dHWtcMdCNjb1emvCkLaiA3x4a7e?cluster=devnet) (also delivered by the QuickNode Stream) |
+
+Note: onchain status `Expired` means "settled NO" (`settle_policy(false)`), not a refund. A refund sets `Refunded` (`expire_policy`). No policy has been refunded yet, so the refund path is shown only by tests.
+
+Pending at the time of writing: #8–#16 (Gemini daily highs, results expected about 05:00–11:00 UTC Nov 20) and #1 (Kalshi weekend rain, about Nov 23). Add their sigs here when the crank settles them (`grep "settled" .data/worker.log`).
+
+Not real-market evidence: policy #7 (`hedgehog:hail:…`, a Hedgehog parametric test market), the `e2e:devnet-smoke` fixture, and the e2e "BTC YES paid" positions (settled against a mocked contract).
 
 ## Fallback for the demo video
 

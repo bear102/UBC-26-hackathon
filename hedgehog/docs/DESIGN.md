@@ -1,5 +1,7 @@
 # Hedgehog v2 — Design (2026-11-19, 00:00 CST)
 
+> **Historical design record** from the start of the build. Some plans here changed (e.g. the QuickNode Stream runs on devnet, not mainnet; no mainnet DFlow buy was made; the `[?]` gates were resolved). The current state is in [`../README.md`](../README.md).
+
 > One line: **an AI risk advisor that turns a small business's worst days into prediction-market hedges, priced like an insurance quote, bought with one signature on Solana.**
 
 Deadline: Fri Nov 20, 12:00 CST (submit target 10:00 CST). Finals Sat Nov 21, UT Austin.
