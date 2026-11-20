@@ -53,7 +53,7 @@ export default function Landing() {
                   <h3 className={s.certH}>If it rains or turns cold and nobody shows up…</h3>
                   <p className={s.certWho}>Rainey St patio bar, Austin · <b>Saturday, Nov 21</b></p>
                   <div className={`terms ${s.certTerms}`}>
-                    <div className="term pay"><span className="lab">We pay you up to</span><span className="amt">$950</span></div>
+                    <div className={`term pay ${s.payBox}`}><span className={`lab ${s.payLab}`}><i aria-hidden="true" />We pay you up to<i aria-hidden="true" /></span><span className="amt">$950</span></div>
                   </div>
                   <ul className={s.ifs}>
                     <li>

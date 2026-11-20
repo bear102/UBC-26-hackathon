@@ -45,7 +45,7 @@ export default async function MarketsPage({ searchParams }: { searchParams: Prom
         <div className="doc-head">
           <span className="caps-title">Venues</span>
         </div>
-        <VenueLegend />
+        <VenueLegend compact />
       </section>
 
       <Suspense fallback={<div className="empty" style={{ marginTop: 20 }}><span className="spinner" /> Loading live markets from Gemini, Kalshi and Polymarket…</div>}>

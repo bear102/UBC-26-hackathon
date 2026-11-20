@@ -69,7 +69,11 @@
 .certWho b { color: var(--ink); font-weight: 600; }
 .certTerms :global(.lab) { text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 600; }
 .certTerms :global(.amt) { font-size: 48px; margin-top: 6px; }
-.certTerms { grid-template-columns: 1fr; }
+.certTerms { grid-template-columns: 1fr; border-width: 1px; outline: 1px solid var(--ink); outline-offset: 3px; margin: 4px 3px 0; }
+.payBox { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 14px 16px 16px !important; background: radial-gradient(ellipse at 50% 120%, var(--pay-soft) 0%, transparent 70%); }
+.payLab { display: flex !important; align-items: center; gap: 10px; width: 100%; max-width: 300px; justify-content: center; }
+.payLab i { flex: 1; height: 1px; background: var(--line-2); }
+.payBox :global(.amt) { font-family: var(--font-display), var(--sans); font-weight: 800; font-size: 64px !important; letter-spacing: -.03em; margin-top: 4px; }
 .ifs { list-style: none; margin: 14px 0 0; padding: 0; }
 .ifs li { display: flex; align-items: center; gap: 10px; padding: 9px 0; }
 .ifs li + li { border-top: 1px dashed var(--line-2); }
@@ -85,5 +89,6 @@
   .heroCert :global(.cert-in) { padding: 18px 16px 30px; }
   .certH { font-size: 24px !important; }
   .certTerms :global(.amt) { font-size: 38px; }
+  .payBox :global(.amt) { font-size: 52px !important; }
   .worstPct { font-size: 34px; }
 }
