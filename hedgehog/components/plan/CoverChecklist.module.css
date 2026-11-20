@@ -55,3 +55,7 @@
   .barCount, .barPrice, .barAll { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .bar { transition: none; } }
+
+/* motion (html.fx only): the tick pops when a risk becomes covered */
+:global(html.fx) .doneTag svg { animation: popIn .45s cubic-bezier(.3, 1.4, .5, 1) both; }
+@keyframes popIn { 0% { transform: scale(.4); opacity: 0; } 60% { transform: scale(1.25); opacity: 1; } 100% { transform: scale(1); } }

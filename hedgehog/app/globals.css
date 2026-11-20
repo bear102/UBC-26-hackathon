@@ -515,3 +515,17 @@ textarea.input { background-image: repeating-linear-gradient(transparent 0 27px,
 /* Visible only at phone widths (pair with .hide-m), e.g. the short "Demo" wallet label in the header. */
 .show-m { display: none; }
 @media (max-width: 640px) { .show-m { display: inline; } }
+
+/* ---------- motion (only when <html class="fx">: set in layout.tsx; off for reduced motion / automation) ---------- */
+html.fx .rv { opacity: 0; transform: translateY(18px); }
+html.fx .rv.rv-in { opacity: 1; transform: none; transition: opacity .6s ease var(--rv-delay, 0ms), transform .7s cubic-bezier(.2, .8, .2, 1) var(--rv-delay, 0ms); }
+html.fx .btn { transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease, color .15s ease; }
+html.fx .btn:hover:not(:disabled) { transform: translateY(-1px); }
+html.fx .btn:active:not(:disabled) { transform: translateY(0); }
+html.fx .btn svg:last-child { transition: transform .2s ease; }
+html.fx .btn:hover:not(:disabled) svg:last-child { transform: translateX(3px); }
+html.fx a.form:hover { transform: translateY(-4px) rotate(-.3deg); box-shadow: 6px 8px 0 -2px var(--line-2), 0 14px 30px -18px rgba(20, 32, 63, .5); }
+html.fx a.form:hover .ico { animation: nudge .5s ease; }
+@keyframes nudge { 40% { transform: translateY(-3px) rotate(-6deg); } 70% { transform: translateY(0) rotate(3deg); } }
+@keyframes popIn { 0% { transform: scale(.4); opacity: 0; } 60% { transform: scale(1.25); opacity: 1; } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { html.fx .rv { opacity: 1; transform: none; } }

@@ -58,6 +58,7 @@ export function PlanView() {
   const [reveal, setReveal] = useState(false);
   const [touring, setTouring] = useState(false);
   const [repricing, setRepricing] = useState(false);
+  const [droppedCount, setDroppedCount] = useState(0); // risks removed by the last Refresh prices (for the note caption)
   const hadQuote = useRef(false);
   // Quick questions before the quote (null = not asking). `edit` = re-answering on an existing plan.
   const [asking, setAsking] = useState<{ questions: ClarifyQuestion[]; previous: ClarifyAnswer[]; edit: boolean } | null>(null);
@@ -224,21 +225,42 @@ export function PlanView() {
   /** Re-price every buyable line at the live ask (no AI), re-fit coverage + budget, and show it. Returns the new
    *  not-yet-covered items so an open "Cover all" dialog can continue with them. */
   const refreshPrices = async (): Promise<CoverItem[]> => {
-    const buyable = quote.lines.filter((l) => l.action !== "read-only");
-    const r = await coverReprice(buyable.map((l) => ({ marketRef: l.contractId, side: l.side })));
+    // Re-price the plan's lines AND every alternative (options feed the plan switcher), so nothing stale survives.
+    const seen = new Set<string>();
+    const all: { marketRef: string; side: "yes" | "no" }[] = [];
+    for (const l of [...quote.lines.filter((x) => x.action !== "read-only"), ...(quote.options ?? []).flatMap((o) => o.choices)]) {
+      const k = `${l.contractId}|${l.side}`;
+      if (!seen.has(k)) { seen.add(k); all.push({ marketRef: l.contractId, side: l.side }); }
+    }
+    const r = await coverReprice(all);
     const ask = new Map(r.lines.map((x) => [`${x.marketRef}|${x.side}`, x.ask]));
-    // A market that closed while the quote sat open can't be bought any more: drop its line and say why.
-    const shut = new Set(r.lines.filter((x) => x.ask == null && /market is (closed|settled|not coverable)|not found/i.test(x.error ?? "")).map((x) => `${x.marketRef}|${x.side}`));
+    // A contract that can't be bought any more (closed, delisted, or not sellable on our program) is dropped with the right reason.
+    const why = (err = "") => /not coverable/i.test(err) ? "Can't be bought on our program yet."
+      : /not found/i.test(err) ? "Its market is no longer listed."
+      : /market is (closed|settled)/i.test(err) ? "Its market has closed since this quote." : null;
+    const shut = new Map<string, string>();
+    for (const x of r.lines) { const w = x.ask == null ? why(x.error) : null; if (w) shut.set(`${x.marketRef}|${x.side}`, w); }
+    const shutIds = new Set([...shut.keys()].map((k) => k.slice(0, k.lastIndexOf("|"))));
     const lines = quote.lines.filter((l) => !shut.has(`${l.contractId}|${l.side}`)).map((l) => {
       const a = ask.get(`${l.contractId}|${l.side}`);
       return a == null ? l : { ...l, pricePerContract: a };
     });
-    const dropped = quote.lines.filter((l) => shut.has(`${l.contractId}|${l.side}`) && !lines.some((k) => k.riskId === l.riskId) && !quote.uncovered.some((u) => u.riskId === l.riskId));
-    const uncovered = [...quote.uncovered, ...dropped.map((l) => ({ riskId: l.riskId, reason: "Its market has closed since this quote." }))];
-    // ...and keep it out of the plan switcher, which rebuilds lines from these options
-    const options = quote.options?.map((o) => ({ ...o, choices: o.choices.filter((c) => !shut.has(`${c.contractId}|${c.side}`)) }));
-    const q = rescaleQuote({ ...quote, lines, uncovered, ...(options ? { options } : {}), createdAt: r.at }, cov);
+    const options = quote.options?.map((o) => ({
+      ...o,
+      choices: o.choices.filter((c) => !shut.has(`${c.contractId}|${c.side}`)).map((c) => {
+        const a = ask.get(`${c.contractId}|${c.side}`);
+        return a == null ? c : { ...c, pricePerContract: a };
+      }),
+    }));
+    // plans must not point at dropped contracts, or "Selected" never matches and their totals include them
+    const packages = quote.packages?.map((p) => ({ ...p, picks: p.picks.filter((x) => !shutIds.has(x.contractId)) }));
+    const hasAlt = (riskId: string) => !!options?.some((o) => o.riskId === riskId && o.choices.length > 0); // another plan can still cover it
+    const dropped = quote.lines.filter((l) => shut.has(`${l.contractId}|${l.side}`) && !lines.some((k) => k.riskId === l.riskId) && !hasAlt(l.riskId) && !quote.uncovered.some((u) => u.riskId === l.riskId));
+    const removedCount = quote.lines.filter((l) => shut.has(`${l.contractId}|${l.side}`)).length;
+    const uncovered = [...quote.uncovered, ...dropped.map((l) => ({ riskId: l.riskId, reason: shut.get(`${l.contractId}|${l.side}`)! }))];
+    const q = rescaleQuote({ ...quote, lines, uncovered, ...(options ? { options } : {}), ...(packages ? { packages } : {}), createdAt: r.at }, cov);
     saveQuote(q, cov); setQuote(q); setLocal(true);
+    if (removedCount) setDroppedCount((n) => n + removedCount);
     const byId = new Map(q.risks.map((x) => [x.id, x]));
     return coverItems(q.lines, byId, (l) => !!bought[`cover:${l.contractId}`], profile).filter((i) => !i.done);
   };
@@ -264,7 +286,7 @@ export function PlanView() {
               <span className="caps-title">Underwriter&apos;s note</span>
             </div>
             <p className={s.summary}>{quote.summary}</p>
-            {local && <p className="xs muted">Written for the original quote; numbers below are current.</p>}
+            {local && <p className="xs muted">Written for the original quote; numbers below are current.{droppedCount > 0 && <> {droppedCount === 1 ? "One risk it mentions can" : `${droppedCount} risks it mentions can`} no longer be bought and {droppedCount === 1 ? "was" : "were"} removed.</>}</p>}
             {error && !loading && <div className="alert alert-bad small" role="alert">Couldn&apos;t re-run the AI: {error}. Your current plan is unchanged.</div>}
             <ClarifyRecap answers={quote.clarifications ?? loadClarify(profile)?.answers} asked={!!loadClarify(profile)?.questions.length} onEdit={editAnswers} busy={loading} />
             <p className={`xs ${s.venues}`}>
@@ -335,7 +357,9 @@ export function PlanView() {
           </div>
           <div className="grid grid-2">
             {[...notCoverable, ...quote.risks.filter((r) => !linesByRisk.has(r.id) && !uncoveredIds.has(r.id))
-              .map((r) => ({ riskId: r.id, reason: "No live market matches this risk closely enough." }))].map((u) => {
+              .map((r) => ({ riskId: r.id, reason: quote.options?.some((o) => o.riskId === r.id && o.choices.length > 0)
+                ? "Not in this plan. Pick a plan above that includes it."
+                : "No live market matches this risk closely enough." }))].map((u) => {
               const r = risksById.get(u.riskId);
               return (
                 <div key={u.riskId} className={`card card-dashed ${s.excl}`}>

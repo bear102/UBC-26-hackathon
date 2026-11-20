@@ -97,3 +97,18 @@
   .payBox :global(.amt) { font-size: 52px !important; }
   .worstPct { font-size: 34px; }
 }
+
+/* ---------- hero motion (html.fx only) ---------- */
+:global(html.fx) .ln { display: inline-block; animation: lineUp .7s cubic-bezier(.2, .8, .2, 1) both; }
+:global(html.fx) .stamp { animation: wipe .6s cubic-bezier(.6, 0, .2, 1) .38s both; }
+:global(html.fx) .exItem { animation: lineUp .5s ease both; }
+:global(html.fx) .exItem:nth-child(1) { animation-delay: .55s; }
+:global(html.fx) .exItem:nth-child(2) { animation-delay: .62s; }
+:global(html.fx) .exItem:nth-child(3) { animation-delay: .69s; }
+:global(html.fx) .exItem:nth-child(4) { animation-delay: .76s; }
+:global(html.fx) .exIc { transition: transform .2s ease; }
+:global(html.fx) .exItem:hover .exIc { transform: rotate(-8deg) scale(1.08); }
+:global(html.fx) .stageIn { animation: certIn 1s cubic-bezier(.2, .8, .2, 1) .2s both; }
+@keyframes lineUp { from { opacity: 0; transform: translateY(.45em); } to { opacity: 1; transform: none; } }
+@keyframes wipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes certIn { from { opacity: 0; transform: translateY(28px) rotate(1.5deg); } to { opacity: 1; transform: none; } }

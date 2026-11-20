@@ -3,6 +3,7 @@ import { PresetGrid } from "@/components/PresetGrid";
 import { GuillocheBand, Rosette, Seal } from "@/components/Engraving";
 import { IconArrowRight, PerilIcon } from "@/components/Icons";
 import { PastQuotes } from "@/components/PastQuotes";
+import { CountUp } from "@/components/CountUp";
 import s from "./page.module.css";
 
 // Creative hedges the AI can build today (each maps to live market types: temperature, game results, rain, diesel).
@@ -29,7 +30,8 @@ export default function Landing() {
           <div className={s.copy}>
             <span className="eyebrow">Insurance for your worst business day</span>
             <h1 className={s.h1}>
-              Insure <span className={s.any}>any</span> <br className={s.br} />business against <br className={s.br} />
+              <span className={s.ln} style={{ animationDelay: "60ms" }}>Insure <span className={s.any}>any</span></span> <br className={s.br} />
+              <span className={s.ln} style={{ animationDelay: "180ms" }}>business against</span> <br className={s.br} />
               <em className={s.stamp}>anything</em>
             </h1>
             <p className={`lede ${s.lede}`}>
@@ -37,7 +39,7 @@ export default function Landing() {
             </p>
             <ul className={s.examples}>
               {EXAMPLES.map((e) => (
-                <li key={e.who}><span className={s.exIc} aria-hidden="true"><PerilIcon peril={e.peril} size={16} /></span><span><b>{e.who}</b> hedges {e.what}</span></li>
+                <li key={e.who} className={s.exItem}><span className={s.exIc} aria-hidden="true"><PerilIcon peril={e.peril} size={16} /></span><span><b>{e.who}</b> hedges {e.what}</span></li>
               ))}
             </ul>
             <div className={s.cta}>
@@ -47,7 +49,7 @@ export default function Landing() {
             {priced(s.pricedDesk)}
           </div>
 
-          <div className={`cert-stage ${s.stage}`} aria-label="Example quote">
+          <div className={`cert-stage ${s.stage} ${s.stageIn}`} aria-label="Example quote">
             <div className="cert-under" />
             <div className={`cert tilt ${s.heroCert}`}>
               <div className="seal-stamp"><Seal /></div>
@@ -63,7 +65,7 @@ export default function Landing() {
                   <h3 className={s.certH}>If it rains or turns cold and nobody shows up…</h3>
                   <p className={s.certWho}>Rainey St patio bar, Austin · <b>Saturday, Nov 21</b></p>
                   <div className={`terms ${s.certTerms}`}>
-                    <div className={`term pay ${s.payBox}`}><span className={`lab ${s.payLab}`}><i aria-hidden="true" />We pay you up to<i aria-hidden="true" /></span><span className="amt">$950</span></div>
+                    <div className={`term pay ${s.payBox}`}><span className={`lab ${s.payLab}`}><i aria-hidden="true" />We pay you up to<i aria-hidden="true" /></span><span className="amt"><CountUp to={950} delayMs={700} /></span></div>
                   </div>
                   <ul className={s.ifs}>
                     <li>
