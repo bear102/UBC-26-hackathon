@@ -16,8 +16,8 @@ These losses are real but too small and too specific for an insurer to write. Pr
 ## How does it work?
 1. An LLM (Claude, with Gemini fallback) builds a risk map: trigger, estimated loss, reasoning.
 2. Code pulls live contracts from the three venues. The AI may only pick contract IDs from that list, so it cannot invent markets.
-3. Code sizes each line against the book's depth and the owner's monthly budget; the cheapest identical contract wins, ties go to Gemini.
-4. `buy_policy` on our Anchor program is co-signed by our quoter, so the price can't be tampered with. The premium goes into a public vault that refuses cover it can't pay, and the monthly budget is enforced onchain.
+3. Code sizes each line against the book's depth and the owner's budget; the cheapest identical contract wins, ties go to Gemini.
+4. `buy_policy` on our Anchor program is co-signed by our quoter, so the price can't be tampered with. The premium goes into a public vault that refuses cover it can't pay.
 5. A crank reads the venue's official result and settles the policy; a YES pays the owner from the vault. If no result ever arrives, anyone can trigger a refund after expiry.
 6. Each Gemini-priced sale records a matching backing order on Gemini (dry-run in this build). A QuickNode Stream on devnet pushes our program's transactions to the live dashboard.
 
@@ -39,6 +39,6 @@ Shot list and voiceover: [docs/DEMO-VIDEO.md](DEMO-VIDEO.md) (2:00). Only policy
 - **Basis risk?** Real: the airport reading isn't your patio. Every line shows its mismatch note, and sizing is a share of the estimated loss, not a promise to make you whole.
 - **Who settles? Is it trustless?** No. One attestor key posts the venue's official result. The escape hatch is the permissionless refund after expiry. Next: multisig or oracle.
 - **Is this legal insurance?** Not in this build. It is a devnet prototype; the product path is an advisor plus self-directed hedges, or a licensed partner writing the cover.
-- **Why blockchain?** The vault balance, the exposure, the owner's budget and every payout are public, and the refund doesn't depend on us. The owner doesn't have to trust Hedgehog to pay.
+- **Why blockchain?** The vault balance, the exposure and every payout are public, and the refund doesn't depend on us. The owner doesn't have to trust Hedgehog to pay.
 - **Thin books?** Quotes never size past the visible book; that limits cover size today.
 - **Did you place real Gemini orders?** No. The backing order is built in code (HMAC Trader API client) but runs dry-run until a funded account is approved.

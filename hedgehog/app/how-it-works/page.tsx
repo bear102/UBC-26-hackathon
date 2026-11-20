@@ -130,7 +130,7 @@ export default function HowItWorks() {
               <span className={s.cno}>§ 2</span>
               <span className="badge badge-kalshi">Solana</span>
               <h3>Settled on Solana</h3>
-              <p>Getting covered is one signature. <b>Hedgehog Cover</b>, our Anchor program, records the policy onchain, moves the premium into a USDC vault anyone can check, refuses any policy the vault can&apos;t pay, and enforces a monthly budget cap. When the market settles, the payout goes to the owner&apos;s wallet automatically.</p>
+              <p>Getting covered is one signature. <b>Hedgehog Cover</b>, our Anchor program, records the policy onchain, moves the premium into a USDC vault anyone can check and refuses any policy the vault can&apos;t pay. When the market settles, the payout goes to the owner&apos;s wallet automatically.</p>
             </li>
             <li className={s.clause}>
               <span className={s.cno}>§ 3</span>

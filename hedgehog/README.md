@@ -62,7 +62,7 @@ A heat wave empties a patio bar. A rained-out Saturday kills a food truck's best
 Live state: `GET /api/cover/info` (vault balance, exposure, free capacity, policies sold).
 
 Program (`programs/hedgehog_policy/src/lib.rs`, Anchor 0.31.1):
-- `buy_policy`: must be co-signed by the quoter key, so the buyer cannot set their own price. Enforces the business's rolling 30-day budget onchain, and refuses cover the vault can't pay (`payout ≤ vault − exposure`, and under `max_exposure`).
+- `buy_policy`: must be co-signed by the quoter key, so the buyer cannot set their own price. The program can enforce a rolling 30-day budget, but the app registers businesses with an effectively unlimited one, so the owner's budget only sizes the quote. Refuses cover the vault can't pay (`payout ≤ vault − exposure`, and under `max_exposure`).
 - `settle_policy(outcome)`: attestor only. YES pays the owner from the vault; NO closes the policy.
 - `expire_policy`: **anyone** can call it after expiry + grace if the attestor never settled; the premium is refunded.
 - Also `init_underwriter`, `fund_vault`, `set_underwriter`, `register_business`, `set_budget`.
@@ -92,7 +92,7 @@ Events delivered so far are stored as `source: "quicknode"` feed items (policy b
 ## Economic design and risk assumptions
 - **Premium** = market ask × contracts (book walked for depth). No Hedgehog fee in the demo.
 - **Capacity**: the vault only sells cover it can pay in full; exposure is tracked onchain.
-- **Budget mandate**: the owner's monthly budget lives onchain and caps premiums over a rolling 30 days.
+- **Budget**: the owner's budget sizes the quote. The program supports an onchain 30-day budget cap, but the app doesn't use it to block purchases.
 - **Backing**: Hedgehog is the counterparty. In production each sale is offset by the same contract on Gemini, so a payout is funded by the hedge. In this build that backing is recorded, not placed (dry-run).
 - **Basis risk**: the market measures the airport, not your patio; a loss is not an empty bar. Every line shows its mismatch note.
 - **Settlement trust**: one attestor key posts results from the venue's official resolution. This is not trustless. The escape hatch is the permissionless refund after expiry. Next: oracle or multisig attestor.
