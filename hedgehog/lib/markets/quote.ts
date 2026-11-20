@@ -225,24 +225,26 @@ export async function sizeQuote(args: SizeArgs): Promise<SizeResult> {
   const buyable = cands.filter((c) => c.line.action !== "read-only");
   cands.length = 0; cands.push(...buyable);
 
-  // Budget (monthly): a line is charged premium / months-of-cover (season futures, month totals; max 6), so a season hedge
-  // bought once doesn't eat one month's budget. Keep the best payout-per-premium lines first; scale the marginal one; drop the rest.
-  const charge = (c: Cand) => c.line.premiumUsd / c.months;
+  // Budget: the owner pays every premium up front, so the plan's total premium must fit the budget (no spreading a season
+  // hedge over months: that let a $782 plan "fit" $200). Keep the best payout-per-premium lines first; scale the marginal one; drop the rest.
+  const charge = (c: Cand) => c.line.premiumUsd;
   let total = cands.reduce((s, c) => s + charge(c), 0);
   let lines: QuoteLine[];
   if (total <= budgetUsd + 1e-9) {
     lines = cands.map((c) => c.line);
   } else {
     // cheapest protection first (payout per premium dollar): this week's cheap tails stay in; a season line takes what is left
-    const order = [...cands].sort((a, b) => b.line.payoutUsd / b.line.premiumUsd - a.line.payoutUsd / a.line.premiumUsd);
+    // direct risks are funded before creative (proxy) hedges, then best payout per premium dollar
+    const proxy = (c: Cand) => (riskById.get(c.line.riskId)?.kind === "proxy" ? 1 : 0);
+    const order = [...cands].sort((a, b) => proxy(a) - proxy(b) || b.line.payoutUsd / b.line.premiumUsd - a.line.payoutUsd / a.line.premiumUsd);
     let left = budgetUsd;
     const kept = new Set<Cand>();
     for (const c of order) {
       if (charge(c) <= left + 1e-9) { kept.add(c); left -= charge(c); continue; }
-      const { n, cost } = maxAffordable(c.ladder, c.want, left * c.months);
+      const { n, cost } = maxAffordable(c.ladder, c.want, left);
       if (n >= 1) {
         c.line = { ...c.line, contracts: n, payoutUsd: n, premiumUsd: r2(cost), pricePerContract: r4(cost / n) };
-        kept.add(c); left -= cost / c.months;
+        kept.add(c); left -= cost;
         uncovered.push({ riskId: c.line.riskId, reason: `budget: scaled ${c.line.contract.label} to ${n} of ${c.want} contracts` });
       } else {
         uncovered.push({ riskId: c.line.riskId, reason: `over budget: ${c.line.contract.label} needs $${c.line.premiumUsd.toFixed(2)}, $${Math.max(0, left).toFixed(2)} left of $${budgetUsd}` });
@@ -250,7 +252,6 @@ export async function sizeQuote(args: SizeArgs): Promise<SizeResult> {
     }
     lines = cands.filter((c) => kept.has(c)).map((c) => c.line);
   }
-  for (const c of cands) if (c.months > 1) c.line.premiumPerMonth = r2(c.line.premiumUsd / c.months);
   total = r2(lines.reduce((s, l) => s + l.premiumUsd, 0));
   const totalPayoutUsd = lines.reduce((s, l) => s + l.payoutUsd, 0);
   lines = [...lines, ...context];

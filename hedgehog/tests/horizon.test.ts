@@ -74,7 +74,7 @@ test("futuresFallbackRisks: a contender gets a deep-run risk, a bubble team a mi
   assert.equal(riskHorizon(land[0], NOW), "month");
 });
 
-test("sizing: a season hedge is charged premium / months of cover against the monthly budget (max 6)", async () => {
+test("sizing: a season hedge is charged its full up-front premium against the budget (no per-month spreading)", async () => {
   const west = LONG.find((c) => c.id === "kalshi:KXNBAWEST-27-SAS")!;
   assert.equal(monthsOfCover("2027-05-31", NOW), 6);
   assert.equal(coverMonths(west, NOW), 6);
@@ -82,8 +82,10 @@ test("sizing: a season hedge is charged premium / months of cover against the mo
   const r = await sizeQuote({ legs: [{ riskId: "r1", contractId: west.id, side: "no", rationale: "x", basisRisk: "y" }], risks: [risk], contracts: new Map([[west.id, west]]),
     coveragePct: 100, budgetUsd: 150, fetchBooks: false, crossCheck: false, route: false, now: NOW });
   const l = r.lines[0];
-  assert.equal(l.contracts, 1000); // $660 up front fits a $150/month budget at 6 months of cover
-  assert.ok(l.premiumPerMonth! <= 150 && Math.abs(l.premiumPerMonth! * 6 - l.premiumUsd) < 0.05);
+  assert.ok(l.premiumUsd <= 150 + 1e-9, `premium ${l.premiumUsd} fits the $150 budget`); // was $660 for 1000 contracts
+  assert.ok(l.contracts < 1000 && l.contracts > 0);
+  assert.equal(l.premiumPerMonth, undefined);
+  assert.ok(r.totalPremiumUsd <= 150 + 1e-9);
 });
 
 test("verifier: day-named windows stay short; 'through the <date> FOMC' is long; loss wording beats weak promo cues", () => {

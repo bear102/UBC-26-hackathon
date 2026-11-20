@@ -208,7 +208,8 @@ test("advise: risk map || brainstorm -> one batched match -> ladders, options, p
   // packages
   assert.deepEqual(q.packages!.map((p) => p.id), ["essentials", "balanced", "max"]);
   const [ess, bal, max] = q.packages!;
-  assert.ok(ess.totalPremiumUsd < bal.totalPremiumUsd && bal.totalPremiumUsd < max.totalPremiumUsd);
+  assert.ok(ess.totalPremiumUsd < bal.totalPremiumUsd && bal.totalPremiumUsd <= max.totalPremiumUsd + 1); // Balanced and Max can both hit the cap
+  for (const p of q.packages!) assert.ok(p.totalPremiumUsd <= q.budgetUsd + 1e-9, `${p.name} ${p.totalPremiumUsd} over budget ${q.budgetUsd}`);
   assert.ok(!ess.picks.some((p) => p.riskId === "r4" || p.riskId === "r5"));
   assert.ok(max.picks.some((p) => p.riskId === "r5"));
   assert.deepEqual(bal.picks.map((p) => p.contractId).sort(), q.lines.map((l) => l.contractId).sort());

@@ -125,5 +125,6 @@ test("hz2: Spurs bar fallback plan (no LLM) carries a NO on a Spurs playoffs / W
   assert.ok(line, "season risk is in the plan");
   assert.equal(line.side, "no");
   assert.ok(Object.keys(meta).includes(line.contractId), line.contractId);
-  assert.ok(line.premiumPerMonth! < line.premiumUsd, "season premium is spread over the months it covers");
+  assert.ok(q.totalPremiumUsd <= bar.monthlyBudgetUsd + 1e-9, `plan premium ${q.totalPremiumUsd} stays inside the budget`);
+  for (const pk of q.packages ?? []) assert.ok(pk.totalPremiumUsd <= bar.monthlyBudgetUsd + 1e-9, `${pk.name} ${pk.totalPremiumUsd} inside the budget`);
 });
