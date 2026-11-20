@@ -54,7 +54,7 @@ export function isNegative(topic: ClarifyTopic, answer: string): boolean {
   if (topic === "loan") return /\bfixed\b|no (loan|debt)|paid off/.test(a);
   // "Fewer customers on game days": a team loss is not what hurts them, so no team-loss hedge either
   if (topic === "game" || topic === "events") return /no effect|doesn'?t matter|not really|neither|no difference|fewer|less busy|slower/.test(a);
-  if (topic === "weather") return /^rarely|hardly|no effect|doesn'?t matter/.test(a);
+  if (topic === "weather") return /^(rarely|hardly|none|no effect|doesn'?t matter)/.test(a);
   if (topic === "delivery") return /under 10|less than 10|^few|^little|hardly/.test(a);
   return false;
 }
@@ -99,6 +99,16 @@ export function answersBlock(answers: ClarifyAnswer[] = []): string {
 }
 
 const WEATHER = new Set(["rain", "heat", "cold", "snow", "storm"]);
+const WEATHER_WORD = /rain|heat|hot|cold|freez|snow|storm|wind|hail/i;
+/** Weather perils named in a (multi-select) answer like "Rain, Freezing cold"; empty when none are named. */
+export function weatherPerilsIn(answer: string): Set<string> {
+  const a = answer.toLowerCase(), s = new Set<string>();
+  if (/rain|wet|drizzle/.test(a)) s.add("rain");
+  if (/heat|hot|warm/.test(a)) s.add("heat");
+  if (/cold|freez|frost|snow|ice|icy/.test(a)) { s.add("cold"); s.add("snow"); }
+  if (/storm|wind|hail|thunder|tornado/.test(a)) { s.add("storm"); s.add("rain"); }
+  return s;
+}
 const OUTDOOR_TXT = /patio|outdoor|outside|terrace|beer garden|al fresco|seats? (are )?out/i;
 const VEHICLE_TXT = /\bvans?\b|truck|vehicle|fleet|deliver|driv|\bmiles?\b|route|courier/i;
 const LOAN_TXT = /loan|line of credit|credit line|debt|borrow|interest (cost|expense|payment)|variable[- ]rate|financing/i;
@@ -106,7 +116,10 @@ const LOAN_TXT = /loan|line of credit|credit line|debt|borrow|interest (cost|exp
 /** Drops risks the owner's answers rule out ("no outdoor seating" -> no patio-weather risks, etc.). */
 export function suppressByAnswers<R extends Pick<Risk, "peril" | "title" | "trigger" | "lossReasoning"> & { causalStory?: string }>(risks: R[], answers: ClarifyAnswer[] = []): R[] {
   const neg = new Set(answers.filter((a) => isNegative(questionTopic(a), a.answer)).map((a) => questionTopic(a)));
-  if (!neg.size) return risks;
+  const wAns = answers.find((a) => questionTopic(a) === "weather" && !isNegative("weather", a.answer));
+  const wPicked = wAns ? weatherPerilsIn(wAns.answer) : new Set<string>();
+  const picked = wPicked.size ? wPicked : null;
+  if (!neg.size && !picked) return risks;
   return risks.filter((r) => {
     const txt = `${r.title} ${r.trigger} ${r.lossReasoning} ${r.causalStory ?? ""}`;
     if (neg.has("outdoor") && WEATHER.has(r.peril) && OUTDOOR_TXT.test(txt)) return false;
@@ -117,6 +130,8 @@ export function suppressByAnswers<R extends Pick<Risk, "peril" | "title" | "trig
     if (neg.has("costs") && (r.peril === "gas" || r.peril === "oil" || r.peril === "natgas") && !/customer|household|spending|demand/i.test(txt)) return false;
     if (neg.has("events") && /\bACL\b|\bF1\b|formula 1|grand prix|SXSW|rodeo|festival/i.test(txt)) return false;
     if (neg.has("weather") && WEATHER.has(r.peril)) return false;
+    // Owner named the weather that hurts ("Rain, Cold"): drop weather risks they didn't pick.
+    if (picked && WEATHER.has(r.peril) && !picked.has(r.peril)) return false;
     return true;
   });
 }
@@ -207,7 +222,9 @@ export function normalizeQuestions(qs: ClarifyQuestion[], p: BusinessProfile): C
     seen.add(id);
     const options = [...new Set(q.options.map((o) => o.trim()).filter((o) => o && o.length <= 40))].slice(0, 5);
     if (options.length < 2 && !q.allowFreeText) continue;
-    out.push({ id, question: question.slice(0, 120), why: q.why.trim().slice(0, 60), options, allowFreeText: !!q.allowFreeText || options.length < 2, label: q.label?.trim().slice(0, 30) || undefined });
+    const weatherKinds = topic === "weather" && options.filter((o) => WEATHER_WORD.test(o)).length >= 2;
+    const multi = !!q.multi || weatherKinds;
+    out.push({ id, question: question.slice(0, 120), why: q.why.trim().slice(0, 60), options, allowFreeText: !!q.allowFreeText || options.length < 2, ...(multi ? { multi: true } : {}), label: q.label?.trim().slice(0, 30) || undefined });
     if (out.length === 3) break;
   }
   return out;

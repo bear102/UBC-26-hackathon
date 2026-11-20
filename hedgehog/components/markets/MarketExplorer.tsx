@@ -47,12 +47,12 @@ export function MarketExplorer({ data, initial }: { data: ExplorerData; initial:
     setShown(PAGE);
   }, [group, city, venues, q, cross]);
 
-  const cityApplies = group === "all" || group === "heat" || group === "rain" || group === "snow" || group === "power" || group === "disaster" || group === "parametric";
+  const cityApplies = group === "all" || group === "games" || group === "heat" || group === "rain" || group === "snow" || group === "power" || group === "disaster" || group === "parametric";
   const cityLc = city.toLowerCase();
   const needle = q.trim().toLowerCase();
   const filtered = useMemo(() => data.events.filter((e) =>
     (group === "all" || e.group === group) &&
-    (!cityLc || !cityApplies || e.place.toLowerCase() === cityLc) &&
+    (!cityLc || !cityApplies || e.place.toLowerCase() === cityLc || (e.cities ?? []).some((c) => c.toLowerCase() === cityLc)) &&
     e.venues.some((v) => venues.includes(v.venue)) &&
     (!cross || e.venues.length > 1) &&
     (!needle || `${e.title} ${e.place} ${e.venues.map((v) => v.title).join(" ")} ${e.outcomes.map((o) => o.label).join(" ")}`.toLowerCase().includes(needle))
@@ -103,7 +103,7 @@ export function MarketExplorer({ data, initial }: { data: ExplorerData; initial:
         <div className={s.filterRow}>
           <label htmlFor="mx-city">Where</label>
           <div className={s.whereRow}>
-            <select id="mx-city" className={`input ${s.input}`} value={city} onChange={(e) => setCity(e.target.value)} disabled={!cityApplies} title={cityApplies ? "City for weather markets" : "City applies to weather markets"}>
+            <select id="mx-city" className={`input ${s.input}`} value={city} onChange={(e) => setCity(e.target.value)} disabled={!cityApplies} title={cityApplies ? "City: local weather and that city's teams" : "City applies to weather and games"}>
               <option value="">All cities</option>
               {data.places.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>

@@ -150,6 +150,7 @@ export interface ClarifyQuestion {
   why: string;                // few words shown under it: "so rain cover fits"
   options: string[];          // tap-to-select chips (<= 5)
   allowFreeText: boolean;
+  multi?: boolean;            // owner may tick several options ("Rain, Cold"); answer is the picks joined with ", "
   label?: string;             // 1-3 word topic for the plan recap: "Outdoor seating"
 }
 

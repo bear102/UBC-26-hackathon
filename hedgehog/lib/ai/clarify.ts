@@ -16,6 +16,7 @@ export const clarifySchema = z.object({
     why: z.string().max(80).describe("<= 6 words, e.g. 'So rain cover fits'"),
     options: z.array(z.string().min(1).max(60)).max(8).describe("2-5 tap-to-pick answers, <= 4 words each"),
     allowFreeText: z.boolean(),
+    multi: z.boolean().optional().describe("true when several options can apply at once (e.g. which kinds of weather hurt)"),
   })).max(6),
 });
 
@@ -27,6 +28,7 @@ Rules:
 - Never ask about weather the owner already said hurts them (e.g. "when it rains nobody comes" answers it).
 - Plain English, no jargon, no preamble, no "great question". Question <= 12 words. why <= 6 words, starting with "So", e.g. "So rain cover fits", "So we only cover busy days". 2-5 options, <= 4 words each, covering the realistic answers (include a "No"/"None" option when relevant).
 - allowFreeText true only when a number or detail helps (e.g. how many vans).
+- multi true when the owner may pick several options at once (which kinds of weather hurt, which costs squeeze them).
 - id: use outdoor, vehicles, loan, busy-days, game or weather when it fits; otherwise a short slug.
 - Whether game days matter at all (when the owner names no team), big local events, fuel/propane costs and delivery-app share are asked separately: don't ask about them.`;
 

@@ -2,6 +2,7 @@
 // with the same event on Gemini / Kalshi / Polymarket merged into one row and outcomes aligned across venues.
 // Server-only; cached 60s with stale-while-revalidate, kept warm by instrumentation.ts (listMarkets caches each venue 45-60s).
 import type { MarketContract, Peril, VenueId } from "../types";
+import { teamCities } from "./teams";
 import { listMarkets } from "./index";
 import { listParametric, PARAMETRIC_PERILS } from "./parametric";
 import { parametricEnabled } from "./proxies";
@@ -34,6 +35,7 @@ export interface ExplorerEvent {
   peril: Peril;
   title: string;
   place: string;                  // city (weather), league (games), "US" (national), "" otherwise
+  cities?: string[];              // games: home cities of both teams (so the city filter finds "Cleveland" games)
   date: string;                   // YYYY-MM-DD (US Central) of the observed thing
   expiry: string;                 // earliest expiry across venues
   venues: { venue: VenueId; title: string; url?: string; n: number }[];
@@ -95,6 +97,7 @@ export function buildExplorer(markets: MarketContract[], now = Date.now()): Expl
       byKey.set(key, e);
     }
     const ev = e.ev;
+    if (c.peril === "game") { const tc = teamCities(c); if (tc.length) ev.cities = [...new Set([...(ev.cities ?? []), ...tc])]; }
     let v = ev.venues.find((x) => x.venue === c.venue);
     if (!v) { v = { venue: c.venue, title: c.eventTitle, url: c.url, n: 0 }; ev.venues.push(v); }
     v.n++;
@@ -135,7 +138,10 @@ export function buildExplorer(markets: MarketContract[], now = Date.now()): Expl
     events.push(ev);
   }
   events.sort((a, b) => (b.venues.length - a.venues.length) || a.date.localeCompare(b.date) || a.title.localeCompare(b.title));
-  const places = [...new Set(events.filter((e) => LOCAL_GROUPS.includes(e.group)).map((e) => e.place).filter((p) => p && p !== "US"))]
+  const places = [...new Set([
+    ...events.filter((e) => LOCAL_GROUPS.includes(e.group)).map((e) => e.place),
+    ...events.flatMap((e) => e.cities ?? []),
+  ].filter((p) => p && p !== "US"))]
     .sort((a, b) => (a === "Austin" ? -1 : b === "Austin" ? 1 : a.localeCompare(b)));
   return { asOf: new Date(now).toISOString(), total: counts.gemini + counts.kalshi + counts.polymarket + counts.hedgehog, counts, events, places };
 }

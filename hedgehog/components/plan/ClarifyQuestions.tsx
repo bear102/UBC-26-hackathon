@@ -7,11 +7,19 @@ import s from "./Clarify.module.css";
 
 const IDLE_SECONDS = 45;
 
-type Draft = { choice: string | null; text: string; skipped: boolean };
+type Draft = { choice: string | null; choices: string[]; text: string; skipped: boolean };
+/** "None" / "Rarely"-style options exclude every other pick on a multi-select question. */
+const EXCLUSIVE = /^(none|no|rarely|no effect|no difference|not really)\b/i;
 
 function initialDraft(q: ClarifyQuestion, prev?: ClarifyAnswer): Draft {
-  if (!prev?.answer) return { choice: null, text: "", skipped: false };
-  return q.options.includes(prev.answer) ? { choice: prev.answer, text: "", skipped: false } : { choice: null, text: prev.answer, skipped: false };
+  const empty: Draft = { choice: null, choices: [], text: "", skipped: false };
+  if (!prev?.answer) return empty;
+  if (q.multi) {
+    const parts = prev.answer.split(/,\s*/).filter(Boolean);
+    const picks = parts.filter((p) => q.options.includes(p));
+    return { ...empty, choices: picks, text: parts.filter((p) => !q.options.includes(p)).join(", ") };
+  }
+  return q.options.includes(prev.answer) ? { ...empty, choice: prev.answer } : { ...empty, text: prev.answer };
 }
 
 export function ClarifyQuestions({ questions, previous = [], onSubmit, onCancel, name }: {
@@ -31,7 +39,7 @@ export function ClarifyQuestions({ questions, previous = [], onSubmit, onCancel,
 
   const collect = useCallback((ds: Draft[]): ClarifyAnswer[] => questions.flatMap((q, i) => {
     const d = ds[i];
-    const answer = d && !d.skipped ? (d.text.trim() || d.choice || "") : "";
+    const answer = !d || d.skipped ? "" : q.multi ? [...d.choices, d.text.trim()].filter(Boolean).join(", ") : (d.text.trim() || d.choice || "");
     return answer ? [{ questionId: q.id, question: q.question, answer, ...(q.label ? { label: q.label } : {}) }] : [];
   }), [questions]);
 
@@ -71,13 +79,22 @@ export function ClarifyQuestions({ questions, previous = [], onSubmit, onCancel,
             <li key={q.id}>
               <fieldset className={s.q} data-skipped={d.skipped} aria-describedby={q.why ? `${qid}-why` : undefined}>
                 <legend className={s.ask} id={qid}>{q.question}</legend>
-                <button type="button" className={s.skip} aria-pressed={d.skipped} onClick={() => update(i, d.skipped ? { skipped: false } : { skipped: true, choice: null, text: "" })}>
+                <button type="button" className={s.skip} aria-pressed={d.skipped} onClick={() => update(i, d.skipped ? { skipped: false } : { skipped: true, choice: null, choices: [], text: "" })}>
                   {d.skipped ? "Undo skip" : "Skip"}
                 </button>
                 {q.why && <span className={s.why} id={`${qid}-why`}>{q.why}</span>}
+                {q.multi && <span className={s.why}>Pick all that apply</span>}
                 {q.options.length > 0 && (
                   <div className={`chips ${s.chips}`} role="group" aria-labelledby={qid}>
-                    {q.options.map((o) => (
+                    {q.options.map((o) => q.multi ? (
+                      <button key={o} type="button" className="chip" aria-pressed={!d.skipped && d.choices.includes(o)}
+                        onClick={() => {
+                          const on = d.choices.includes(o);
+                          const choices = on ? d.choices.filter((x) => x !== o)
+                            : EXCLUSIVE.test(o) ? [o] : [...d.choices.filter((x) => !EXCLUSIVE.test(x)), o];
+                          update(i, { choices, skipped: false });
+                        }}>{o}</button>
+                    ) : (
                       <button key={o} type="button" className="chip" aria-pressed={!d.skipped && d.choice === o && !d.text.trim()}
                         onClick={() => update(i, { choice: d.choice === o && !d.text.trim() ? null : o, text: "", skipped: false })}>{o}</button>
                     ))}
