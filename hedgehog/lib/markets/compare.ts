@@ -156,9 +156,19 @@ export interface Equivalent { contract: MarketContract; side: "yes" | "no"; matc
 export function findEquivalent(c: MarketContract, side: "yes" | "no", pool: MarketContract[]): Equivalent | null {
   const flip = (s: "yes" | "no") => (s === "yes" ? "no" : "yes");
   if (c.peril === "game") {
+    const fc = contractMeta(c.id);
     let best: Equivalent | null = null;
     for (const o of pool) {
       if (o.id === c.id || o.status !== "open") continue;
+      // season futures: only the same stage of the same team ("make the playoffs" is not "win the West"); wins ladders: same line
+      const fo = contractMeta(o.id);
+      if (fc?.futureKind || fo?.futureKind) {
+        if (fc?.futureKind !== fo?.futureKind || !leagueEq(fc?.league?.toUpperCase(), fo?.league?.toUpperCase())) continue;
+        if (!(fo?.teams ?? [o.label]).some((t) => nameEq(fc?.teams ?? [c.label], t))) continue;
+        if (fc?.futureKind === "wins" && lc(o.label).replace(/\s+/g, "") !== lc(c.label).replace(/\s+/g, "")) continue;
+        if (!best) best = { contract: o, side, match: "same" };
+        continue;
+      }
       const same = sameGame(c, o);
       if (same === null) continue;
       const e: Equivalent = { contract: o, side: same ? side : flip(side), match: "same" };

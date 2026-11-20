@@ -40,7 +40,11 @@ async function cached(key: string, f: () => Promise<MarketContract[]>): Promise<
   if (c && Date.now() - c.t < TTL) return c.v;
   const staleOk = !!c && c.v.length > 0 && Date.now() - c.t < STALE_MAX;
   if (c?.p) return staleOk ? c.v : c.p;
-  const p = f().then((v) => { srcCache.set(key, { t: Date.now(), v }); return v; })
+  const p = f().then((v) => {
+    if (!v.length && c?.v.length) { srcCache.set(key, { t: c.t, v: c.v }); return c.v; } // empty refresh: keep the last good list
+    srcCache.set(key, { t: v.length ? Date.now() : Date.now() - TTL + 30_000, v }); // an empty list is retried in 30 s
+    return v;
+  })
     .catch((e) => { if (c) { srcCache.set(key, { t: c.t, v: c.v }); return c.v; } srcCache.delete(key); throw e; });
   srcCache.set(key, { t: c?.t ?? 0, v: c?.v ?? [], p });
   return staleOk ? c!.v : p;

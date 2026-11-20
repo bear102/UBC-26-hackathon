@@ -37,7 +37,9 @@ export function parseHistory(evidence?: string | null): History | null {
 
 // ---------- event phrasing ----------
 
-const lowerFirst = (s: string) => (/^[A-Z][a-z]/.test(s) && !/^(Spurs|Lakers|Texans|Longhorns|Austin|Fed|WTI|CPI|Brent|Gemini|Kalshi|US)\b/.test(s) ? s[0].toLowerCase() + s.slice(1) : s);
+// Lowercase only ordinary leading words ("Rain hits", "Our team loses"); names stay ("Denver beats", "Houston Rockets miss").
+const COMMON_START = /^(a|an|the|it|its|our|your|my|we|they|there|this|that|these|those|rain|rainy|heavy|wet|dry|hot|heat|cold|snow|freeze|storm|high|low|late|early|weak|slow|bad|no|fewer|less|more|prices?|gas|fuel|diesel|natural|inflation|rates?|recession|customers?|sales|foot|traffic|demand|revenue|business|crowds?|home|away|team|teams|games?|playoff|season|one|two|three|any|every|each|monthly|weekly|daily|holiday|tourism|tourists?|visitors?)\b/i;
+const lowerFirst = (s: string) => (/^[A-Z][a-z]/.test(s) && COMMON_START.test(s) ? s[0].toLowerCase() + s.slice(1) : s);
 
 const PERIL_EVENT: Record<Peril, string> = {
   rain: "it rains",
@@ -91,12 +93,15 @@ export function whenPhrase(risk?: Pick<Risk, "window"> | null, contract?: Pick<M
 }
 
 /** The bad thing, as a clause after "If …": "it rains", "Spurs lose to the Lakers". */
-export function eventClause(risk?: Risk | null, contract?: MarketContract | null): string {
+export function eventClause(risk?: Risk | null, contract?: MarketContract | null, side?: "yes" | "no"): string {
   const peril = (risk?.peril ?? contract?.peril ?? "other") as Peril;
   if (peril === "game") {
     const t = (risk?.trigger ?? "").split(/[,(;]/)[0].trim();
-    if (t && t.length <= 60) return lowerFirst(t);
-    if (contract?.label) return `${contract.label.replace(/\s+win$/i, "")} win${/s$/i.test(contract.label) ? "" : "s"}`;
+    if (t && t.length <= 70) return lowerFirst(t);
+    const title = (risk?.title ?? "").split(/[,(;]/)[0].trim();
+    if (title && title.length <= 70) return lowerFirst(title);
+    if (contract?.label && side !== "no") return `${contract.label.replace(/\s+win$/i, "")} win${/s$/i.test(contract.label) ? "" : "s"}`;
+    if (contract?.label) return `${contract.label.replace(/\s+win$/i, "")} ${/s$/i.test(contract.label) ? "don't" : "doesn't"} win`;
   }
   if (peril === "other" && risk?.title) return lowerFirst(risk.title);
   return PERIL_EVENT[peril] ?? "it happens";
@@ -170,7 +175,7 @@ export function explainLine(line: QuoteLine, risk?: Risk | null, profile?: Pick<
   const history = parseHistory(risk?.evidence);
   const readOnly = line.action === "read-only";
   const inPlan = !readOnly && line.contracts > 0;
-  const ifClause = eventClause(risk, c);
+  const ifClause = eventClause(risk, c, line.side);
   const when = whenPhrase(risk, c);
 
   const scenario = {

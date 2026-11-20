@@ -20,9 +20,14 @@ export type CheckoutResult = { kind: CheckoutKind; signature: string; network: N
 
 const ORDER: Stage[] = ["connect", "build", "signing", "sending", "confirming", "record", "done"];
 
-export function CheckoutDialog({ kind, line, risk, businessId, onClose, onDone }: {
+export function CheckoutDialog({ kind, line: initialLine, risk, businessId, onClose, onDone, onRefresh }: {
   kind: CheckoutKind; line: QuoteLine; risk?: Risk; businessId: string; onClose: () => void; onDone: (r: CheckoutResult) => void;
+  /** Re-price the plan at live asks (after "price moved"); returns the updated buyable lines. */
+  onRefresh?: () => Promise<{ line: QuoteLine }[]>;
 }) {
+  const [line, setLine] = useState(initialLine);
+  const [moved, setMoved] = useState<{ before: number; after: number } | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const { publicKey, signTransaction, connected } = useWallet();
   const { setVisible } = useWalletModal();
   const [stage, setStage] = useState<Stage>("review");
@@ -85,6 +90,18 @@ export function CheckoutDialog({ kind, line, risk, businessId, onClose, onDone }
   // When we're waiting for the wallet and it connects, continue automatically.
   useEffect(() => { if (stage === "connect" && connected && publicKey) run(); }, [stage, connected, publicKey, run]);
 
+  const priceMoved = !!err && /price moved/i.test(err);
+  async function refresh() {
+    if (!onRefresh) return;
+    setRefreshing(true);
+    try {
+      const fresh = (await onRefresh()).find((i) => i.line.contractId === line.contractId)?.line;
+      if (fresh) { setMoved({ before: line.premiumUsd, after: fresh.premiumUsd }); setLine(fresh); }
+      setErr(null); setFailedAt(null); setStage("review");
+    } catch (e) { setErr(walletErrorMessage(e)); }
+    finally { setRefreshing(false); }
+  }
+
   function start() {
     setErr(null); setFailedAt(null);
     if (!mock && !connected) { setStage("connect"); setVisible(true); return; }
@@ -135,6 +152,7 @@ export function CheckoutDialog({ kind, line, risk, businessId, onClose, onDone }
               {gemini && " Backed by the same contract on Gemini."}
               {line.contract.venue === "hedgehog" && " Settles from public data (USGS, NOAA, NIFC, US AQI). Underwritten by the Hedgehog pool · no exchange backing."}
               {" "}Devnet prototype, not an insurance product. Pays on the market's result, not your actual loss.</p>
+            {moved && <div className="alert alert-info small" style={{ marginBottom: 12 }}>Price updated to the live market: {moved.after > moved.before ? "up" : moved.after < moved.before ? "down" : "unchanged"} from {usd(moved.before, 2)} to <b>{usd(moved.after, 2)}</b>.</div>}
             {mock && <div className="alert alert-info small" style={{ marginBottom: 12 }}>Demo mode: simulated, nothing goes onchain.</div>}
             <div className={s.actions}>
               <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
@@ -158,10 +176,12 @@ export function CheckoutDialog({ kind, line, risk, businessId, onClose, onDone }
 
         {stage === "error" && (
           <>
-            <div className="alert alert-bad" role="alert" style={{ marginBottom: 12 }}>{err}</div>
+            <div className="alert alert-bad" role="alert" style={{ marginBottom: 12 }}>{priceMoved ? <>The market price moved since your quote. <span className="muted">({err})</span></> : err}</div>
             <div className={s.actions}>
               <button className="btn btn-ghost" onClick={onClose}>Close</button>
-              <button className="btn btn-primary" onClick={start}>Try again</button>
+              {priceMoved && onRefresh
+                ? <button className="btn btn-primary" onClick={refresh} disabled={refreshing}>{refreshing ? <><span className="spinner" /> Refreshing…</> : "Refresh prices"}</button>
+                : <button className="btn btn-primary" onClick={start}>Try again</button>}
             </div>
           </>
         )}

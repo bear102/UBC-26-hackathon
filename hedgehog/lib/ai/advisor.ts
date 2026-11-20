@@ -13,7 +13,7 @@ import {
   BRAINSTORM_SYSTEM, TIER_LABEL, brainstormPrompt, brainstormSchema, buildCatalog, buildPackages, directionalPick, evidenceText,
   fallbackIdeas, filterIdeaCandidates, ideasFromBrainstorm, ideasFromPlaybook, labelBound, ladderChoices, sameExposure, type Idea, type PlaybookSeed, type TieredLeg,
 } from "./ideas";
-import { futuresFallbackRisks, futuresSide, ownTeamsIn, periodFallbackRisks, riskHorizon, stageWanted } from "./horizon";
+import { OWN_TEAMS, futuresFallbackRisks, futuresSide, leagueIn, ownTeamsIn, periodFallbackRisks, riskHorizon, stageWanted } from "./horizon";
 import { contractMeta } from "../markets/normalize";
 import { noMarketReason, parametricEnabled } from "../markets/proxies";
 import { isLongContract, longUniverse, seasonCalendar } from "./longContext";
@@ -214,6 +214,10 @@ export function sameExposureX(a: Risk, b: Risk): boolean {
     const pair = (r: Risk) => { const m = `${r.trigger} ${r.title}`.match(MATCHUP); return m ? [m[1], m[2]].map((x) => x.toLowerCase().trim()).sort().join("|") : null; };
     const pa = pair(a), pb = pair(b);
     if (pa && pb) return pa === pb;
+    const la = leagueIn(`${a.title} ${a.trigger}`), lb = leagueIn(`${b.title} ${b.trigger}`);
+    if (la && lb && la !== lb) return false; // Texans (NFL) and Rockets (NBA) share a city, not an exposure
+    const oa = ownTeamsIn(`${a.title} ${a.trigger}`).map((t) => t.nick), ob = ownTeamsIn(`${b.title} ${b.trigger}`).map((t) => t.nick);
+    if (oa.length && ob.length && !oa.some((t) => ob.includes(t))) return false;
   }
   return sameExposure(a, b, teamKeys);
 }
@@ -861,11 +865,46 @@ export function monthsNamed(text: string): Set<number> {
 /** Economic hedges: show the trigger in the market's own words ("CPI in November: Above 0.1%") so the period/strike
  *  always match the contract (the LLM's paraphrase could name the settlement month instead of the data month). */
 const MARKET_WORDED: Peril[] = ["cpi", "fed", "gas", "oil", "natgas", "metals"];
+/** Plain trigger for a season future on the side held: "Houston Rockets miss the NBA playoffs", "Houston Texans win fewer than 9 games". */
+export function futuresTrigger(c: MarketContract, side: "yes" | "no"): string | null {
+  const m = contractMeta(c.id);
+  if (!m?.futureKind) return null;
+  const longest = [...(m.teams ?? [])].sort((a, b) => b.length - a.length)[0] ?? c.label;
+  // "Houston" + NBA -> "Houston Rockets" (the city alone is ambiguous across leagues)
+  const own = OWN_TEAMS.find((o) => (!m.league || o.league.includes(m.league)) && o.names.includes(longest.toLowerCase().trim()));
+  const team = own && !/\s/.test(longest) ? `${own.city} ${own.nick}` : longest;
+  const lg = m.league ? `${m.league} ` : "";
+  const yes = side === "yes";
+  const t = c.eventTitle.replace(/\?$/, "").replace(/^\d{4}\s+/, "").replace(/^Pro Basketball\b/i, "NBA").replace(/^Pro Football\b/i, "NFL")
+    .replace(/^College Football\b/i, "college football").replace(/\s+(winner|champion)$/i, "").trim();
+  const cw = t.match(/\b(western|eastern|afc|nfc)\b/i)?.[0];
+  const conf = cw ? (cw.length === 3 ? cw.toUpperCase() : `${cw[0].toUpperCase()}${cw.slice(1).toLowerCase()} Conference`) : undefined;
+  switch (m.futureKind) {
+    case "playoffs": return `${team} ${yes ? "make" : "miss"} the ${lg}playoffs`;
+    case "round": if (/host/i.test(t)) return `${team} ${yes ? "host" : "don't host"} a playoff game`;
+      return /conference finals/i.test(t)
+      ? `${team} ${yes ? "reach" : "don't reach"} the ${conf ? `${conf} ` : "Conference "}Finals`.replace("Conference Conference", "Conference")
+      : `${team} ${yes ? "advance" : "don't advance"} (${t})`;
+    case "conference": return `${team} ${yes ? "win" : "don't win"} the ${conf ?? "conference"} title`;
+    case "division": return `${team} ${yes ? "win" : "don't win"} the ${t}`;
+    case "title": return `${team} ${yes ? "win" : "don't win"} the ${t.replace(/\s*(national\s+)?championship$/i, "")} title`;
+    case "wins": {
+      const n = c.label.match(/(\d+)\s*\+?/)?.[1];
+      if (!n) return null;
+      return /\+|or more|plus/i.test(c.label) ? `${team} win ${yes ? `${n} or more` : `fewer than ${n}`} games` : `${team} ${yes ? "" : "don't "}win exactly ${n} games`.replace(/\s+/g, " ");
+    }
+  }
+  return null;
+}
+
 function marketWordedTriggers(risks: Risk[], lines: QuoteLine[]): void {
   for (const r of risks) {
-    if (!MARKET_WORDED.includes(r.peril)) continue;
     const l = lines.find((x) => x.riskId === r.id && x.contracts > 0) ?? lines.find((x) => x.riskId === r.id);
     if (!l) continue;
+    // season futures: the trigger names the stage the contract actually pays on (a cheaper-tail stage can differ from the risk's wording)
+    const ft = r.peril === "game" ? futuresTrigger(l.contract, l.side) : null;
+    if (ft) { r.trigger = ft; continue; }
+    if (!MARKET_WORDED.includes(r.peril)) continue;
     const c = l.contract;
     const what = l.side === "yes" ? c.label : `not ${c.label}`;
     r.trigger = c.eventTitle && c.eventTitle !== c.label ? `${c.eventTitle}: ${what}` : what;

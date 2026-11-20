@@ -332,7 +332,7 @@ export function PlanView() {
 
       {checkout && (
         <CheckoutDialog kind={checkout.kind} line={checkout.line} risk={risksById.get(checkout.line.riskId)} businessId={profile.id}
-          onClose={() => setCheckout(null)}
+          onClose={() => setCheckout(null)} onRefresh={refreshPrices}
           onDone={(r) => setBought((b) => ({ ...b, [`${r.kind}:${checkout.line.contractId}`]: r }))} />
       )}
     </div>

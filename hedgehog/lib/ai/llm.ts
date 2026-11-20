@@ -3,6 +3,7 @@
 // "repair" retry when the output is not valid JSON or fails the zod schema. Keys are never logged.
 import { GoogleGenAI } from "@google/genai";
 import Anthropic from "@anthropic-ai/sdk";
+import { appendFileSync, mkdirSync } from "node:fs";
 import { z } from "zod/v4";
 import { env } from "../env";
 
@@ -139,6 +140,17 @@ const geminiProvider: Provider = {
   },
 };
 
+/** Claude spend log (.data/llm-usage.jsonl): one row per call, so a run can be held to a dollar budget. Sonnet 5.5: $2 in / $10 out per MTok. */
+function logUsage(msg: any): void {
+  try {
+    const u = msg?.usage ?? {};
+    const inTok = (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) * 1.25 + (u.cache_read_input_tokens ?? 0) * 0.1;
+    const usd = (inTok * 2 + (u.output_tokens ?? 0) * 10) / 1e6;
+    mkdirSync(".data", { recursive: true });
+    appendFileSync(".data/llm-usage.jsonl", JSON.stringify({ t: new Date().toISOString(), model: msg?.model, in: u.input_tokens, out: u.output_tokens, usd: Math.round(usd * 1e5) / 1e5, tag: process.env.LLM_USAGE_TAG ?? "" }) + "\n");
+  } catch { /* logging is best-effort */ }
+}
+
 let anthropic: Anthropic | null = null;
 const anthropicClient = () => (anthropic ??= new Anthropic({ apiKey: env.anthropicKey(), maxRetries: 1 }));
 /** Claude via the official SDK. Sonnet 5.5 (adaptive thinking): effort "medium" for the heavy calls (risk map, brainstorm),
@@ -157,6 +169,7 @@ const anthropicProvider: Provider = {
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
     } as any, { timeout: timeoutMs }) as any;
+    logUsage(msg);
     if (msg.stop_reason === "refusal") throw new Error("anthropic refused the request");
     const text = (msg.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
     if (!text) throw new Error(`anthropic returned no text (stop: ${msg.stop_reason})`);

@@ -446,9 +446,9 @@ export function ladderChoices(rec: TieredLeg, cands: MarketContract[], existing:
   const a0 = askOf(c0, rec.side);
   if (a0 == null) return out;
   const b0 = labelBound(c0.label);
-  const push = (c: MarketContract, side: "yes" | "no", tier: string, why: string) => {
+  const push = (c: MarketContract, side: "yes" | "no", tier: string, why: string, basis = rec.basisRisk) => {
     if (out.length >= max || has(c.id)) return;
-    out.push({ riskId: rec.riskId, contractId: c.id, side, tier, rationale: why, basisRisk: rec.basisRisk });
+    out.push({ riskId: rec.riskId, contractId: c.id, side, tier, rationale: why, basisRisk: basis });
   };
 
   if (c0.peril === "game" && !isMatchup(c0)) {
@@ -462,8 +462,10 @@ export function ladderChoices(rec: TieredLeg, cands: MarketContract[], existing:
     const sibs = cands.filter(sib);
     const cheaper = sibs.filter((c) => askOf(c, rec.side)! <= a0 * 0.75).sort((x, y) => askOf(y, rec.side)! - askOf(x, rec.side)!)[0];
     const broader = sibs.filter((c) => askOf(c, rec.side)! >= a0 * 1.3).sort((x, y) => askOf(x, rec.side)! - askOf(y, rec.side)!)[0];
-    if (cheaper) push(cheaper, rec.side, "cheap-tail", `Cheaper tail: ${rec.side.toUpperCase()} on "${cheaper.label}" [${cheaper.eventTitle}] pays only in the worse season, at ${Math.round(askOf(cheaper, rec.side)! * 100)}¢ per $1.`);
-    if (broader) push(broader, rec.side, "broad", `Broader cover: ${rec.side.toUpperCase()} on "${broader.label}" [${broader.eventTitle}] pays more often, at ${Math.round(askOf(broader, rec.side)! * 100)}¢ per $1.`);
+    if (cheaper) push(cheaper, rec.side, "cheap-tail", `Cheaper tail: ${rec.side.toUpperCase()} on "${cheaper.label}" [${cheaper.eventTitle}] pays only in the worse season, at ${Math.round(askOf(cheaper, rec.side)! * 100)}¢ per $1.`,
+      `Pays only in the worse season ("${cheaper.eventTitle}"); a milder disappointment (${c0.eventTitle}) pays nothing.`);
+    if (broader) push(broader, rec.side, "broad", `Broader cover: ${rec.side.toUpperCase()} on "${broader.label}" [${broader.eventTitle}] pays more often, at ${Math.round(askOf(broader, rec.side)! * 100)}¢ per $1.`,
+      `Pays in more seasons than your loss needs ("${broader.eventTitle}"), so you pay more for it.`);
     return out;
   }
   if (c0.peril === "game") {

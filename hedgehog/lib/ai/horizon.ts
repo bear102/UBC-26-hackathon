@@ -207,9 +207,10 @@ export function futuresSide(risk: Pick<Risk, "title" | "trigger"> & { lossReason
 export function stageWanted(text: string): FutureKind[] {
   const s = text.toLowerCase();
   if (/\bhost(s|ing)? a (home )?playoff|home playoff game/.test(s)) return ["round", "playoffs"];
+  // a deep-run wording wins over "miss ... playoff": "Rockets miss deep playoff run" is about the conference finals
+  if (/deep (playoff )?run|first round|round one|bounced|one and done|conference finals|(west|east)(ern)? (conference )?finals|run ends|knocked out|eliminated|early (playoff )?exit|second round|before the (finals|conference)/.test(s)) return ["round", "conference"];
   if (/\bmiss(es|ing)?\b[^.]{0,20}\bplayoffs?\b|no playoffs|fail(s|ing)? to (make|reach|qualify)[^.]{0,20}playoffs?|out of the playoffs|playoff drought|don'?t make the playoffs|not make the playoffs/.test(s)) return ["playoffs", "wins", "division"];
   if (/losing season|win total|\bwins?\b.{0,12}\b(or fewer|under|below)\b/.test(s)) return ["wins", "playoffs"];
-  if (/deep (playoff )?run|first round|round one|bounced|one and done|conference finals|(west|east)(ern)? (conference )?finals|run ends|knocked out|eliminated|early (playoff )?exit|second round|before the (finals|conference)/.test(s)) return ["round", "conference"];
   if (/\b(title|championship|super bowl|stanley cup|finals)\b/.test(s)) return ["title", "conference"];
   return [];
 }
