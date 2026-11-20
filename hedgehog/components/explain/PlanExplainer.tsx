@@ -20,7 +20,9 @@ export function PlanExplainer({ quote, profile }: { quote: Quote; profile?: Pick
             {" "}If none of it happens, that premium is the whole cost.
           </p>
         ) : (
-          <p className={s.planLead}>Nothing in this plan fits the budget yet. Raise the monthly budget or lower the coverage.</p>
+          <p className={s.planLead}>{quote.uncovered.some((u) => /budget/i.test(u.reason))
+            ? "Nothing in this plan fits the budget yet. Raise the monthly budget or lower the coverage."
+            : "No live market covers these risks at a fair price right now. The reasons are below."}</p>
         )}
         <div className={s.tally} aria-label="Our take on each hedge">
           {pe.counts.good > 0 && <span className="badge badge-good">{pe.counts.good} worth it</span>}

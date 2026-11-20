@@ -39,7 +39,8 @@ export function ClarifyQuestions({ questions, previous = [], onSubmit, onCancel,
 
   const collect = useCallback((ds: Draft[]): ClarifyAnswer[] => questions.flatMap((q, i) => {
     const d = ds[i];
-    const answer = !d || d.skipped ? "" : q.multi ? [...d.choices, d.text.trim()].filter(Boolean).join(", ") : (d.text.trim() || d.choice || "");
+    // /api/advise caps an answer at 120 chars: several picks plus typed text can run over, so trim instead of failing the quote.
+    const answer = (!d || d.skipped ? "" : q.multi ? [...d.choices, d.text.trim()].filter(Boolean).join(", ") : (d.text.trim() || d.choice || "")).slice(0, 120).trim();
     return answer ? [{ questionId: q.id, question: q.question, answer, ...(q.label ? { label: q.label } : {}) }] : [];
   }), [questions]);
 

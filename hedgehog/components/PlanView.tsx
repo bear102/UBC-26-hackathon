@@ -253,6 +253,7 @@ export function PlanView() {
             </div>
             <p className={s.summary}>{quote.summary}</p>
             {local && <p className="xs muted">Written for the original quote; numbers below are current.</p>}
+            {error && !loading && <div className="alert alert-bad small" role="alert">Couldn&apos;t re-run the AI: {error}. Your current plan is unchanged.</div>}
             <ClarifyRecap answers={quote.clarifications ?? loadClarify(profile)?.answers} asked={!!loadClarify(profile)?.questions.length} onEdit={editAnswers} busy={loading} />
             <p className={`xs ${s.venues}`}>
               <span className="badge badge-gemini">Priced live: Gemini · Kalshi · Polymarket</span>

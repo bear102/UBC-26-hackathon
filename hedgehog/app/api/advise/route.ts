@@ -26,6 +26,10 @@ const bodySchema = z.object({
   answers: answersSchema.optional(),
 });
 
+/** Advise runs in flight, by request body (survives dev hot reloads on globalThis). */
+const g = globalThis as unknown as { __hhAdviseInflight?: Map<string, Promise<unknown>> };
+const inflight = (g.__hhAdviseInflight ??= new Map());
+
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "biz";
 
 export async function POST(req: Request) {
@@ -38,10 +42,18 @@ export async function POST(req: Request) {
   const { profile: p, coveragePct, answers } = parsed.data;
   const profile = { ...p, id: p.id || p.presetId || `${slug(p.name)}-${Math.random().toString(36).slice(2, 7)}` };
   try {
-    const quote = await advise(profile, { coveragePct, answers });
-    const id = `q-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-    const row = store.upsert("quotes", { ...quote, id });
-    return NextResponse.json(row);
+    // A reload, a second tab or Back/Forward while the AI runs (~60 s) re-sends the same request: join the run already
+    // in flight instead of paying for a second one (only when the business has an id, so two new businesses never share).
+    const key = p.id || p.presetId ? JSON.stringify(parsed.data) : null;
+    let run = key ? inflight.get(key) : undefined;
+    if (!run) {
+      run = advise(profile, { coveragePct, answers }).then((quote) => {
+        const id = `q-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+        return store.upsert("quotes", { ...quote, id });
+      });
+      if (key) { inflight.set(key, run); run.finally(() => inflight.delete(key)).catch(() => {}); }
+    }
+    return NextResponse.json(await run);
   } catch (e) {
     console.error("[api/advise]", (e as Error).message);
     return NextResponse.json({ error: "advisor failed", detail: (e as Error).message.slice(0, 300) }, { status: 502 });

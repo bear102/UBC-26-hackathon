@@ -30,18 +30,8 @@ Live backing orders on a funded Gemini account; a multisig or oracle attestor in
 ## Technologies used
 Solana (devnet), Anchor, SPL Token, @solana/web3.js, Solana Wallet Adapter / Wallet Standard (Phantom), Gemini Prediction Markets API, Kalshi API, Polymarket Gamma API, QuickNode Streams, QuickNode RPC, Next.js, React, TypeScript, Claude (Anthropic API), Google Gemini API, Zod, NWS / Open-Meteo weather data.
 
-## Video script (2:30)
-Record on the public URL. Use a preset (fast and repeatable). Do not show policy #7 (`hedgehog:hail`) or e2e fixtures as real payouts.
-
-| Time | Screen | Say |
-|---|---|---|
-| 0:00–0:15 | Home page | "A heat wave or a rained-out Saturday can cost a small business a week's margin. No insurer writes a policy that small. Prediction markets already price these events. Hedgehog turns them into insurance." |
-| 0:15–0:45 | Pick the Rainey St patio bar preset → risk map | "The AI maps the business to its worst days, each with a dollar loss and its reasoning." |
-| 0:45–1:15 | Quote: one line's venue comparison, payout vs premium, budget bar | "Each risk is matched to a live contract. The AI can only choose from contracts our code pulled, and code picks the cheapest venue. Gemini is primary. Here's what you pay, and what you get if it happens." |
-| 1:15–1:35 | "Cover all" → one wallet approval → explorer tx | "One approval buys every policy from our Solana program. The premium goes into a public vault that only sells cover it can pay." |
-| 1:35–1:55 | Dashboard: "Your cover" + feed with a QuickNode event | "QuickNode Streams watches our program on devnet and pushes each policy into the live feed." |
-| 1:55–2:15 | Explorer: policy #3 settle tx (2tB5…Mx2s), vault → owner 3.00 | "This policy was written on a Gemini daily-high market. Gemini resolved it YES, our crank settled it, and the vault paid the owner. No claim form." |
-| 2:15–2:30 | /how-it-works trust section + addresses | "Devnet, test dollars, one attestor key, dry-run Gemini backing: stated plainly. Next: live backing and a multisig attestor." |
+## Video
+Shot list and voiceover: [docs/DEMO-VIDEO.md](DEMO-VIDEO.md) (2:00). Only policy #3 is shown as a real-market payout; never #7 (`hedgehog:hail`) or e2e fixtures.
 
 ## Pitch Q&A (short answers)
 - **Isn't this just a prediction-market UI?** No. The owner never sees a contract; they get a quote in dollars sized to their loss and budget, and a policy with an onchain payout.

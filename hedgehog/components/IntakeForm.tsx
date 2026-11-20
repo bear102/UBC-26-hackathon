@@ -5,6 +5,7 @@ import type { BusinessProfile } from "@/lib/types";
 import { getPresets } from "@/lib/client/api";
 import { clearQuotes, loadProfile, saveProfile, setLastBusiness } from "@/lib/client/storage";
 import { cityForZip } from "@/lib/client/zipCity";
+import { intakeError, MAX_DESC } from "@/lib/client/intake";
 import { FIXTURE_PRESETS } from "@/lib/fixtures";
 import { Seal } from "./Engraving";
 import { IconArrowRight } from "./Icons";
@@ -49,13 +50,11 @@ export function IntakeForm() {
   function submit(e: FormEvent) {
     e.preventDefault();
     const rev = Number(revenue), bud = Number(budget);
-    if (description.trim().length < 12) return setErr("Tell us a bit more (one sentence is enough).");
-    if (!name.trim()) return setErr("Add a business name.");
-    if (!(rev > 0)) return setErr("Average daily revenue must be a positive number.");
-    if (!(bud > 0)) return setErr("Monthly hedge budget must be a positive number.");
+    const z = zip.trim();
+    const bad = intakeError({ description, name, zip: z, revenue: rev, budget: bud });
+    if (bad) return setErr(bad);
     setErr(null);
     const id = base?.id ?? `${slug(name)}-${Math.random().toString(36).slice(2, 7)}`;
-    const z = zip.trim();
     const city = cityForZip(z) ?? (base && (base.zip ?? "") === z ? base.city : z ? "" : base?.city ?? "Austin, TX");
     const profile: BusinessProfile = {
       id, name: name.trim(), description: description.trim(), city, zip: z || undefined,
@@ -65,6 +64,8 @@ export function IntakeForm() {
     const prev = loadProfile(id) ?? base;
     if (prev && profileKey(prev) !== profileKey(profile)) clearQuotes(id);
     saveProfile(profile); setLastBusiness(id);
+    // Browser Back from the plan comes back to this business's filled-in form, not a blank one.
+    if (!presetId) window.history.replaceState(null, "", `/intake?preset=${encodeURIComponent(id)}`);
     router.push(`/plan?b=${encodeURIComponent(id)}&c=${coverage}`);
   }
 
@@ -84,13 +85,13 @@ export function IntakeForm() {
         </div>
         <label className={s.you}>
           <span className="sr-only">Describe your business</span>
-          <textarea className="input" rows={4} name="hh-description" autoComplete="off" value={description} onChange={(e) => setDescription(e.target.value)}
+          <textarea className="input" rows={4} maxLength={MAX_DESC} name="hh-description" autoComplete="off" value={description} onChange={(e) => setDescription(e.target.value)}
             placeholder="e.g. We run a taco truck in East Austin. No indoor seating, so rainy lunches kill us, and cold weekends are slow." />
         </label>
 
         <div className="grid grid-2">
           <label className="field"><span>Business name</span>
-            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Cielo Taco Truck" name="hh-business" autoComplete="off" data-1p-ignore data-lpignore="true" />
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Cielo Taco Truck" maxLength={120} name="hh-business" autoComplete="off" data-1p-ignore data-lpignore="true" />
           </label>
           <label className="field"><span>ZIP code</span>
             <input className="input num" value={zip} onChange={(e) => setZip(e.target.value)} inputMode="numeric" maxLength={5} placeholder="78702" name="hh-zip" autoComplete="off" />
