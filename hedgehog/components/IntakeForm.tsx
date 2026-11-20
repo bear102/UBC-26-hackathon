@@ -69,7 +69,7 @@ export function IntakeForm() {
   }
 
   return (
-    <form onSubmit={submit} className={s.form} noValidate>
+    <form onSubmit={submit} className={s.form} noValidate autoComplete="off" data-form-type="other">
       <div className={`page-head ${s.head}`}>
         <div>
           <span className="eyebrow">Step 2</span>
@@ -84,22 +84,22 @@ export function IntakeForm() {
         </div>
         <label className={s.you}>
           <span className="sr-only">Describe your business</span>
-          <textarea className="input" rows={4} value={description} onChange={(e) => setDescription(e.target.value)}
+          <textarea className="input" rows={4} name="hh-description" autoComplete="off" value={description} onChange={(e) => setDescription(e.target.value)}
             placeholder="e.g. We run a taco truck in East Austin. No indoor seating, so rainy lunches kill us, and cold weekends are slow." />
         </label>
 
         <div className="grid grid-2">
           <label className="field"><span>Business name</span>
-            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Cielo Taco Truck" autoComplete="organization" />
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Cielo Taco Truck" name="hh-business" autoComplete="off" data-1p-ignore data-lpignore="true" />
           </label>
           <label className="field"><span>ZIP code</span>
-            <input className="input num" value={zip} onChange={(e) => setZip(e.target.value)} inputMode="numeric" maxLength={5} placeholder="78702" autoComplete="postal-code" />
+            <input className="input num" value={zip} onChange={(e) => setZip(e.target.value)} inputMode="numeric" maxLength={5} placeholder="78702" name="hh-zip" autoComplete="off" />
           </label>
           <label className="field"><span>Average daily revenue</span>
-            <div className="input-prefix"><b>$</b><input className="input num" value={revenue} onChange={(e) => setRevenue(e.target.value.replace(/[^\d.-]/g, ""))} inputMode="decimal" /></div>
+            <div className="input-prefix"><b>$</b><input className="input num" value={revenue} onChange={(e) => setRevenue(e.target.value.replace(/[^\d.-]/g, ""))} inputMode="decimal" name="hh-revenue" autoComplete="off" /></div>
           </label>
           <label className="field"><span>Monthly hedge budget</span>
-            <div className="input-prefix"><b>$</b><input className="input num" value={budget} onChange={(e) => setBudget(e.target.value.replace(/[^\d.-]/g, ""))} inputMode="decimal" /></div>
+            <div className="input-prefix"><b>$</b><input className="input num" value={budget} onChange={(e) => setBudget(e.target.value.replace(/[^\d.-]/g, ""))} inputMode="decimal" name="hh-budget" autoComplete="off" /></div>
           </label>
         </div>
         <fieldset className={s.fieldset}>
