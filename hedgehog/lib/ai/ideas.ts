@@ -166,7 +166,7 @@ export const brainstormSchema = z.object({
 export type BrainstormOut = z.infer<typeof brainstormSchema>;
 
 export const BRAINSTORM_SYSTEM = `You are Hedgehog's creative hedging strategist (second-order exposures) for US small businesses (the owner's city is in the profile).
-The owner's OBVIOUS risks (weather at their own site, their own named teams) are handled by another analyst. Your job: scan the LIVE MARKET CATALOG and find markets with a real but non-obvious economic link to this business that the owner would not think of. Think about:
+The owner's OBVIOUS risks (weather at their own site, their own named teams) are listed separately, not by you. Your job: scan the LIVE MARKET CATALOG and find markets with a real but non-obvious economic link to this business that the owner would not think of. Think about:
 - costs: fuel (WTI/Brent crude, US gas), natural gas (kitchen burners, propane, electricity), metals (silver/gold/copper for jewelers, contractors, electricians), food inflation (CPI);
 - financing: variable-rate loans or credit lines (Fed decisions, funds rate);
 - demand drivers: customers' disposable income (gas prices, CPI), crypto wealth for crypto-paid merchants (BTC/SOL), weather in feeder cities for tourism, cold snaps for outdoor trade, rival/neighbor team games (college football Saturdays, local teams) that pull crowds away or bring them in.
@@ -179,7 +179,7 @@ Rules:
 - causalStory: the chain from market to P&L ("Brent leads diesel by ~2 weeks; 4 vans x 3,000 mi/week ...").
 - worthIt: is it worth the premium? (e.g. "Cheap tail cover; only worth it if fuel is >5% of costs").
 - naturalHedges (0-3): things that HELP this business, which the owner should NOT hedge (or should hedge the opposite tail), e.g. a hot-soup truck benefits from cold, a delivery caterer gets more orders when it rains. advice: dont-hedge | hedge-opposite | watch.
-- Never invent markets. No venue names in titles.`;
+- Never invent markets. No venue names in titles. Never mention analysts, a playbook or cover the plan may not hold ("already covered").`;
 
 export function brainstormPrompt(profileBlock: string, today: string, catalog: CatalogEntry[], seeds: Idea[] = []): string {
   return [
@@ -205,6 +205,17 @@ export interface PlaybookSeed {
   candidates: MarketContract[];
 }
 
+/**
+ * The business itself sells on-demand delivery (meals, groceries, parcels, rides): "60% delivery", "our drivers", couriers,
+ * delivery apps. Customers who "order delivery instead" (a lunch truck's loss) or a fuel dealer's own routes do not count.
+ */
+export function onDemandDelivery(description: string): boolean {
+  const own = /\b\d+\s*%\s*(?:of [a-z ]{0,20})?deliver|\b(we|our)\b[^.]{0,40}\b(deliver\w*|couriers?|drivers?)\b|\bdeliver(y|ies)\s+(drivers?|orders?|routes?|business|service|sales|share|kitchen)\b|\bcouriers?\b|\b(doordash|uber ?eats|grubhub|rideshare)\b|\btake-?out\b/i;
+  const theirs = /\b(order|orders|ordering|ordered)\s+(delivery|in|doordash|uber ?eats|grubhub)\b|\binstead\b/i;
+  const goods = /food|meals?|pizza|restaurant|kitchen|cafe|grocer|courier|parcels?|packages?|rideshare|take-?out|flowers?|florist|bakery/i;
+  return goods.test(description) && description.split(/(?<=[.!?;])\s+/).some((x) => own.test(x) && !theirs.test(x));
+}
+
 /** Playbook seeds -> proxy ideas whose candidates are exactly the seed's real contracts. */
 export function ideasFromPlaybook(seeds: PlaybookSeed[], profile: BusinessProfile): { ideas: Idea[]; naturalHedges: NaturalHedge[] } {
   const ideas: Idea[] = []; const naturalHedges: NaturalHedge[] = [];
@@ -212,7 +223,14 @@ export function ideasFromPlaybook(seeds: PlaybookSeed[], profile: BusinessProfil
     const { idea: x, candidates } = seed;
     const sides = (seed as { sides?: Record<string, "yes" | "no"> }).sides;
     if (!x || !PERILS.includes(x.peril)) continue;
-    if (x.naturalHedgeNote) naturalHedges.push({ peril: x.peril, title: x.title ?? x.problem ?? "Natural hedge", explanation: x.naturalHedgeNote, advice: "watch" });
+    // a delivery-app offset only for a business that delivers (QA cycle 4: "delivery orders recoup rainy days" for a parking lot
+    // and a college bar that never mentioned delivery)
+    // (QA cycle 5: "office workers order delivery instead" is a loss channel, and a propane dealer's own deliveries do not
+    // rise with rain); the note gets its own title, never the idea's ("Diesel spike via Brent crude" over a rain note)
+    if (x.naturalHedgeNote && (!/\bdeliver/i.test(x.naturalHedgeNote) || onDemandDelivery(profile.description))) {
+      const head = x.naturalHedgeNote.split(/[:;]/)[0].trim();
+      naturalHedges.push({ peril: x.peril, title: head.length >= 8 && head.length <= 80 && head !== x.naturalHedgeNote.trim() ? head : "Natural hedge", explanation: x.naturalHedgeNote, advice: "watch" });
+    }
     const cands = (candidates ?? []).filter((c) => c && c.status === "open");
     if (!cands.length) continue;
     const loss = x.lossUsd && x.lossUsd > 0 ? x.lossUsd : profile.avgDailyRevenueUsd * 0.1;
@@ -312,13 +330,13 @@ const PRESET_IDEAS: Record<string, { ideas: FallbackIdea[]; natural: NaturalHedg
 };
 
 const KEYWORD_IDEAS: { re: RegExp; idea: (p: BusinessProfile) => FallbackIdea }[] = [
-  { re: /deliver|van|truck|drive|fleet|mile|uber|courier/i, idea: (p) => ({ kind: "proxy", peril: "gas", title: "Fuel price spike", trigger: "US average gas price above this week's top strike", location: "US", window: "this week",
+  { re: /\bdeliver|\bvans?\b|\btrucks?\b|\bdrivers\b|\bfleet|\buber\b|courier/i, idea: (p) => ({ kind: "proxy", peril: "gas", title: "Fuel price spike", trigger: "US average gas price above this week's top strike", location: "US", window: "this week",
       lossUsd: Math.max(20, Math.round(p.avgDailyRevenueUsd * 0.05 / 10) * 10), lossReasoning: `Assumes fuel is ~5% of a ${usd(p.avgDailyRevenueUsd)} day's costs that can't be passed on.`, confidence: 0.4, hint: "gas price",
       correlation: "strong", causalStory: "Every delivery mile costs more when pump prices rise; prices to customers lag by weeks.", worthIt: "Worth it if fuel is a top cost." }) },
   { re: /crypto|bitcoin|btc|solana|\bsol\b|web3/i, idea: (p) => ({ kind: "proxy", peril: "crypto", title: "Crypto drawdown cuts crypto-paid sales", trigger: "BTC below this month's lower strikes on Nov 30", location: "US", window: "Nov 30",
       lossUsd: Math.max(20, Math.round(p.avgDailyRevenueUsd * 0.2 / 10) * 10), lossReasoning: "Assumes ~20% of a day's sales come from crypto-rich customers who pull back after a drop.", confidence: 0.3, hint: "BTC price",
       correlation: "medium", causalStory: "Crypto-paying customers spend from crypto wealth; a drawdown hits both demand and coins held as revenue.", worthIt: "Only if a real share of revenue is paid or held in crypto." }) },
-  { re: /jewel|silversmith|goldsmith|\b(gold|silver)\b[^.]{0,30}\b(rings?|chains?|casting|scrap|ounces?|bullion)\b|\bmetal(s|work|smith)?\b|electrician|electrical contract|\bwir(e|ing)\b|plumb|contractor/i, idea: (p) => ({ kind: "proxy", peril: "metals", title: "Metal input costs spike", trigger: `${/silver/i.test(p.description) ? "Silver" : /gold|jewel/i.test(p.description) ? "Gold" : "Copper"} closes above this month's upper strike`, location: "US", window: "Nov 30",
+  { re: /jewel|silversmith|goldsmith|\b(gold|silver)\b[^.]{0,30}\b(rings?|chains?|casting|scrap|ounces?|bullion)\b|\bmetal(s|work|smith)?\b|electrician|electrical contract|\bwir(e|ing)\b|plumb|copper|flashing|gutters?/i, idea: (p) => ({ kind: "proxy", peril: "metals", title: "Metal input costs spike", trigger: `${/silver/i.test(p.description) ? "Silver" : /gold|jewel/i.test(p.description) ? "Gold" : "Copper"} closes above this month's upper strike`, location: "US", window: "Nov 30",
       lossUsd: Math.max(20, Math.round(p.avgDailyRevenueUsd * 0.1 / 10) * 10), lossReasoning: "Assumes metal is ~10% of a day's cost base.", confidence: 0.35, hint: /silver/i.test(p.description) ? "Silver price" : /gold|jewel/i.test(p.description) ? "Gold price" : "Copper price",
       correlation: "strong", causalStory: "Raw metal is priced off the same futures the market settles on.", worthIt: "Worth it when quotes to customers are fixed before you buy metal." }) },
   { re: /\bloans?\b|credit line|line of credit|\bdebt|mortgage|financ|\blease/i, idea: () => ({ kind: "proxy", peril: "fed", title: "Rate hike on a variable loan", trigger: "The Fed hikes 25bps at the next meeting", location: "US", window: "next FOMC meeting",
@@ -432,7 +450,7 @@ export type TieredLeg = HedgeLeg & { tier: string };
 /** A single game ("Arkansas vs Texas", "Spurs at Lakers"); season futures ("Pro Basketball Playoff Qualifiers") are not. */
 const isMatchup = (c: MarketContract) => /\s(vs\.?|v\.?|at|@)\s/i.test(c.eventTitle);
 export const TIER_LABEL: Record<string, string> = {
-  recommended: "Recommended", balanced: "Balanced", "cheap-tail": "Cheap tail", broad: "Broad", "other-date": "Other date", "other-side": "Other side", "other-venue": "Other venue",
+  recommended: "Recommended", balanced: "Balanced", "cheap-tail": "Cheap tail", broad: "Broad", "other-date": "Other date", "other-side": "Other side", "other-venue": "Other venue", "further-strike": "Further strike",
 };
 
 /**
@@ -460,7 +478,9 @@ export function ladderChoices(rec: TieredLeg, cands: MarketContract[], existing:
     const m0 = contractMeta(c0.id);
     const sameTeam = (c: MarketContract) => { const m = contractMeta(c.id); return !m0?.teams?.length || !m?.teams?.length
       || (m.league === m0.league && m.teams.some((t) => m0.teams!.some((u) => t.toLowerCase() === u.toLowerCase()))); };
-    const sib = (c: MarketContract) => c.id !== c0.id && !isMatchup(c) && okAsk(askOf(c, rec.side)) && sameTeam(c)
+    // a rung with a contract or two on the book is not a real choice (QA cycle 5: "35+ wins" NO had 1.2 contracts)
+    const deepS = (c: MarketContract) => { const d = rec.side === "yes" ? c.depthYes : c.depthNo; return d === undefined || d >= 3; };
+    const sib = (c: MarketContract) => c.id !== c0.id && !isMatchup(c) && okAsk(askOf(c, rec.side)) && sameTeam(c) && deepS(c)
       && (c.eventTicker === c0.eventTicker ? /\bwins?\b/i.test(c.label) && /\bwins?\b/i.test(c0.label) : c.label.trim().toLowerCase() === c0.label.trim().toLowerCase());
     const sibs = cands.filter(sib);
     const cheaper = sibs.filter((c) => askOf(c, rec.side)! <= a0 * 0.75).sort((x, y) => askOf(y, rec.side)! - askOf(x, rec.side)!)[0];
@@ -477,7 +497,10 @@ export function ladderChoices(rec: TieredLeg, cands: MarketContract[], existing:
     return out;
   }
   if (b0.dir === "up" || b0.dir === "down") {
-    const sibs = cands.filter((c) => c.eventTicker === c0.eventTicker && c.id !== c0.id && labelBound(c.label).dir === b0.dir && okAsk(askOf(c, rec.side)));
+    // a "cheaper" strike with a fraction of a contract on the book is not cheaper once sized (QA cycle 3: a 30c tail with 0.21
+    // contracts of depth walked to 33c and made Essentials the dearest package)
+    const deep = (c: MarketContract) => { const d = rec.side === "yes" ? c.depthYes : c.depthNo; return d === undefined || d >= 25; };
+    const sibs = cands.filter((c) => c.eventTicker === c0.eventTicker && c.id !== c0.id && labelBound(c.label).dir === b0.dir && okAsk(askOf(c, rec.side)) && deep(c));
     const cheaper = sibs.filter((c) => askOf(c, rec.side)! <= a0 * 0.75).sort((x, y) => Math.abs(askOf(x, rec.side)! - a0 * 0.5) - Math.abs(askOf(y, rec.side)! - a0 * 0.5))[0];
     const broader = sibs.filter((c) => askOf(c, rec.side)! >= a0 * 1.3).sort((x, y) => Math.abs(askOf(x, rec.side)! - Math.min(0.8, a0 * 1.8)) - Math.abs(askOf(y, rec.side)! - Math.min(0.8, a0 * 1.8)))[0];
     if (cheaper && !out.some((l) => l.tier === "cheap-tail")) push(cheaper, rec.side, "cheap-tail", `Cheaper tail cover: "${cheaper.label}" pays only in the worse case, at ${Math.round(askOf(cheaper, rec.side)! * 100)}¢ per $1.`);
@@ -499,8 +522,10 @@ const STRENGTH = { strong: 3, medium: 2, weak: 1 } as const;
  * Three alternative plans from the sized choices (code only), each fitted to the budget at the quote's coverage
  * with the same greedy the client uses (rescaleQuote), so totals match what the owner sees after switching.
  */
-export function buildPackages(q: Quote, coveragePct: number): QuotePackage[] {
-  const opts = q.options ?? [];
+export function buildPackages(q: Quote, coveragePct: number, excluded: (l: QuoteLine) => boolean = () => false): QuotePackage[] {
+  // a choice the default plan rejects (coin flip, mostly prepaid) is never a package line either (QA cycle 5: Essentials held
+  // a 60c wins-rung NO and a 56c snow strike the plan had just called coin flips)
+  const opts = (q.options ?? []).map((o) => ({ ...o, choices: o.choices.filter((x) => !excluded(x)) })).filter((o) => o.choices.length);
   if (!opts.length) return [];
   const risk = new Map(q.risks.map((r) => [r.id, r]));
   const buyable = (l: QuoteLine) => l.action !== "read-only";

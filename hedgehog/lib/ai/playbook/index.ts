@@ -205,7 +205,9 @@ export function playbookIdeas(profile: BusinessProfile, markets: MarketContract[
   // copper-wire hedge to a roofer and a rooftop bar (QA cycle 2)
   const kwText = `${text} ${profile.city ?? ""}`;
   const scored = PLAYBOOK.filter((e) => scoreOf.has(e.industry)).map((e) => {
-    const kw = e.keywords.filter((k) => re(`\\b${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(kwText)).length;
+    // a short keyword is a whole word (+ inflections), a longer one a stem (QA cycle 5: "pipe" matched a mortgage "pipeline",
+    // "car" a "career"); "refinanc", "excavat" stay stems
+    const kw = e.keywords.filter((k) => re(`\\b${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}${k.length <= 4 ? "(?:s|es|d|ed|er|ers|ing)?\\b" : ""}`).test(kwText)).length;
     return { e, kw, s: (scoreOf.get(e.industry) ?? 0) + 2 * kw - STRENGTH[e.correlation] };
   }).filter((x) => x.kw > 0 || !x.e.keywords.length).sort((a, b) => b.s - a.s);
 

@@ -91,7 +91,7 @@ export interface Industry {
 export const INDUSTRIES: Industry[] = [
   { id: "bar-restaurant", name: "Bars & restaurants (patio / dine-in)", keywords: ["\\bbar\\b", "pub", "tavern", "brewery", "taproom", "restaurant", "bistro", "diner", "patio", "beer garden", "cocktail", "\\bgrill\\b", "eatery", "kitchen", "pizzeria", "cantina", "winery", "ice cream", "dessert"],
     naturalHedges: [{ peril: "rain", note: "If a big share of sales is delivery, rainy days partly pay you back (delivery orders rise); size rain cover to the dine-in/patio share only." }] },
-  { id: "food-truck", name: "Food trucks & trailers", keywords: ["food truck", "taco truck", "\\btruck\\b.*(taco|food|bbq|burger|birria)", "trailer park", "food trailer", "street food", "walk-up"],
+  { id: "food-truck", name: "Food trucks & trailers", keywords: ["food truck", "taco truck", "\\btruck\\b.*(taco|food|bbq|burger|birria)", "trailer park", "food trailer", "street food", "walk-up (window|counter|line|lunch|orders?|customers?|crowd)"],
     naturalHedges: [{ peril: "cold", note: "Hot food (birria, ramen, soup) sells better on cool days; only a freezing, windy snap hurts." }] },
   { id: "coffee-shop", name: "Coffee shops, bakeries & cafes", keywords: ["coffee", "cafe", "café", "espresso", "bakery", "donut", "bagel", "tea shop", "boba", "juice bar"],
     naturalHedges: [{ peril: "cold", note: "Cool mornings sell hot drinks; don't buy cold-day cover." }] },
@@ -99,10 +99,10 @@ export const INDUSTRIES: Industry[] = [
   { id: "landscaping", name: "Landscaping, lawn care & tree service", keywords: ["landscap", "lawn", "mowing", "yard", "tree service", "irrigation", "hardscape", "gardening service", "sod"],
     naturalHedges: [{ peril: "rain", note: "Rain grows grass: a wet week loses billable days now but fills the schedule two weeks later. Hedge long wet spells, not single showers." }] },
   { id: "construction", name: "Construction, roofing & electrical contractors", keywords: ["construction", "contractor", "\\broof(ing|ers?)\\b|\\bre-?roof|shingles?", "builder", "remodel", "electrician", "electrical", "wiring", "concrete", "framing", "general contractor", "solar install"] },
-  { id: "hvac-plumbing", name: "HVAC & plumbing", keywords: ["hvac", "plumb", "air condition", "\\ba/c\\b", "heating", "furnace", "pipe", "water heater", "refrigeration"],
+  { id: "hvac-plumbing", name: "HVAC & plumbing", keywords: ["hvac", "plumb", "air condition", "\\ba/c\\b", "heating", "furnace", "\\bpipes?\\b|\\bpiping\\b|\\brepip", "water heater", "refrigeration"],
     naturalHedges: [{ peril: "cold", note: "Freezes and cold snaps mean burst pipes and no-heat calls: emergency demand you profit from. Don't hedge cold." },
                     { peril: "heat", note: "Heat waves fill the A/C repair schedule. Don't hedge heat." }] },
-  { id: "delivery", name: "Delivery, couriers, rideshare & trucking", keywords: ["deliver", "courier", "rideshare", "uber", "lyft", "doordash", "instacart", "\\bvans?\\b", "fleet", "trucking", "box trucks?", "delivery trucks?", "\\bsemis?\\b", "logistics", "moving company", "movers", "\\bmiles?\\b", "freight", "dispatch", "catering"],
+  { id: "delivery", name: "Delivery, couriers, rideshare & trucking", keywords: ["\\b(we|our)\\b[^.]{0,40}\\bdeliver|\\bdeliver(y|ies)? (drivers?|vans?|trucks?|routes?|fleet|business|service|company)\\b|\\b\\d+\\s*%\\s*deliver", "courier", "rideshare", "uber", "lyft", "doordash", "instacart", "\\bvans?\\b", "fleet", "trucking", "box trucks?", "delivery trucks?", "\\bsemis?\\b", "logistics", "moving company", "movers", "\\bmiles?\\b", "freight", "dispatch", "catering"],
     naturalHedges: [{ peril: "rain", note: "Rainy days lift delivery orders (people stay in); rain is a natural hedge, don't buy rain cover." }] },
   { id: "farm-nursery", name: "Farms, ranches, greenhouses & nurseries", keywords: ["farm", "ranch", "nursery", "greenhouse", "grower", "orchard", "crop", "cattle", "plants", "garden center", "\\bhay\\b", "vineyard"] },
   { id: "retail-apparel", name: "Seasonal retail & apparel", keywords: ["boutique", "apparel", "clothing", "outerwear", "coats?", "jackets?", "boots", "retail", "store", "shop\\b", "gift shop", "sporting goods"],
@@ -262,7 +262,7 @@ export const PLAYBOOK: HedgeIdea[] = [
     validated: V("kalshi:KXCPI-26DEC-T0.3", 0.13) },
 
   // food trucks
-  { id: "truck-rain-day", industry: "food-truck", keywords: ["no indoor", "walk-up", "line", "lot", "trailer"],
+  { id: "truck-rain-day", industry: "food-truck", keywords: ["no indoor", "walk-up line", "walk-up window", "walk-up customer", "lunch line", "food lot", "trailer"],
     title: "Rain wipes out the walk-up line", problem: "A truck with no seating sells almost nothing in the rain; weekends are most of the money.",
     causalStory: "Walk-up demand goes to near zero when it rains; the city rain market pays on the same day/weekend.",
     peril: "rain", marketQuery: RAIN_DAY, side: "yes", correlation: "strong", lossShareOfDay: 0.5,
@@ -366,7 +366,7 @@ export const PLAYBOOK: HedgeIdea[] = [
     validated: V("gemini:GEMI-COPPER2611302200-HI6", 0.24) },
 
   // delivery
-  { id: "delivery-gas", industry: "delivery", keywords: ["car", "rideshare", "uber", "lyft", "doordash", "courier", "mile", "gas"],
+  { id: "delivery-gas", industry: "delivery", keywords: ["car", "rideshare", "uber", "lyft", "doordash", "courier", "mile", "gas", "gasoline"],
     title: "Pump-price spike eats delivery pay", problem: "Gig pay per trip is fixed while fuel cost per mile isn't; surcharges are per trip, not per mile.",
     causalStory: "Every mile costs more when the AAA average rises; the weekly gas market pays when it settles above the strike.",
     peril: "gas", marketQuery: GAS_WEEK, side: "yes", correlation: "strong", lossShareOfDay: 0.05,
@@ -408,7 +408,6 @@ export const PLAYBOOK: HedgeIdea[] = [
     causalStory: "Weekend rain in the city cancels outdoor bookings; the weekend rain market pays on the same city and weekend.",
     peril: "rain", marketQuery: RAIN_DAY, side: "yes", correlation: "medium", lossShareOfDay: 0.4,
     basisRisk: "Any measurable rain at the station pays; a sunny afternoon after a morning shower still settles YES.",
-    naturalHedgeNote: "Hotels and indoor attractions may gain from rainy days; this is for outdoor operators.",
     evidence: [{ claim: "Weather-driven event/outing disruptions rose 86.5% 2023-2024 (Tokio Marine HCC).", source: "https://www.tmhcc.com/en-us/news-and-articles/thought-leadership/ensuring-event-continuity-amid-uncertainty" }],
     validated: V("kalshi:KXRAINWKND-26NOV21-AUS", 0.35) },
 

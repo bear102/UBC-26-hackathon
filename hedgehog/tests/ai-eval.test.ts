@@ -121,10 +121,13 @@ test("hz2: Spurs bar fallback plan (no LLM) carries a NO on a Spurs playoffs / W
     sizeQuote: (a) => sizeQuote({ ...a, fetchBooks: false, crossCheck: false }) } });
   const season = q.risks.find((r) => r.horizon === "season")!;
   assert.match(season.title, /Spurs/);
-  const line = q.lines.find((l) => l.riskId === season.id)!;
-  assert.ok(line, "season risk is in the plan");
-  assert.equal(line.side, "no");
-  assert.ok(Object.keys(meta).includes(line.contractId), line.contractId);
+  // the season risk is offered as a NO on a Spurs future; in this fixture the only deep book is NO 66c (WCF NO 41c has 4
+  // contracts, playoffs NO 4c has 14: dust), so the plan leaves it out as prepaying the payout (QA cycle 3)
+  const opt = q.options?.find((o) => o.riskId === season.id);
+  assert.ok(opt?.choices.some((c) => c.side === "no" && Object.keys(meta).includes(c.contractId)), "season risk offered as a NO future");
+  const line = q.lines.find((l) => l.riskId === season.id && l.contracts > 0);
+  if (line) { assert.equal(line.side, "no"); assert.ok(line.pricePerContract < 0.6); }
+  else assert.match(q.uncovered.find((u) => u.riskId === season.id)?.reason ?? "", /coin flip|prepay/);
   assert.ok(q.totalPremiumUsd <= bar.monthlyBudgetUsd + 1e-9, `plan premium ${q.totalPremiumUsd} stays inside the budget`);
   for (const pk of q.packages ?? []) assert.ok(pk.totalPremiumUsd <= bar.monthlyBudgetUsd + 1e-9, `${pk.name} ${pk.totalPremiumUsd} inside the budget`);
 });

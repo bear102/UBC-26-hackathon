@@ -213,11 +213,18 @@ export async function sizeQuote(args: SizeArgs): Promise<SizeResult> {
     }
     const want = Math.ceil((coveragePct / 100) * risk.lossUsd - 1e-9);
     if (want <= 0) { uncovered.push({ riskId: leg.riskId, reason: "nothing to cover (loss or coverage is 0)" }); continue; }
-    const cap = Math.min(MAX_INSURANCE_ASK, topAsk + (args.maxSlippage ?? MAX_SLIPPAGE));
+    // slippage relative to the quoted ask too (QA cycle 3: a 4c top-of-book walked to a 9c average, doubling the price quoted)
+    const cap = Math.min(MAX_INSURANCE_ASK, topAsk + Math.min(args.maxSlippage ?? MAX_SLIPPAGE, Math.max(0.02, topAsk * 0.5)));
     const ladder = ladderFor(c, leg.side, books.get(c.id)).filter((l) => l.price <= cap + 1e-9);
     const w = walk(ladder, want);
     const filled = Math.floor(w.filled);
     if (filled <= 0) { uncovered.push({ riskId: leg.riskId, reason: `no ${leg.side.toUpperCase()} liquidity at or below $${cap.toFixed(2)}` }); continue; }
+    // a depth-capped line paying crumbs against the loss is noise, not cover (QA cycle 3: $19 of payout on a $3,600 loss kept in
+    // the plan because MIN_PAYOUT_USD only applied to budget-scaled lines)
+    if (filled < want && filled < Math.min(want, Math.max(MIN_PAYOUT_USD, 0.01 * risk.lossUsd))) {
+      uncovered.push({ riskId: leg.riskId, reason: `Only ${filled} contract${filled === 1 ? "" : "s"} offered near the quoted price on "${c.label}": a $${filled} payout is too small to be worth buying.` });
+      continue;
+    }
     const cost = walk(ladder, filled).cost;
     const line: QuoteLine = {
       ...leg, contract: c, coveragePct, contracts: filled,

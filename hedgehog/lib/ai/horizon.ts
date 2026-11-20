@@ -231,22 +231,47 @@ function leagueTeams(): (OwnTeam & { re: RegExp })[] {
   });
   // college programs (venues label them "Ohio St.", "Michigan"); only the program's own name or mascot, never a bare state
   const college: [RegExp, string, string, string[]][] = [
-    [/\bohio state\b|\bbuckeyes\b|\bOSU football\b/i, "Buckeyes", "Columbus", ["ohio st.", "ohio state", "ohio st"]],
-    [/\bwolverines\b|\bmichigan football\b|\bUMich\b/i, "Wolverines", "Ann Arbor", ["michigan"]],
-    [/\bcrimson tide\b|\balabama football\b/i, "Crimson Tide", "Tuscaloosa", ["alabama"]],
-    [/\bgeorgia bulldogs\b|\bUGA\b/i, "Bulldogs", "Athens", ["georgia"]],
-    [/\bLSU\b|\bfighting tigers\b/i, "Tigers", "Baton Rouge", ["lsu"]],
+    [/\bohio state\b|\bbuckeyes\b|\bOSU football\b|\bohio stadium\b/i, "Buckeyes", "Columbus", ["ohio st.", "ohio state", "ohio st"]],
+    [/\bwolverines\b|\bmichigan\b(?! state)[^.]{0,25}\bfootball\b|\bUMich\b|\bbig house\b/i, "Wolverines", "Ann Arbor", ["michigan"]],
+    [/\bcrimson tide\b|\bbama\b|\broll tide\b|bryant[- ]denny|\balabama\b[^.]{0,25}\bfootball\b/i, "Crimson Tide", "Tuscaloosa", ["alabama"]],
+    [/\bgeorgia bulldogs\b|\bUGA\b|\bgeorgia\b(?! tech| state)[^.]{0,25}\bfootball\b|sanford stadium/i, "Bulldogs", "Athens", ["georgia"]],
+    [/\bLSU\b|\bfighting tigers\b|tiger stadium|death valley/i, "Tigers", "Baton Rouge", ["lsu"]],
     [/\bnotre dame\b|\bfighting irish\b/i, "Fighting Irish", "South Bend", ["notre dame"]],
     [/\bpenn state\b|\bnittany lions\b/i, "Nittany Lions", "State College", ["penn st.", "penn state"]],
-    [/\boregon ducks\b|\boregon football\b/i, "Ducks", "Eugene", ["oregon"]],
-    [/\btexas a&m\b|\baggies\b/i, "Aggies", "College Station", ["texas a&m"]],
-    [/\bsooners\b/i, "Sooners", "Norman", ["oklahoma"]],
-    [/\bvols\b|\bvolunteers\b/i, "Volunteers", "Knoxville", ["tennessee"]],
+    [/\boregon ducks\b|\boregon\b(?! state)[^.]{0,25}\bfootball\b|autzen/i, "Ducks", "Eugene", ["oregon"]],
+    [/\btexas a&m\b|\baggies\b|kyle field/i, "Aggies", "College Station", ["texas a&m"]],
+    [/\bsooners\b|\boklahoma\b(?! state| city)[^.]{0,25}\bfootball\b/i, "Sooners", "Norman", ["oklahoma"]],
+    [/\bvols\b|\bvolunteers\b|\btennessee\b(?! titans)[^.]{0,25}\bfootball\b|neyland/i, "Volunteers", "Knoxville", ["tennessee"]],
     [/\bclemson\b/i, "Tigers", "Clemson", ["clemson"]],
     [/\bseminoles\b|\bflorida state\b/i, "Seminoles", "Tallahassee", ["florida st.", "florida state"]],
     [/\bmiami hurricanes\b/i, "Hurricanes", "Miami", ["miami (fl)", "miami"]],
     [/\bUSC\b|\btrojans\b/, "Trojans", "Los Angeles", ["usc"]],
     [/\bjayhawks\b/i, "Jayhawks", "Lawrence", ["kansas"]],
+    // QA cycle 4: a Lexington bar's Kentucky basketball got NBA games, a Pitt football lot got the Steelers; the school's own
+    // name next to a sports word, its mascot or its arena (never a bare state: "Kentucky bourbon" is not the Wildcats)
+    [/\bkentucky wildcats\b|\bkentucky\b(?! derby| fried| bourbon)[^.]{0,30}\b(basketball|football|games?|wildcats|fans?|hoops)\b|\bUK (basketball|football|games?)\b|\brupp arena\b|\bbig blue nation\b/i, "Wildcats", "Lexington", ["kentucky"]],
+    [/\bpitt\b|\bpitt panthers\b/i, "Panthers", "Pittsburgh", ["pittsburgh", "pitt"]],
+    [/\blouisville\b[^.]{0,30}\b(basketball|football|games?|cardinals|fans?)\b|\blouisville cardinals\b/i, "Cardinals", "Louisville", ["louisville"]],
+    [/\bhoosiers\b|\bindiana\b(?! pacers| fever)[^.]{0,25}\b(basketball|football|hoops)\b|assembly hall/i, "Hoosiers", "Bloomington", ["indiana"]],
+    [/\bbadgers\b|camp randall/i, "Badgers", "Madison", ["wisconsin"]],
+    [/\bhawkeyes\b|kinnick/i, "Hawkeyes", "Iowa City", ["iowa"]],
+    [/\bcornhuskers\b|\bhuskers\b/i, "Cornhuskers", "Lincoln", ["nebraska"]],
+    [/\bauburn tigers\b|\bauburn\b[^.]{0,25}\b(football|basketball|games?)\b|\bwar eagle\b/i, "Tigers", "Auburn", ["auburn"]],
+    [/\bgators\b|\bthe swamp\b/i, "Gators", "Gainesville", ["florida"]],
+    [/\brazorbacks\b/i, "Razorbacks", "Fayetteville", ["arkansas"]],
+    [/\bole miss\b|\brebels football\b/i, "Rebels", "Oxford", ["ole miss", "mississippi"]],
+    [/\bmizzou\b|\bmissouri tigers\b/i, "Tigers", "Columbia", ["missouri"]],
+    [/\bgamecocks\b/i, "Gamecocks", "Columbia", ["south carolina"]],
+    [/\bblue devils\b|\bduke\b[^.]{0,25}\b(basketball|football|games?)\b|cameron indoor/i, "Blue Devils", "Durham", ["duke"]],
+    [/\btar heels\b|\bunc\b[^.]{0,25}\b(basketball|football|games?)\b/i, "Tar Heels", "Chapel Hill", ["north carolina", "unc"]],
+    [/\bspartans\b[^.]{0,25}\b(basketball|football|games?)\b|\bmichigan state\b/i, "Spartans", "East Lansing", ["michigan st.", "michigan state"]],
+    [/\bboilermakers\b/i, "Boilermakers", "West Lafayette", ["purdue"]],
+    [/\bmountaineers\b|\bwest virginia\b[^.]{0,25}\b(basketball|football|games?)\b/i, "Mountaineers", "Morgantown", ["west virginia"]],
+    [/\bhokies\b|\bvirginia tech\b/i, "Hokies", "Blacksburg", ["virginia tech"]],
+    [/\bgonzaga\b|\bzags\b/i, "Bulldogs", "Spokane", ["gonzaga"]],
+    [/\buconn\b/i, "Huskies", "Storrs", ["uconn", "connecticut"]],
+    [/\bred raiders\b|\btexas tech\b/i, "Red Raiders", "Lubbock", ["texas tech"]],
+    [/\bbaylor\b/i, "Bears", "Waco", ["baylor"]],
   ];
   for (const [re, nick, city, names] of college) out.push({ re, nick, city, names: [...names, nick.toLowerCase()], league: ["NCAAF", "NCAAM"], homePerRound: 0.5 });
   return out;
@@ -255,6 +280,27 @@ function leagueTeams(): (OwnTeam & { re: RegExp })[] {
 /** Teams named in a text, in order of first mention. */
 export function ownTeamsIn(text: string): OwnTeam[] {
   return OWN_TEAMS.map((t) => ({ t, i: text.search(t.re) })).filter((x) => x.i >= 0).sort((a, b) => a.i - b.i).map(({ t: { re: _re, ...t } }) => t);
+}
+
+/**
+ * ownTeamsIn + the home city's teams named by bare nickname in a sports sentence ("If the Pistons or Lions miss the playoffs"
+ * from a Detroit hotel: "Lions" alone is too common a word for ownTeamsIn, QA cycle 3). Order of first mention.
+ */
+export function ownTeamsInCity(text: string, city: string): OwnTeam[] {
+  const base = ownTeamsIn(text);
+  const c = city.split(",")[0].trim().toLowerCase();
+  if (!c) return base;
+  const sports = /playoffs?|games?|season|fans?|tickets|arena|stadium|field|home opener/i;
+  const extra: { t: OwnTeam; i: number }[] = [];
+  for (const { re: _re, ...t } of OWN_TEAMS) {
+    if (t.city.toLowerCase() !== c || base.some((b) => b.nick === t.nick && b.city === t.city)) continue;
+    const m = new RegExp(`\\b${t.nick.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).exec(text); // capitalised nickname only
+    if (!m) continue;
+    const sentence = text.slice(Math.max(0, text.lastIndexOf(".", m.index) + 1), text.indexOf(".", m.index) < 0 ? undefined : text.indexOf(".", m.index));
+    if (sports.test(sentence) || ownTeamsIn(sentence).length) extra.push({ t, i: m.index });
+  }
+  if (!extra.length) return base;
+  return [...base.map((t) => ({ t, i: text.search(OWN_TEAMS.find((o) => o.nick === t.nick && o.city === t.city)!.re) })), ...extra].sort((a, b) => a.i - b.i).map((x) => x.t);
 }
 
 /** Is this contract (by its meta) a future on one of `owns`? League-aware: "Houston" is the Rockets only in the NBA. */
@@ -288,7 +334,7 @@ export function stageWanted(text: string): FutureKind[] {
   if (/\bhost(s|ing)? a (home )?playoff|home playoff game/.test(s)) return ["round", "playoffs"];
   // a deep-run wording wins over "miss ... playoff": "Rockets miss deep playoff run" is about the conference finals
   if (/deep (playoff )?run|first round|round one|bounced|one and done|conference finals|(west|east)(ern)? (conference )?finals|run ends|knocked out|eliminated|early (playoff )?exit|second round|before the (finals|conference)/.test(s)) return ["round", "conference"];
-  if (/\bmiss(es|ing)?\b[^.]{0,20}\bplayoffs?\b|no playoffs|fail(s|ing)? to (make|reach|qualify)[^.]{0,20}playoffs?|out of the playoffs|playoff drought|don'?t make the playoffs|not make the playoffs/.test(s)) return ["playoffs", "wins", "division"];
+  if (/\bmiss(es|ing)?\b[^.]{0,30}\bplayoffs?\b|no playoffs|fail(s|ing)? to (make|reach|qualify)[^.]{0,20}playoffs?|out of the playoffs|playoff drought|don'?t make the playoffs|not make the playoffs/.test(s)) return ["playoffs", "wins", "division"];
   if (/losing season|win total|\bwins?\b.{0,12}\b(or fewer|under|below)\b/.test(s)) return ["wins", "playoffs"];
   if (/\b(title|championship|super bowl|stanley cup|finals)\b/.test(s)) return ["title", "conference"];
   return [];
@@ -324,8 +370,17 @@ export function futuresFallbackRisks(profile: BusinessProfile, markets: MarketCo
   if (!CROWD.test(text)) return [];
   // up to two teams (a wing shop that lives on Texans AND Cowboys Sundays), first-mentioned first; with a market list,
   // only teams that have a live season future (a risk nobody can hedge stays the LLM's call, not a canned fallback)
-  const live = (team: OwnTeam) => !markets.length || markets.some((c) => c.status === "open" && !!ownFutureTeam(contractMeta(c.id), [team]));
-  return ownTeamsIn(profile.description).filter(live).slice(0, 2).flatMap((team) => teamSeasonRisk(profile, team, markets, now));
+  // QA cycle 3: "If the Pistons or Lions miss the playoffs our bookings collapse" lost the Lions to a first-mentioned Red Wings
+  // risk nobody could buy: teams the owner ties to a loss come first, and a team whose protective NO is already likely
+  // (> 75c on every stage) takes no slot
+  const live = (team: OwnTeam) => !markets.length || markets.some((c) => {
+    if (c.status !== "open" || !ownFutureTeam(contractMeta(c.id), [team])) return false;
+    return c.noAsk === null || c.noAsk === undefined || c.noAsk <= 0.75;
+  });
+  const sentences = profile.description.split(/(?<=[.!?;])\s+/);
+  const named = (team: OwnTeam) => sentences.some((s) => LOSS_WORDS.test(s) && ownTeamsInCity(s, profile.city).some((t) => t.nick === team.nick && t.city === team.city));
+  const teams = ownTeamsInCity(profile.description, profile.city).map((t, i) => ({ t, i, w: named(t) ? 0 : 1 })).sort((a, b) => a.w - b.w || a.i - b.i).map((x) => x.t);
+  return teams.filter(live).slice(0, 2).flatMap((team) => teamSeasonRisk(profile, team, markets, now));
 }
 
 function teamSeasonRisk(profile: BusinessProfile, team: OwnTeam, markets: MarketContract[], now: Date): Omit<Risk, "id">[] {

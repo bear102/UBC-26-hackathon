@@ -236,6 +236,18 @@ export function underlyings(text: string): { key: string; group: string }[] {
 const perilFamily = (p: Peril): Peril[] => (p === "heat" || p === "cold" ? ["heat", "cold"] : p === "other" ? ["other", "natgas", "metals"] : [p, ...proxyPerils(p)]);
 const candidateVenues = (p: Peril): VenueId[] => (POLY_PERILS.includes(p) || PROXIES[p] ? ["gemini", "kalshi", "polymarket"] : ["gemini", "kalshi"]);
 
+/** Leagues of the one sport a text names ("football Saturdays" -> NFL/NCAAF); undefined when none or several. */
+export function sportLeagues(text: string): string[] | undefined {
+  const fb = /\bfootball\b/i.test(text), bb = /\bbasketball\b|\bhoops\b|march madness/i.test(text), hk = /\bhockey\b/i.test(text);
+  if (Number(fb) + Number(bb) + Number(hk) !== 1) return undefined;
+  return fb ? ["NFL", "NCAAF"] : bb ? ["NBA", "NCAAM"] : ["NHL"];
+}
+const NOT_PROPER = /^(home|away|team|game|games|night|nights|loses?|lost|loss|wins?|this|next|week|weekend|today|tonight|the|our|their|playoffs?|season|monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|june|july|august|september|october|november|december|rain|snow|cold|heat|crowd|fans?|local|big|bad|rival|college|pro|finale|opener|bowl)$/i;
+/** Capitalised words (4+ letters) a game risk names, minus calendar / generic words: "Kentucky", "Indiana". */
+export function properNouns(text: string): string[] {
+  return [...new Set((text.match(/\b[A-Z][a-zA-Z&.]{3,}\b/g) ?? []).filter((w) => !NOT_PROPER.test(w)))];
+}
+
 /** Pure ranking step of findCandidates over a given market universe (no network; used by the eval harness). */
 export function rankCandidates(risk: Risk, profile: BusinessProfile, universe: MarketContract[], limit = 15, nowDate = new Date()): MarketContract[] {
   const family = perilFamily(risk.peril), venues = candidateVenues(risk.peril);
@@ -255,9 +267,18 @@ export function rankCandidates(risk: Risk, profile: BusinessProfile, universe: M
   const cityName = (risk.location || profile.city).split(",")[0].trim();
   const riskOwn = risk.peril === "game" ? (ownTeamsIn(`${risk.title} ${risk.trigger}`).length ? ownTeamsIn(`${risk.title} ${risk.trigger}`)
     : ownTeamsIn(`${cityName} ${risk.title}. ${cityName} ${risk.trigger}`)) : []; // "Eagles" is ambiguous alone, "Philadelphia Eagles" is not
-  const lgOf = (riskOwn.length ? [...new Set(riskOwn.flatMap((t) => t.league))] : (leagueIn(`${risk.title} ${risk.trigger}`) ? [leagueIn(`${risk.title} ${risk.trigger}`)!] : []));
+  let lgOf = (riskOwn.length ? [...new Set(riskOwn.flatMap((t) => t.league))] : (leagueIn(`${risk.title} ${risk.trigger}`) ? [leagueIn(`${risk.title} ${risk.trigger}`)!] : []));
+  // the sport the owner names (QA cycle 4: a Pitt FOOTBALL lot got Pitt's basketball game): the risk's words, else the profile's
+  if (risk.peril === "game" && lgOf.length > 1) {
+    const sp = sportLeagues(`${risk.title} ${risk.trigger}`) ?? sportLeagues(profile.description);
+    const both = sp ? lgOf.filter((l) => sp.includes(l)) : [];
+    if (both.length) lgOf = both;
+  }
   const wantTeams = risk.peril === "game" && riskOwn.length && !teamsIn(`${risk.title} ${risk.trigger}`).length ? riskOwn.map((t) => ({ names: t.names, league: t.league }))
     : risk.peril === "game" ? teamsIn(`${risk.title} ${risk.trigger}`).length ? teamsIn(`${risk.title} ${risk.trigger}`) : teamsIn(text) : [];
+  // no known team at all: a game must at least name one of the risk's own proper nouns (QA cycle 4: "Kentucky loses a home
+  // game" was handed unrelated NBA games)
+  const proper = risk.peril === "game" && !wantTeams.length ? properNouns(`${risk.title} ${risk.trigger}`) : [];
   const target = triggerNumber(risk.trigger);
   const wantU = !["heat", "cold", "rain", "game"].includes(risk.peril) ? underlyings(`${risk.title} ${risk.trigger}`) : [];
   // "other" spans shutdowns, recessions, stock indexes...: the risk's own distinctive words pick the event ("Government shutdown on Dec 12")
@@ -282,10 +303,13 @@ export function rankCandidates(risk: Risk, profile: BusinessProfile, universe: M
     // time window
     const evStart = meta?.eventDate ?? (Number.isFinite(exp) ? centralDate(new Date(exp)) : win.start);
     const evEnd = meta?.eventEnd ?? evStart;
-    if (evEnd < win.start) continue;
+    // a national price printed just before a month / season window (Nov 30 gas for "fuel through December") is the nearest
+    // live measurement of that cost (QA cycle 3: "no live market for gas" while November gas and diesel strikes were live)
+    const early = evEnd < win.start && longWin && !local && risk.peril !== "game" && daysBetween(evEnd, win.start) <= 14;
+    if (evEnd < win.start && !early) continue;
     const gap = evStart > win.end ? daysBetween(win.end, evStart) : 0;
     if (gap > (longWin && winDays >= 30 ? (local ? 7 : 14) : local ? 3 : 45)) continue;
-    let s = 3 / (1 + gap / 2);
+    let s = 3 / (1 + gap / 2) - (early ? 1 : 0);
     if (longWin && risk.peril === "game" && !meta?.futureKind && (risk.horizon === "season" || win.kind === "season")) continue; // a playoff run is not next week's game
     if (longWin) {
       // a price / level printed at the end of the exposure (diesel on Dec 31 for "through December") is the horizon's own measurement
@@ -309,6 +333,7 @@ export function rankCandidates(risk: Risk, profile: BusinessProfile, universe: M
     }
     if (risk.peril === "game") {
       if (lgOf.length && meta?.league && !lgOf.includes(meta.league)) continue;
+      if (proper.length && !proper.some((w) => new RegExp(`\\b${w}\\b`, "i").test(`${c.eventTitle} ${c.label}`))) continue;
       const tm = wantTeams.length ? teamMatch(c, meta, wantTeams) : null;
       if (wantTeams.length && !tm) continue;
       if (tm === "self") s += 3; else if (tm === "opponent") s += 2;

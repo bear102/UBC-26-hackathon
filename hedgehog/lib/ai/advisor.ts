@@ -15,6 +15,8 @@ import {
 } from "./ideas";
 import { OWN_TEAMS, futuresFallbackRisks, futuresSide, leagueIn, ownTeamsIn, periodFallbackRisks, riskHorizon, stageWanted } from "./horizon";
 import { contractMeta } from "../markets/normalize";
+import { findEquivalent } from "../markets/compare";
+import { MIN_PAYOUT_USD } from "../markets/quote";
 import { noMarketReason, parametricEnabled } from "../markets/proxies";
 import { isLongContract, longUniverse, seasonCalendar } from "./longContext";
 import { settleDefaultPlan } from "./defaultPlan";
@@ -256,6 +258,63 @@ export function dedupeRisks<R extends Risk>(rs: R[], now = new Date()): R[] {
   return out;
 }
 
+/**
+ * Two risks whose recommended picks are the same market (same contract, or the same event on another venue) are one
+ * exposure (QA cycle 3: "Rain on Thanksgiving" + a proxy "Rain empties the patio" on the same contract; "Chiefs host a
+ * playoff game" + "Chiefs miss the playoffs" both landing on the playoff qualifier). The survivor is the risk whose wording
+ * names the stage the contract pays on (season futures), else the direct one, else the bigger loss. Mutates `choices`;
+ * returns the ids merged away.
+ */
+export function mergeSameMarketRisks(risks: Risk[], choices: Map<string, TieredLeg[]>, contracts: Map<string, MarketContract>): Set<string> {
+  const gone = new Set<string>();
+  const rec = (id: string) => { const l = choices.get(id)?.[0]; const c = l && contracts.get(l.contractId); return l && c ? { l, c } : null; };
+  const fits = (r: Risk, c: MarketContract) => { const k = contractMeta(c.id)?.futureKind; return k && stageWanted(`${r.title} ${r.trigger}`)[0] === k ? 0 : 1; };
+  for (let i = 0; i < risks.length; i++) {
+    const a = risks[i], ra = rec(a.id);
+    if (!ra || gone.has(a.id)) continue;
+    for (let j = i + 1; j < risks.length; j++) {
+      const b = risks[j], rb = rec(b.id);
+      if (!rb || gone.has(b.id) || a.peril !== b.peril) continue;
+      // ... or another strike of the same ladder (QA cycle 4: "Wet November" on ">5 in" and a proxy "very wet month" on ">6 in")
+      const ladder = a.peril !== "game" && ra.c.venue === rb.c.venue && !!ra.c.eventTicker && ra.c.eventTicker === rb.c.eventTicker && ra.l.side === rb.l.side;
+      const same = ra.c.id === rb.c.id || ladder || (ra.c.venue !== rb.c.venue && ra.l.side === rb.l.side
+        ? findEquivalent(ra.c, ra.l.side, [rb.c])?.match === "same" && findEquivalent(ra.c, ra.l.side, [rb.c])?.side === rb.l.side : false);
+      if (!same) continue;
+      const score = (r: Risk) => [fits(r, ra.c), r.kind === "proxy" ? 1 : 0, -r.lossUsd];
+      const [sa, sb] = [score(a), score(b)];
+      const keepA = sa[0] !== sb[0] ? sa[0] < sb[0] : sa[1] !== sb[1] ? sa[1] < sb[1] : sa[2] <= sb[2];
+      const [keep, drop] = keepA ? [a, b] : [b, a];
+      console.warn(`[advise] risk "${drop.title}" merged into "${keep.title}": same market`);
+      gone.add(drop.id); choices.delete(drop.id);
+      if (!keepA) break; // a is gone
+    }
+  }
+  return gone;
+}
+
+/**
+ * The default plan's choice for one risk, from its insurance-priced choices: the first free one (not a thin book), then
+ *  - a depth-capped pick yields to another rung covering 2x+ the contracts at a similar price (QA cycle 3: DEC-8 NO capped at
+ *    52 contracts on a $15,000 loss; the 12-inch Miami strike capped at 108 while 13 inches paid $286);
+ *  - a pick above COIN_FLIP_ASK yields to a funded cheap tail at <= 25c (QA cycle 3: a 52c monthly-rain line crowded out
+ *    8-10c tails and paid less than the Essentials package).
+ */
+export function pickPlanChoice(priced: QuoteLine[], free: (x: QuoteLine) => boolean, thin: (x: QuoteLine) => boolean, want: number): QuoteLine | undefined {
+  let c = priced.find((x) => free(x) && !thin(x)) ?? priced.find(free);
+  if (c && c.maxCoverable !== undefined) {
+    const c0 = c;
+    const deeper = priced.filter((x) => x !== c0 && free(x) && x.contracts >= 2 * c0.contracts && x.impliedProb <= Math.max(COIN_FLIP_ASK, c0.impliedProb + 0.05))
+      .sort((a, b) => b.contracts - a.contracts)[0];
+    if (deeper) c = deeper;
+  }
+  if (c && c.impliedProb > COIN_FLIP_ASK) {
+    const c0 = c;
+    const tail = priced.find((x) => x !== c0 && free(x) && x.tier === TIER_LABEL["cheap-tail"] && x.impliedProb <= 0.25 && x.contracts >= Math.min(want, MIN_PAYOUT_USD));
+    if (tail) c = tail;
+  }
+  return c;
+}
+
 /** Words that show the owner named a weather peril themselves. */
 const PERIL_WORDS: Partial<Record<string, RegExp>> = {
   cold: /\bcold|freez|frigid|chill|frost|winter|below \d+\s*°?\s*f?\b/i, heat: /\bheat|\bhot\b|scorch|summer|above 9\d|1[01]\d\s*°?f/i,
@@ -321,7 +380,26 @@ export function guardSide<L extends HedgeLeg>(risk: Risk, leg: L, c: MarketContr
   const b = labelBound(c.label);
   // the trigger's direction; a trigger with no direction word at all leaves the matcher's side alone (QA cycle 1: "S&P fails
   // to reach 8,000" read as "up" and flipped a correct NO into a YES that pays on a rally)
-  const down = DOWN_RE.test(risk.trigger), up = UP_RE.test(risk.trigger.replace(DOWN_RE, " "));
+  let down = DOWN_RE.test(risk.trigger), up = UP_RE.test(risk.trigger.replace(DOWN_RE, " "));
+  // a slowdown / recession is not hot inflation (QA cycle 5: "slowdown cuts wholesale orders" bought YES CPI above 3.7%)
+  if (/\b(slowdown|recession|downturn|layoffs?|weak(er)? (demand|economy))\b/i.test(`${risk.title} ${risk.trigger}`) && /\bcpi\b|inflation/i.test(`${c.eventTitle} ${c.id}`)
+    && (labelBound(c.label).dir === "up") === (leg.side === "yes")) return null;
+  // a compound trigger ("at least 3 inches of snow ... or several days below 30F"): the direction comes from the clause that
+  // names the contract's own measure; still mixed = the matcher's side stands (QA cycle 5: snow cover flipped to NO "Above 4 in")
+  if (down && up && risk.peril !== "heat" && risk.peril !== "cold") {
+    const measure = MEASURE_WORDS[c.peril] ?? MEASURE_WORDS[risk.peril];
+    const own = measure ? risk.trigger.split(/\s*(?:\bor\b|\band\b|[;,])\s*/i).filter((x) => measure.test(x)).join(" ") : "";
+    const d1 = DOWN_RE.test(own), u1 = UP_RE.test(own.replace(DOWN_RE, " "));
+    if (!own || d1 === u1) return leg;
+    down = d1; up = u1;
+  }
+  // an open-topped bucket: the market prices reaching its lower edge as unlikely and its top is 2x+ that edge, so the tail
+  // above it is remote (QA cycle 5: "10 or more snow days" vs YES "Indianapolis · 10-33 days" at 23c was "no market pays")
+  if (b.dir === "range" && leg.side === "yes" && openTopBucket(risk, c)) return leg;
+  // a bounded bucket ("7-19 days", "6-25 days") misses the extreme beyond its top: never cover for "too much" / a heavy tail,
+  // even when the trigger has no direction word (QA cycle 4: "high bucket (e.g. 20+ days)" bought YES "7-19 days")
+  if (b.dir === "range" && leg.side === "yes" && !down && (up || /\+|\bheavy\b|\bhigh\b|\bsnowy\b|\bwet\b|\bmore\b/i.test(`${risk.title} ${risk.trigger}`))
+    && risk.peril !== "heat" && risk.peril !== "cold") return null;
   if (risk.peril !== "heat" && risk.peril !== "cold" && !down && !up) return leg;
   // heat / cold follow the peril unless the trigger says the other way outright (QA cycle 2: a "warm night, low stays ABOVE
   // 32°F" risk filed as peril cold was flipped to YES on "31°F or below", which pays when the HVAC business does well)
@@ -334,7 +412,12 @@ export function guardSide<L extends HedgeLeg>(risk: Risk, leg: L, c: MarketContr
     // YES on a bucket only if the whole bucket is on the bad side of the trigger ("45-46°F" does not pay for "low <= 44°F")
     const [lo, hi] = (c.label.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
     const t = Number((risk.trigger.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/) ?? [])[0]);
+    // no threshold to check against: a bounded bucket misses the extreme case beyond it (QA cycle 3: YES "7-19 days" sold as
+    // heavy-snow cover pays nothing in a 20+ day winter); only a bucket starting at zero is safe for a "too little" risk
+    if (!Number.isFinite(t) && hi !== undefined) return !wantUp && lo <= 0 ? leg : null;
     if (!Number.isFinite(t) || hi === undefined) return leg;
+    // "too much": a bucket with a top never covers the tail above it (QA cycle 4: YES "6-25 days" for "6 or more snow days")
+    if (wantUp && risk.peril !== "heat") return null;
     return (wantUp ? lo >= t - 1 : hi <= t + 1) ? leg : null;
   }
   if (b.dir !== "up" && b.dir !== "down") return leg;
@@ -351,6 +434,26 @@ export function guardSide<L extends HedgeLeg>(risk: Risk, leg: L, c: MarketContr
   return { ...leg, side, rationale: `${leg.rationale} (Side corrected to ${side.toUpperCase()}: that is the side that pays when ${wantUp ? "it goes above" : "it stays below"} "${c.label}".)` };
 }
 
+const MEASURE_WORDS: Partial<Record<string, RegExp>> = { snow: /snow|inch/i, rain: /rain|inch|precip/i, gas: /gas|diesel|fuel|\$/i, oil: /oil|crude|brent|wti|\$/i };
+/** "N or more" / "at least N" in a "too much" trigger; null when the trigger has no such threshold. */
+export function upThreshold(text: string): number | null {
+  const m = text.replace(/,/g, "").match(/(\d+(?:\.\d+)?)\s*(?:\+|or more|or above|or higher)|\b(?:at least|more than|above|over)\s*(\d+(?:\.\d+)?)/i);
+  return m ? Number(m[1] ?? m[2]) : null;
+}
+/** YES on a bucket "lo-hi" for a "lo or more" risk when the market prices reaching lo as unlikely (<= 30c) and hi >= 2 lo. */
+export function openTopBucket(risk: Risk, c: MarketContract): boolean {
+  const t = upThreshold(risk.trigger);
+  const [lo, hi] = (c.label.replace(/,/g, "").match(/\d+(?:\.\d+)?/g) ?? []).map(Number);
+  return t !== null && hi !== undefined && lo > 0 && lo >= t - 1 && lo <= t + 1 && hi >= 2 * lo && c.yesAsk != null && c.yesAsk <= 0.3;
+}
+
+/** A "more snow" season risk whose only snow-day market for the city is a bucket from zero to a few days ("0-2 days"). */
+export function snowlessCity(risk: Risk, cands: MarketContract[]): boolean {
+  if (risk.peril !== "snow" || /\b(snowless|little|less|fewer|no snow|dry|mild|warm)\b/i.test(`${risk.title} ${risk.trigger}`)) return false;
+  const days = cands.filter((c) => /snow days/i.test(c.eventTitle));
+  return days.length > 0 && days.length === cands.length && days.every((c) => { const m = c.label.match(/(?:^|\D)0\s*[-–]\s*(\d+)/); return !!m && Number(m[1]) <= 6; });
+}
+
 /** Proxy / macro lines priced above this are near coin flips: offered as options, kept out of the default plan. */
 export const COIN_FLIP_ASK = 0.4;
 const COIN_FLIP_PERILS = new Set(["cpi", "fed", "gas", "oil", "natgas", "metals", "crypto"]);
@@ -361,6 +464,19 @@ export function ownTempThreshold(text: string, up: boolean): number | null {
   return m.length ? (up ? Math.min(...m) : Math.max(...m)) : null;
 }
 
+/**
+ * The default plan leaves out a line the owner would mostly prepay: >= PREPAY_ASK at the top of the book or at the walked
+ * price (QA cycle 3), and season / month cover above 50c, more likely than not (QA cycle 4: NO "host a playoff game" at 57c
+ * bought $355 of payout for $202 while a 48c line was dropped as a coin flip); a game loss above 50c is expected, not a tail
+ * (QA cycle 4 confirm run: NO Kentucky at 59c took 94% of a bar's budget).
+ */
+export function prepaidLine(r: { horizon?: Risk["horizon"]; peril?: Risk["peril"] } | undefined, x: Pick<QuoteLine, "impliedProb" | "pricePerContract">): boolean {
+  return x.impliedProb >= PREPAY_ASK - 1e-9 || (x.impliedProb >= 0.5 && x.pricePerContract >= PREPAY_ASK - 1e-9)
+    || ((r?.peril === "game" || (r?.horizon !== undefined && r.horizon !== "event")) && x.impliedProb > 0.5 + 1e-9);
+}
+
+/** A "cheap tail" choice costs at most this per $1; a pricier further strike is labelled "Further strike". */
+export const CHEAP_TAIL_MAX = 0.25;
 /** Above this ask the owner mostly prepays the payout: another choice at an insurance price is recommended instead. */
 export const PREPAY_ASK = 0.6;
 /** Above this ask (and no cheaper choice) the risk is "already likely" and left uncovered rather than prepaid. */
@@ -375,7 +491,8 @@ export function insuranceFirst<L extends HedgeLeg & { tier: string }>(legs: L[],
   const kept = legs.filter((l) => { const a = askFor(l, cands); return a == null || a <= ALREADY_LIKELY_ASK; });
   if (!kept.length) return [];
   const a0 = askFor(kept[0], cands);
-  if (a0 != null && a0 > PREPAY_ASK) {
+  // at or above PREPAY_ASK (QA cycle 3: a 0.60 top ask slipped past a strict ">" and took 99.9% of a budget)
+  if (a0 != null && a0 >= PREPAY_ASK - 1e-9) {
     const j = kept.findIndex((l, i) => { const a = askFor(l, cands); return i > 0 && l.tier !== "other-date" && a != null && a >= 0.03 && a <= PREPAY_ASK; });
     if (j > 0) { const [best] = kept.splice(j, 1); kept.unshift(best); }
     // no choice at an insurance price: a 60-75c sole pick mostly prepays the payout (QA cycle 2: NO 62c on one college
@@ -400,13 +517,15 @@ export function undominated<L extends HedgeLeg>(leg: L, cands: MarketContract[])
   const better = cands.filter((c) => {
     if (c.id === c0.id || c.eventTicker !== c0.eventTicker || c.status !== "open") return false;
     const b = labelBound(c.label), a = leg.side === "yes" ? c.yesAsk : c.noAsk;
-    if (b.dir !== b0.dir || b.v === null || a == null || a < 0.03 || a > a0 + 1e-9) return false;
+    // within 2c counts as "no more money" (QA cycle 4: "Above 8 in" at 28c kept over "Above 4 in" at 30c)
+    if (b.dir !== b0.dir || b.v === null || a == null || a < 0.03 || a > a0 + 0.02 + 1e-9) return false;
     return growsUp ? b.v > b0.v! : b.v < b0.v!;
-  }).sort((x, y) => ((leg.side === "yes" ? x.yesAsk : x.noAsk)! - (leg.side === "yes" ? y.yesAsk : y.noAsk)!));
+  }).sort((x, y) => ((leg.side === "yes" ? x.yesAsk : x.noAsk)! - (leg.side === "yes" ? y.yesAsk : y.noAsk)!)
+    || (growsUp ? labelBound(y.label).v! - labelBound(x.label).v! : labelBound(x.label).v! - labelBound(y.label).v!));
   const c = better[0];
   if (!c) return leg;
   const a = leg.side === "yes" ? c.yesAsk! : c.noAsk!;
-  return { ...leg, contractId: c.id, rationale: `${leg.rationale} (Switched to "${c.label}" at ${Math.round(a * 100)}¢: it pays in every case "${c0.label}" pays, and more, for no more money.)` };
+  return { ...leg, contractId: c.id, rationale: `${leg.rationale} (Switched to "${c.label}" at ${Math.round(a * 100)}¢: it pays in every case "${c0.label}" pays, and more, for ${a <= a0 + 1e-9 ? "no more money" : "about the same money"}.)` };
 }
 
 /** Deterministic pick used only if the matcher LLM is unreachable. Conservative: may return nothing. */
@@ -495,11 +614,26 @@ export function heuristicPick(risk: Risk, candidates: MarketContract[], busyDays
   return c ? { riskId: risk.id, contractId: c.id, side: "yes", rationale: `Pays if "${c.eventTitle}" resolves ${c.label}.`, basisRisk: `Threshold and date may not match the trigger exactly. ${note}` } : null;
 }
 
+/** The business runs its own vehicles / engines (a hotel whose guests drive in does not). */
+const OWN_FLEET = /\bdeliver|\bfleet\b|\bvans?\b|\btrucks?\b|\bsemis?\b|courier|\bhaul|\broutes?\b|\btractors?\b|generator|\bboats?\b|jet ?skis?|\bdrivers\b|\bmowers?\b|\bequipment\b|\bplows?\b/i;
+
+/** The owner's own fuel (QA cycle 2: gasoline trucks / jet skis hedged with diesel): the other fuel's contracts are dropped
+ *  when the owner names only one of them (crude, a driver of both, stays). Not strict: unchanged when nothing else is left. */
+export function ownFuel(cands: MarketContract[], description: string, strict = false): MarketContract[] {
+  const d = /diesel/i.test(description), g = /gasoline|\bgas\b|\bpetrol\b|pump prices?|jet ?skis?/i.test(description);
+  const other = d && !g ? /\b(gas(oline)?|aaa)\b/i : g && !d ? /diesel/i : null;
+  const keep = other ? cands.filter((c) => !other.test(`${c.eventTitle} ${c.id}`) || (d && /diesel/i.test(c.eventTitle))) : cands;
+  return keep.length || strict ? keep : cands;
+}
+
 /** Macro perils need a hook in the owner's own words (eval iter 4: the risk map kept adding "US gas prices" for a
  *  mortgage broker, a coffee cart and an online merch shop because a gas market exists). */
 const GROUNDING: Partial<Record<string, RegExp>> = {
-  gas: /fuel|\bgas\b|gasoline|diesel|petrol|\bvans?\b|truck|\bcars?\b|vehicle|\bdriv|deliver|\bmiles?\b|fleet|generator|equipment|haul|tractor|commut|courier|\broutes?\b|boat/i,
+  // word-bounded: "contractor" is not a tractor (QA cycle 3: every contractor got a diesel hedge)
+  gas: /fuel|\bgas\b|gasoline|diesel|petrol|\bvans?\b|\btrucks?\b|\bcars?\b|vehicle|\bdriv(e|es|er|ers|ing|en)\b|\bdeliver|\bmiles?\b|\bfleet|generator|equipment|\bhaul|\btractors?\b|commut|courier|\broutes?\b|\bboats?\b|jet ?skis?/i,
   fed: /loan|credit line|line of credit|credit card|mortgage|debt|financ|refi|interest|variable[- ]rate/i, // not bare "rates": "nightly rates" are prices
+  // metal prices only for a business that buys metal (QA cycle 3: copper hedges for asphalt roofers and a parcel fleet)
+  metals: /metal|copper|silver|\bgold\b|jewel|\bwir(e|es|ing)\b|flashing|gutters?|\bpipes?\b|plumb|electric(al|ian)|line[- ]sets?|scrap|\bsteel\b|alumin|bullion|smith/i,
   cpi: /inflation|food costs?|ingredient|milk|bean|menu|wholesale|supplier|input costs?|cost of goods|\bcpi\b|mortgage|chicken|beef|eggs?\b|produce/i,
 };
 GROUNDING.oil = GROUNDING.gas;
@@ -517,23 +651,64 @@ export function pastDated(r: { window: string; trigger: string; title: string; h
   // after ~5 pm the day is mostly over too (today's daily markets are already decided)
   return days.length > 0 && days.every((d) => d < today || (lateEvening && d === today));
 }
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+const HOLIDAY = /thanksgiving|christmas|new year'?s day|independence day|labor day|memorial day/i;
+/** A weekday-only business (crews, offices) does not work on public holidays: holiday weather costs it nothing. */
+export const weekdayOnly = (busyDays: string[]) => busyDays.length > 0 && busyDays.every((d) => WEEKDAYS.includes(d));
+/**
+ * A one-off weather risk dated only to days the business is not busy (QA cycle 3: "Cold Wednesday Nov 25" for Thu-Sat bars,
+ * Thanksgiving rain for a Mon-Fri roofing crew). Dates ("Nov 24-26") and weekday names count; no date = kept.
+ */
+export function offBusyDays(r: { peril: string; window?: string; trigger: string; title: string; horizon?: string }, busyDays: string[], today: string): boolean {
+  if (!["rain", "cold", "heat", "snow", "storm"].includes(r.peril) || (r.horizon && r.horizon !== "event") || !busyDays.length) return false;
+  const text = `${r.window ?? ""} ${r.title} ${r.trigger}`;
+  if (weekdayOnly(busyDays) && HOLIDAY.test(text)) return true;
+  const y = Number(today.slice(0, 4)), m0 = Number(today.slice(5, 7)) - 1;
+  const days = new Set<string>();
+  for (const m of text.matchAll(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:\s*[-–]\s*(\d{1,2})\b)?/gi)) {
+    const mi = MON.indexOf(m[1].toLowerCase().slice(0, 3)), yy = mi < m0 - 6 ? y + 1 : y;
+    const a = Number(m[2]), b = m[3] ? Math.min(Number(m[3]), a + 6) : a;
+    for (let d = a; d <= Math.max(a, b); d++) days.add(DOW[new Date(Date.UTC(yy, mi, d, 12)).getUTCDay()]);
+  }
+  // a calendar date is exact; weekday words count only without one (QA cycle 4: "Cold Saturday" titled over a "Tue Nov 24" trigger)
+  if (!days.size) for (const m of text.matchAll(/\b(sun|mon|tue|wed|thu|fri|sat)(?:day|nesday|sday|rsday|urday|s)?\b/gi)) days.add(m[1][0].toUpperCase() + m[1].slice(1, 3).toLowerCase());
+  // "weekend" only when no day is named ("Thanksgiving-week weekend run-up ... Wed Nov 25" is a Wednesday)
+  if (!days.size && /\bweekend\b/i.test(text)) { days.add("Sat"); days.add("Sun"); }
+  return days.size > 0 && ![...days].some((d) => busyDays.includes(d));
+}
+
 /** Regional markets need the region: ERCOT is the Texas grid (QA cycle 2: an ERCOT power trigger for a Phoenix car wash). */
 export function regionOk(r: { peril: string; trigger: string; title: string }, profile: BusinessProfile): boolean {
   if (!/\bercot\b|\btexas\b/i.test(`${r.title} ${r.trigger}`) || r.peril === "game") return true;
   return /\b(tx|texas)\b|austin|dallas|houston|san antonio|fort worth|el paso|lubbock|waco|corpus christi|arlington|plano/i.test(profile.city);
 }
 
+/**
+ * A trigger is a market-style condition, not commentary (QA cycle 4: "high at or above 40F on Mon Nov 23 (forecast 36F, so
+ * unlikely; no live market for that date)", "(Flood Watch, 44% chance of showers)", "(YES ~28c)"): asides about forecasts,
+ * odds, prices or markets are cut.
+ */
+export function cleanTrigger(t: string): string {
+  const aside = /forecast|\bchance\b|\d\s*%|unlikely|\blikely\b|\bmarkets?\b|\bnws\b|\bwatch\b|\bwarning\b|\badvisory\b|\d\s*(?:¢|cents\b|c\b)/i;
+  const out = t.trim()
+    .replace(/\s*\(([^)]*)\)/g, (m, inner: string) => (aside.test(inner) || /\b(YES|NO)\b/.test(inner) ? "" : m))
+    .replace(/\s*[;,–—-]\s+(?:forecast|currently|the market|markets?|no live market|priced|odds)\b[^;]*$/i, "")
+    .replace(/\s{2,}/g, " ").trim();
+  return out || t.trim();
+}
+
 function sanitizeRisks(raw: z.infer<typeof riskMapSchema>["risks"], profile: BusinessProfile, now = new Date()): Risk[] {
   // an event risk loses at most a week of revenue; a month / season risk (a playoff run, a soaked month) up to 30 days
   const capFor = (window: string) => Math.max(100, profile.avgDailyRevenueUsd * (riskHorizon({ window }, now) === "event" ? 7 : 30));
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(now);
-  const grounded = raw.filter((r) => groundedRisk(r.peril, profile) && !pastDated(r, today, Number(new Intl.DateTimeFormat("en-US", { timeZone: TZ, hour: "numeric", hourCycle: "h23" }).format(now)) >= 17) && regionOk(r, profile));
+  const grounded = raw.filter((r) => groundedRisk(r.peril, profile) && !pastDated(r, today, Number(new Intl.DateTimeFormat("en-US", { timeZone: TZ, hour: "numeric", hourCycle: "h23" }).format(now)) >= 17) && regionOk(r, profile)
+    && !offBusyDays({ ...r, horizon: riskHorizon(r, now) }, profile.busyDays, today));
   if (grounded.length < raw.length) console.warn(`[advise] dropped ungrounded risks: ${raw.filter((r) => !grounded.includes(r)).map((r) => r.title).join("; ")}`);
   return (grounded.length ? grounded : raw).slice(0, 5).map((r, i) => ({
     id: `r${i + 1}`,
     peril: r.peril,
     title: r.title.trim(),
-    trigger: r.trigger.trim(),
+    trigger: cleanTrigger(r.trigger),
     location: r.location.trim() || undefined,
     window: r.window.trim() || undefined,
     lossUsd: Math.max(10, Math.round(Math.min(r.lossUsd, capFor(r.window)) / 10) * 10),
@@ -585,18 +760,20 @@ Rules:
 - Return 3 to 5 risks, most material first.
 - Only objective, publicly settled events: official daily high/low temperature, rain, snowfall or snow days, a named team's game result, WTI/Brent oil, US gas or diesel price, natural gas, metals, Texas (ERCOT) power prices/peak demand (Texas businesses only), lake/river water levels, earthquakes, tornado counts, Fed decision, CPI print. Never "staff quits" or "bad review". ${parametricEnabled() ? 'Flood (river above flood stage), hail (1 inch+ nearby), wildfire (100+ acres nearby) and air quality (AQI above 150, peril "smoke") have no exchange market, but Hedgehog sells parametric cover on them (priced from public history, settled from USGS / NOAA / NIFC / AQI data): list them when they really threaten this business.' : 'Flood, hail, wildfire and air quality (peril "smoke") have no direct market: list them only when they really threaten this business. Code matches them to the closest real market (rain totals, river levels, tornado counts, a dry spell) with a basis-risk note, or marks them not coverable.'}
 - peril is one of: heat, cold, rain, snow, game, oil, gas (incl. diesel), natgas, metals, power, water, quake, storm, fed, cpi, crypto, flood, smoke (air quality), hail, wildfire, other.
-- trigger is plain English (no venue names or brackets) and reads like a market question with a concrete threshold or team, e.g. "Austin high >= 85°F on Sat Nov 22", "Spurs lose to the Lakers on Fri Nov 21". Use thresholds that fit the season and the owner's city.
+- trigger is plain English (no venue names, brackets, prices, odds or forecast numbers) and reads like a market question with a concrete threshold or team, on the busy day the owner names, e.g. "Austin high >= 85°F on Sat Nov 22", "Spurs lose to the Lakers on Fri Nov 21". Use thresholds that fit the season and the owner's city.
 - window: a single event = a date or range inside the next 7 days (dates are given). An exposure that piles up = the period the owner feels: "December", "through the 2026-27 NBA playoffs", "through the Jan 27 2027 FOMC" (the meeting before a loan reprices); use the Season calendar. horizon = event | month | season.
 - If the owner mentions a team, playoffs, a busy or booking season, monthly totals, fuel contracts, or a loan / lease / rate reset, include at least 1 month or season risk (see SEASON FUTURES & PERIOD MARKETS). Keep one-off days (a rainy Saturday, this week's game) as event risks.
-- Examples: Spurs bar -> "Spurs fail to reach the Western Conference finals" (~5 lost playoff nights); landscaper -> "Austin rain above 5 inches in December"; box-truck fleet -> "Diesel above $5.60 at the end of December"; mortgage broker -> "30-year mortgage rate tops 7% in 2027".
+- Examples: Spurs bar -> "Spurs fail to reach the Western Conference finals" (~5 lost playoff nights); landscaper -> "Austin rain above 5 inches in December"; box-truck fleet -> "Diesel above $5.60 at the end of the latest listed month"; mortgage broker -> "30-year mortgage rate tops 7% in 2027".
 - location is where the event is measured: "Austin", the team's city, or "US".
 - lossUsd = revenue lost (or extra cost) per occurrence for an event, grounded in the given average daily revenue and busy days; show the arithmetic in lossReasoning (e.g. "Sat ~1.5x avg = $6,300; 80% patio; -40% => ~$2,000"). One event should rarely exceed two days of revenue. Month / season window: lossUsd = the EXTRA loss in the bad scenario vs a normal one over the whole window (e.g. "~5 home playoff nights x $3,200 lift = $16,000").
 - confidence (0..1) = how sure you are that the event causes that loss.
 - Align triggers and windows with the LIVE MARKETS (same dates, thresholds and games), but write them in your own plain English: a trigger a live market settles beats a more precise one nobody trades. E.g. if a market asks where it will rain this weekend, write "Rain in Austin this weekend (Nov 21-22)", not ">= 0.25 in on Saturday". Use absolute price thresholds from the market labels, not "+$0.50". Daily weather markets often exist only for today/tomorrow; if the risky day has no market, still list the risk.
 - Prefer risks the LIVE MARKETS can hedge, but still include a material risk if no market is listed. Never stretch a one-off exposure (one game, one rainy day) into a season risk.
 - Relevance beats coverage: every risk must follow from something the owner said or an obvious trait of the business (outdoor seats, vans, a loan, crypto revenue, game-night crowds). A market existing is NOT a reason to list a risk: no fuel/gas-price risk unless the business buys meaningful fuel (vehicles, generators, equipment); no Fed/CPI risk unless it carries variable-rate debt or its revenue moves with rates/prices.
-- Weather risks must land on the owner's BUSY DAYS (or the days it operates). A weekend weather market does not hedge a Monday-Friday business: pick a weekday market or list the risk without one.
+- Weather risks must land on the owner's BUSY DAYS (or the days it operates); check each date's weekday in the Next 7 days list and name the busy day in the title (a Fri/Sat venue's weekend risk is "rainy Saturday", not Sunday). A weekend weather market does not hedge a Monday-Friday business: pick a weekday market or list the risk without one.
 - If a WEATHER FORECAST is given, weather risks follow it: a risky busy day in the forecast (rain >= 50%, a cold front, heat, an NWS alert) comes first, dated to that day, with the forecast in lossReasoning. A dry, mild week makes this week's weather risks less likely: keep them only if a market prices them cheaply, and prefer later dates or month totals.
+- A team the owner says fills the place gets its next game on a busy day as an event risk when a live market lists it, in the sport the owner names: never another sport's game or opponent (football Saturdays are never an NCAAM game) and no sport the owner did not mention.
+- Seasonal-demand businesses (heating fuel, snow removal, ski): list the warm or snowless month that cuts demand even when no market prices it.
 - Game-day answers: "more customers on game days" -> add the local team's game risks (the next game lost; a lot or stand at the stadium: the next HOME game, and a season risk such as missing the playoffs / CFP, i.e. fewer home game days); "fewer customers" or "no difference" -> no game risk. Fuel / propane costs "No" -> no fuel risk. Big events "No difference" -> no event risk.
 - If the owner answered quick questions, treat the answers as facts: use them to size losses (e.g. "mostly outdoor seating", "3 vans") and drop risks they rule out (no outdoor seating -> no patio-weather risk; no own vehicles -> no fuel risk; fixed-rate loan -> no Fed risk for the loan; game result doesn't matter -> no game risk).`;
 
@@ -612,7 +789,7 @@ Rules:
    - A season or month contract covers months, is bought once and can be sold before it settles; never cover a season or month risk with a single game or day.
    - "Rates stay high / no cut": a hold AND a hike both hurt; YES on a funds-rate level "above X%" pays in both, "maintains" alone misses a hike.
    - Weather: the contract's day or period must be the risk's day(s); one day never covers a weekend, a Thursday never covers Fri/Sat.
-3. Prefer: date inside the risk window, threshold closest to the trigger, ask between 0.05 and 0.85, ideally 0.10-0.50. An ask above ~0.60 means the bad outcome is already likely, so the owner mostly prepays the payout: make the further-out strike the "recommended" pick and offer the pricey one as "broad". Prefer gemini contracts when they are otherwise equal or close in price (Gemini = our primary venue; kalshi only when Gemini lacks the market). Polymarket candidates are buyable too (best price wins), but prefer gemini/kalshi when prices are close. A candidate with "proxy:" is the closest real market for a risk no market lists directly: pick it only if the note fits the loss, take the side the note describes, and put the note in basisRisk.${parametricEnabled() ? " hedgehog candidates are Hedgehog parametric cover (flood, hail, wildfire, air quality; YES pays when the trigger happens, priced from local history): buyable, use them for those risks." : ""}
+3. Prefer: date inside the risk window and on the owner's busy days (a weekend market beats a month total for a weekend-only business), threshold closest to the trigger, ask between 0.05 and 0.85, ideally 0.10-0.50. An ask above ~0.60 means the bad outcome is already likely, so the owner mostly prepays the payout: make the further-out strike the "recommended" pick and offer the pricey one as "broad". Prefer gemini contracts when they are otherwise equal or close in price (Gemini = our primary venue; kalshi only when Gemini lacks the market). Polymarket candidates are buyable too (best price wins), but prefer gemini/kalshi when prices are close. A candidate with "proxy:" is the closest real market for a risk no market lists directly: pick it only if the note fits the loss, take the side the note describes, and put the note in basisRisk.${parametricEnabled() ? " hedgehog candidates are Hedgehog parametric cover (flood, hail, wildfire, air quality; YES pays when the trigger happens, priced from local history): buyable, use them for those risks." : ""}
 4. Imperfect is OK: if a contract pays in most of the scenarios where the loss happens (e.g. "rain this weekend" for "rain Saturday", a nearby threshold, the same team's next game), pick it and explain the gap in basisRisk.
 5. Give the owner CHOICES. For each risk return 1 to 3 picks:
    - picks[0] tier "recommended": the best hedge.
@@ -736,15 +913,27 @@ export async function advise(owner: BusinessProfile, opts: AdviseOpts = {}): Pro
       risks = keep.map((r, i) => ({ ...r, id: `r${i + 1}` }));
     }
   }
-  const dontHedge = new Set(naturalHedges.filter((n) => n.advice === "dont-hedge" && PERIL_WORDS[n.peril]).map((n) => n.peril));
+  // any peril but games ("Spurs wins already pay you" says nothing about a loss): high gas prices that HELP a pawn shop mean no
+  // gas idea (QA cycle 4: "Gas prices squeeze customer spending" bought next to the advisor's own "don't hedge gas")
+  const dontHedge = new Set(naturalHedges.filter((n) => n.advice === "dont-hedge" && n.peril !== "game").map((n) => n.peril));
   const addIdeas = (xs: Idea[]) => {
     for (const idea of xs) {
       // the same grounding as the risk map (QA cycle 2: Fed / CPI ideas for businesses with no loan; cold cover next to
       // "don't hedge cold" advice)
-      if (!groundedRisk(idea.risk.peril, profile) && (FAMILY[idea.risk.peril] === "rates" || idea.risk.correlation === "weak")) { console.warn(`[advise] idea "${idea.risk.title}" dropped: not grounded in the owner's words`); continue; }
+      if (!groundedRisk(idea.risk.peril, profile) && (FAMILY[idea.risk.peril] === "rates" || idea.risk.peril === "metals" || idea.risk.correlation === "weak"
+        // a fuel idea about the business's own vehicles the owner never mentioned (QA cycle 3: "diesel for truck and dump
+        // costs" for a roofer); a supplier surcharge story (keg delivery off Brent) can stand
+        || (FAMILY[idea.risk.peril] === "fuel" && /\b(trucks?|vans?|fleet|dump|vehicles?|equipment|crews?)\b/i.test(`${idea.risk.title} ${idea.risk.causalStory ?? ""}`)))
+        // a story about the business's own driving with no fleet in the owner's words (QA cycle 4: "every delivery mile costs
+        // more" for a hotel)
+        // (a supplier's delivery surcharge is not the owner's driving)
+        || (FAMILY[idea.risk.peril] === "fuel" && /\bdelivery (miles?|vans?|trucks?|routes?|drivers?|runs?)\b|\bour (vans?|trucks?|fleet|vehicles?|deliver\w*)\b|\bfleet\b|\bmiles?\b/i.test(`${idea.risk.title} ${idea.risk.causalStory ?? ""}`) && !OWN_FLEET.test(owner.description))) { console.warn(`[advise] idea "${idea.risk.title}" dropped: not grounded in the owner's words`); continue; }
+      // a one-off weather idea on a day the business is not busy (QA cycle 4: Thanksgiving-Thursday rain for a Fri/Sat bar)
+      if (offBusyDays({ ...idea.risk, horizon: riskHorizon(idea.risk, now) }, profile.busyDays, new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(now))) { console.warn(`[advise] idea "${idea.risk.title}" dropped: not on a busy day`); continue; }
       if (dontHedge.has(idea.risk.peril) && !risks.some((r) => r.peril === idea.risk.peril)) { console.warn(`[advise] idea "${idea.risk.title}" dropped: natural hedge says don't hedge ${idea.risk.peril}`); continue; }
       const dup = [...risks, ...kept.map((k) => k.risk)].find((r) => sameExposureX(idea.risk, r) || sameFamily(idea.risk, r));
       if (dup) { console.warn(`[advise] idea "${idea.risk.title}" dropped: same exposure as "${dup.title}"`); continue; }
+      idea.risk.trigger = cleanTrigger(idea.risk.trigger); // ideas too (confirm run: "Government shutdown ... (priced about 28 cents)")
       kept.push(idea);
     }
   };
@@ -760,6 +949,7 @@ export async function advise(owner: BusinessProfile, opts: AdviseOpts = {}): Pro
   const contracts = new Map<string, MarketContract>();
   const uncovered: { riskId: string; reason: string }[] = [];
   const candsByRisk = new Map<string, MarketContract[]>();
+  const noExposure = new Set<string>();
   await Promise.all(risks.map(async (risk) => {
     let cands: MarketContract[] = [];
     try {
@@ -771,19 +961,51 @@ export async function advise(owner: BusinessProfile, opts: AdviseOpts = {}): Pro
       const want = monthsNamed(`${risk.title} ${risk.trigger} ${risk.window ?? ""}`);
       if (want.size === 1) {
         const before = cands.length;
+        const all0 = cands;
         cands = cands.filter((c) => { const have = monthsNamed(`${c.eventTitle} ${c.label}`); return !have.size || [...have].some((m) => want.has(m)); });
+        // an ongoing cost (fuel, metals, gas bills) with no market for that month yet: the latest month-end print before it is
+        // the nearest live measure (QA cycle 3: a gasoline fleet's #1 risk left uncovered while November gas strikes were live)
+        if (before && !cands.length && COST_PERILS.has(risk.peril)) {
+          const prev = ([...want][0] + 11) % 12;
+          cands = all0.filter((c) => monthsNamed(`${c.eventTitle} ${c.label}`).has(prev));
+        }
         if (before && !cands.length) {
-          uncovered.push({ riskId: risk.id, reason: `No ${MONTH_NAMES[[...want][0]]} market is listed yet; venues usually open the next month near month-end.` });
+          // the current month has no "not listed yet" excuse (QA cycle 4: "No November market is listed yet" on Nov 20)
+          const m = [...want][0], cur = Number(new Intl.DateTimeFormat("en-US", { timeZone: TZ, month: "numeric" }).format(now)) - 1;
+          uncovered.push({ riskId: risk.id, reason: m === cur
+            ? noMarketReason(risk.peril, `${risk.location ? ` in ${risk.location}` : ""} (${risk.window ?? MONTH_NAMES[m]})`)
+            : `No ${MONTH_NAMES[m]} market is listed yet; venues usually open the next month near month-end.` });
           return;
         }
       }
       // the owner's own fuel (QA cycle 2: gasoline trucks / jet skis hedged with diesel): drop the other fuel's contracts when
       // the owner names only one of them
+      // a direct fuel risk too: only diesel listed for a gasoline truck is not its fuel (QA cycle 5: a food truck's "gas for the
+      // generator and the truck" bought year-end diesel)
       if (risk.peril === "gas") {
-        const d = /diesel/i.test(owner.description), g = /gasoline|\bgas\b|\bpetrol\b|pump prices?|jet ?skis?/i.test(owner.description);
-        const other = d && !g ? /\b(gas(oline)?|aaa)\b/i : g && !d ? /diesel/i : null;
-        const keep = other ? cands.filter((c) => !other.test(`${c.eventTitle} ${c.id}`) || (d && /diesel/i.test(c.eventTitle))) : cands;
-        if (keep.length) cands = keep;
+        const k = ownFuel(cands, owner.description, true);
+        if (cands.length && !k.length) { uncovered.push({ riskId: risk.id, reason: "Only the other fuel's price markets fit this window; they don't track what you buy." }); return; }
+        cands = k;
+      }
+      // a weekday-only business is closed on the holiday: Thanksgiving-day weather is not its loss (QA cycle 3)
+      if (["rain", "cold", "heat", "snow"].includes(risk.peril) && weekdayOnly(profile.busyDays)) {
+        const before = cands.length;
+        cands = cands.filter((c) => !HOLIDAY.test(c.eventTitle));
+        if (before && !cands.length) {
+          uncovered.push({ riskId: risk.id, reason: "The only market is for the holiday itself, when your crews don't work." });
+          return;
+        }
+      }
+      // one-day weather: the contract's day must be one the risk names (QA cycle 4: a Saturday cold risk offered Friday's low;
+      // a Wednesday rain risk priced off the Thanksgiving Thursday market)
+      if (["rain", "cold", "heat", "snow"].includes(risk.peril) && riskHorizon(risk, now) === "event") {
+        const before = cands.length;
+        cands = cands.filter((c) => weatherDayFits(risk, c, now, profile.busyDays));
+        if (before && !cands.length) {
+          const days = namedDays(`${risk.title} ${risk.trigger} ${risk.window ?? ""}`, now).map((d) => new Date(d).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" }));
+          uncovered.push({ riskId: risk.id, reason: `No live market for ${risk.peril} on ${days.join(" / ") || "that day"}${risk.location ? ` in ${risk.location}` : ""}; the listed ones are for other days.` });
+          return;
+        }
       }
       // one game: the contract's game day must be the risk's (QA cycle 2: a "Sun Nov 29" risk bought the Nov 26 game) and,
       // for a business tied to the stadium (parking, tailgates), a home game
@@ -814,8 +1036,20 @@ export async function advise(owner: BusinessProfile, opts: AdviseOpts = {}): Pro
       uncovered.push({ riskId: risk.id, reason: noMarketReason(risk.peril, `${risk.location ? ` in ${risk.location}` : ""} ${risk.window ? `(${risk.window})` : "this week"}`) });
       return;
     }
+    // a snowy-winter risk where the city's own snow-day market is a bucket from zero ("Houston · 0-2 days"): snow days are
+    // near zero there, so it is not a real exposure (QA cycle 5: "winter freeze-day season cover" for Austin and Houston)
+    if (snowlessCity(risk, cands)) { noExposure.add(risk.id); return; }
     candsByRisk.set(risk.id, cands);
   }));
+  if (noExposure.size) {
+    console.warn(`[advise] dropped snow risks in near-snowless cities: ${risks.filter((r) => noExposure.has(r.id)).map((r) => r.title).join("; ")}`);
+    const keep = risks.filter((r) => !noExposure.has(r.id));
+    const ren = new Map(keep.map((r, i) => [r.id, `r${i + 1}`]));
+    const cs0 = new Map(candsByRisk); candsByRisk.clear();
+    for (const [id, cs] of cs0) if (ren.has(id)) candsByRisk.set(ren.get(id)!, cs);
+    for (let i = uncovered.length - 1; i >= 0; i--) { const id = ren.get(uncovered[i].riskId); if (id) uncovered[i].riskId = id; else uncovered.splice(i, 1); }
+    risks = keep.map((r) => ({ ...r, id: ren.get(r.id)! }));
+  }
   // a creative idea naming one month ("December CPI") gets that month's contracts only, like the direct risks (QA cycle 1)
   const sameMonth = (r: Risk, cs: MarketContract[]) => {
     const want = monthsNamed(`${r.title} ${r.trigger} ${r.window ?? ""}`);
@@ -823,9 +1057,11 @@ export async function advise(owner: BusinessProfile, opts: AdviseOpts = {}): Pro
   };
   const ideaCands = await Promise.all(kept.map(async (idea) => {
     let base: MarketContract[] = [];
-    if (idea.fixed) return sameMonth(idea.risk, idea.fixed.filter((c) => c.status === "open" && (c.yesAsk !== null || c.noAsk !== null))).slice(0, 10);
+    // ideas too (QA cycle 5: a food truck that buys gasoline and BBQ vans burning "400 gallons of gas" got year-end diesel)
+    const fuel = (cs: MarketContract[]) => (idea.risk.peril === "gas" || idea.risk.peril === "oil" ? ownFuel(cs, owner.description, true) : cs);
+    if (idea.fixed) return fuel(sameMonth(idea.risk, idea.fixed.filter((c) => c.status === "open" && (c.yesAsk !== null || c.noAsk !== null)))).slice(0, 10);
     try { base = await deps.findCandidates(idea.risk, profile, 12); } catch { /* fall back to the catalog */ }
-    return sameMonth(idea.risk, filterIdeaCandidates(idea, base, all, now.getTime())).slice(0, 10);
+    return fuel(sameMonth(idea.risk, filterIdeaCandidates(idea, base, all, now.getTime()))).slice(0, 10);
   }));
   const anyIdeaMarket = ideaCands.some((c) => c.length);
   const ideaRisks: Risk[] = [];
@@ -907,13 +1143,40 @@ export async function advise(owner: BusinessProfile, opts: AdviseOpts = {}): Pro
         legs = [h];
       }
       legs = legs.map((l) => undominated(l, cands)).filter((l, i, a) => a.findIndex((x) => x.contractId === l.contractId) === i);
-      const priced = insuranceFirst(ladderChoices(legs[0], cands, legs, 3), cands);
+      legs = busyDaysFirst(risk, legs, cands, profile.busyDays, now);
+      // a "cheap tail" above 25c is not cheap (QA cycle 4: 29c diesel at the money, 39c Pittsburgh snow): call it a further strike
+      const priced = insuranceFirst(ladderChoices(legs[0], cands, legs, 3), cands)
+        .map((l) => (l.tier === "cheap-tail" && (askFor(l, cands) ?? 0) > CHEAP_TAIL_MAX ? { ...l, tier: "further-strike" } : l));
       if (!priced.length) {
         const a = askFor(legs[0], cands);
-        uncovered.push({ riskId: risk.id, reason: `Already likely: ${legs[0].side.toUpperCase()} costs ${a != null ? `${Math.round(a * 100)}¢` : "too much"} per $1, so you would mostly prepay the payout. Not worth insuring at this price.` });
+        uncovered.push({ riskId: risk.id, reason: a != null && a <= ALREADY_LIKELY_ASK
+          ? `Priced near a coin flip: ${legs[0].side.toUpperCase()} costs ${Math.round(a * 100)}¢ per $1, so you would mostly prepay the payout. Not worth insuring at this price.`
+          : `Already likely: ${legs[0].side.toUpperCase()} costs ${a != null ? `${Math.round(a * 100)}¢` : "too much"} per $1, so you would mostly prepay the payout. Not worth insuring at this price.` });
         continue;
       }
       choicesByRisk.set(risk.id, priced);
+    }
+  }
+
+  // an "other" risk matched to an unrelated event is a weak proxy, never direct cover (QA cycle 3: "Thanksgiving break student
+  // exodus" rewritten onto a government-shutdown contract, labelled direct, took the whole budget)
+  for (const r of risks) {
+    const l = choicesByRisk.get(r.id)?.[0], c = l && contracts.get(l.contractId);
+    if (r.kind === "proxy" || r.peril !== "other" || !c) continue;
+    const ws = (t: string) => new Set((t.toLowerCase().match(/[a-z]{5,}/g) ?? []).filter((w) => !["above", "below", "price", "prices", "before", "after", "during", "until", "which", "there", "their", "would"].includes(w)));
+    const mine = ws(r.title), theirs = ws(`${c.eventTitle} ${c.label}`);
+    if (![...mine].some((w) => theirs.has(w) || [...theirs].some((x) => x.startsWith(w.slice(0, 5))))) {
+      console.warn(`[advise] ${r.id} "${r.title}": matched to unrelated "${c.eventTitle}", kept as a weak proxy`);
+      Object.assign(r, { kind: "proxy", correlation: "weak", causalStory: r.causalStory ?? `Only loosely linked: "${c.eventTitle}" does not measure this loss.` });
+    }
+  }
+
+  // one risk per market (QA cycle 3: "Rain on Thanksgiving" twice, "Chiefs miss the playoffs" bought on Gemini AND Kalshi)
+  {
+    const gone = mergeSameMarketRisks(risks, choicesByRisk, contracts);
+    if (gone.size) {
+      risks = risks.filter((r) => !gone.has(r.id));
+      for (let i = uncovered.length - 1; i >= 0; i--) if (gone.has(uncovered[i].riskId)) uncovered.splice(i, 1);
     }
   }
 
@@ -946,6 +1209,7 @@ export async function advise(owner: BusinessProfile, opts: AdviseOpts = {}): Pro
   // ... nor one strike ladder (QA cycle 2: Dec snow ">4 in" for one risk and ">6 in" for a proxy of the same exposure)
   const ladderKey = (x: QuoteLine) => (x.contract.peril === "game" ? x.contractId : `ladder:${x.contract.venue}:${x.contract.eventTicker}`);
   const sameMarket: { riskId: string; owner: string }[] = [];
+  const usedLines: QuoteLine[] = [];
   const rOf = (id: string) => risks.find((r) => r.id === id);
   // direct risks first, then the bigger loss (QA cycle 2: a proxy duplicate claimed the recession contract, then lost it to the budget)
   const byLoss = [...options].sort((a, b) => (rOf(a.riskId)?.kind === "proxy" ? 1 : 0) - (rOf(b.riskId)?.kind === "proxy" ? 1 : 0)
@@ -959,19 +1223,26 @@ export async function advise(owner: BusinessProfile, opts: AdviseOpts = {}): Pro
     const thin = (x: QuoteLine) => r0?.horizon !== undefined && x.maxCoverable !== undefined && x.contracts < Math.min(0.25 * want, 25);
     // a loose proxy or a macro bet near a coin flip is a wager, not insurance: options only (QA cycle 2: CPI YES 45c, diesel 45c)
     const coinFlip = (x: QuoteLine) => (r0?.kind === "proxy" || COIN_FLIP_PERILS.has(r0?.peril ?? "")) && x.impliedProb > COIN_FLIP_ASK;
-    const free = (x: QuoteLine) => !usedBy.has(x.contractId) && !usedBy.has(ladderKey(x));
-    const priced = o.choices.filter((x) => !coinFlip(x));
+    // the same event on another venue is the same market (QA cycle 3: Chiefs miss-playoffs bought on Gemini and Kalshi)
+    const twin = (x: QuoteLine) => usedLines.some((u) => u.contract.venue !== x.contract.venue && findEquivalent(u.contract, u.side, [x.contract])?.match === "same");
+    const free = (x: QuoteLine) => !usedBy.has(x.contractId) && !usedBy.has(ladderKey(x)) && !twin(x);
+    // judged on the price actually paid at this size, not the top of the book (QA cycle 3: a 0.60 ask walked to 61c)
+    // (the option was sized without a budget, so its average only counts once the top of the book is already ~50c)
+    const prepaid = (x: QuoteLine) => prepaidLine(r0, x);
+    const priced = o.choices.filter((x) => !coinFlip(x) && !prepaid(x));
     if (!priced.length) {
-      uncovered.push({ riskId: o.riskId, reason: `Priced near a coin flip (${Math.round(o.choices[0].impliedProb * 100)}¢ per $1) for a loose link to your loss: shown as an option, not put in the plan.` });
+      uncovered.push({ riskId: o.riskId, reason: o.choices.every(prepaid) && !o.choices.some(coinFlip)
+        ? `Priced near a coin flip (${Math.round(Math.max(o.choices[0].pricePerContract, o.choices[0].impliedProb) * 100)}¢ per $1 at this size): you would mostly prepay the payout, so it is shown as an option, not put in the plan.`
+        : `Priced near a coin flip (${Math.round(o.choices[0].impliedProb * 100)}¢ per $1) for a loose link to your loss: shown as an option, not put in the plan.` });
       continue;
     }
-    const c = priced.find((x) => free(x) && !thin(x)) ?? priced.find(free);
+    const c = pickPlanChoice(priced, free, thin, want);
     if (!c) {
       const used = priced.map((x) => usedBy.get(x.contractId) ?? usedBy.get(ladderKey(x))).find((x) => x);
       sameMarket.push({ riskId: o.riskId, owner: used ?? "" });
       continue;
     }
-    usedBy.set(c.contractId, c.riskId); usedBy.set(ladderKey(c), c.riskId);
+    usedBy.set(c.contractId, c.riskId); usedBy.set(ladderKey(c), c.riskId); usedLines.push(c);
     defaultLegs.push({ riskId: c.riskId, contractId: c.contractId, side: c.side, rationale: c.rationale, basisRisk: c.basisRisk });
   }
   for (const [rid, legs] of choicesByRisk) {
@@ -1012,10 +1283,10 @@ export async function advise(owner: BusinessProfile, opts: AdviseOpts = {}): Pro
     naturalHedges,
     ...(opts.answers ? { clarifications: answers } : {}),
   };
-  quote.packages = buildPackages(quote, coveragePct);
+  quote.packages = buildPackages(quote, coveragePct, (x) => { const r = rOf(x.riskId); return prepaidLine(r, x) || ((r?.kind === "proxy" || COIN_FLIP_PERILS.has(r?.peril ?? "")) && x.impliedProb > COIN_FLIP_ASK); });
   // QA #4: the plan shown first IS Plan B (the AI's picks, sized like the plan switcher); skip-priced lines stay out
   settleDefaultPlan(quote, coveragePct as Coverage, new Map(defaultLegs.map((l) => [l.riskId, l.contractId])));
-  marketWordedTriggers(risks, quote.lines);
+  marketWordedTriggers(risks, quote.lines, quote.options);
   attachForecast(quote, fc); // forecast vs market on weather lines (QuoteLine.forecast)
 
   // (5) summary
@@ -1024,7 +1295,7 @@ export async function advise(owner: BusinessProfile, opts: AdviseOpts = {}): Pro
     try {
       const { data, model } = await deps.llm({
         tier: "fast",
-        system: "You write a 2-3 sentence plain-English summary of a hedge quote for a small-business owner. Use the exact numbers given. Mention one creative hedge they might not have thought of ONLY if one is listed in the facts (never invent business advice or hedges that are not in the facts), and any natural hedge. Be honest about what is not covered and about basis risk. Name every line in the facts as 'costs $X, pays $Y if ...', and say when market depth caps a line. Creative proxy hedges are loose links, never 'strong'. No hype, no bullet points.",
+        system: "You write a 2-3 sentence plain-English summary of a hedge quote for a small-business owner. Use the exact numbers given. Mention one creative hedge they might not have thought of ONLY if one is listed in the facts (never invent business advice, business lines or hedges that are not in the facts; quote strikes and prices only as the facts give them), and any natural hedge. Be honest about what is not covered and about basis risk. Name every line in the facts as 'costs $X, pays $Y if ...', and say when market depth caps a line. Never mention analysts or internal steps. Creative proxy hedges are loose links, never 'strong'. No hype, no bullet points.",
         schema: summarySchema,
         prompt: `${pb}\n\nQUOTE FACTS:\n${quoteFacts(quote)}\n\nReturn {"summary":"..."}.`,
         timeoutMs: 15_000,
@@ -1088,7 +1359,63 @@ export function monthsNamed(text: string): Set<number> {
   return out;
 }
 
-const VENUE_BOUND = /parking|tailgat|concession|stadium lot|game-?day lot/i;
+// parking / tailgates / concessions, and retail "a block from Lambeau Field" or "busy on home games" (QA cycle 4: a Green Bay
+// fan shop hedged the Packers' road game at the Rams)
+const VENUE_BOUND = /\b(block|blocks|steps|walk|across|next door|next to|near|by|outside)\b[^.]{0,30}(\b(stadium|arena|ballpark|coliseum|dome)\b|\b[A-Z][a-z]+ (Field|Stadium|Arena|Center|Park)\b)/;
+const VENUE_BOUND_I = /parking|tailgat|concession|stadium lot|game-?day lot/i;
+/** Business whose game-day crowd is physically at the stadium (a lot, a stand, a shop next door); a bar showing away games on TV is not. */
+export function venueBound(description: string): boolean {
+  if (VENUE_BOUND_I.test(description)) return true;
+  if (/\bbars?\b|\bpub\b|tavern|taphouse|watch part|\bTVs?\b|screens?\b|sports bar/i.test(description)) return false;
+  return VENUE_BOUND.test(description) || /\bhome games?\b/i.test(description);
+}
+
+/**
+ * A business open only a few days (weekends) is hedged by a market on THOSE days before a month total that also counts the
+ * days it is closed (QA cycle 4: a weekend-only paddle dock got November's rain total; the Nov 21-22 weekend market inside its
+ * window was shown as "Other date"). Only when the risk names its days and the busy-day market falls on them.
+ */
+export function busyDaysFirst<L extends HedgeLeg & { tier: string }>(risk: Risk, legs: L[], cands: MarketContract[], busyDays: string[], now = new Date()): L[] {
+  if (!["rain", "cold", "heat", "snow"].includes(risk.peril) || legs.length < 2 || !busyDays.length || busyDays.length > 3) return legs;
+  if (!namedDays(`${risk.title} ${risk.trigger} ${risk.window ?? ""}`, now).length) return legs;
+  const span = (l: L) => { const m = contractMeta(l.contractId); return m?.eventDate && m.eventEnd ? daysBetweenIso(m.eventDate, m.eventEnd) : 0; };
+  if (span(legs[0]) < 7) return legs;
+  const j = legs.findIndex((l, i) => {
+    const c = cands.find((x) => x.id === l.contractId), d = c && marketDays(c);
+    return i > 0 && !!c && !!d && d.every((x) => busyDays.includes(x)) && weatherDayFits(risk, c, now, busyDays) && (askFor(l, cands) ?? 1) <= PREPAY_ASK;
+  });
+  if (j < 0) return legs;
+  const out = [...legs];
+  const [best] = out.splice(j, 1);
+  return [{ ...best, tier: "recommended" }, { ...out[0], tier: "broad" }, ...out.slice(1)];
+}
+const daysBetweenIso = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
+
+/** Calendar days (UTC noon ms) a risk names: "Nov 21", "Nov 21-22", "Nov 19 - 30" (ranges capped at 14 days). */
+export function namedDays(text: string, now = new Date()): number[] {
+  const y = now.getUTCFullYear(), out: number[] = [];
+  for (const m of text.matchAll(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:\s*[-–]\s*(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+)?(\d{1,2})\b)?/gi)) {
+    const mi = MON.indexOf(m[1].toLowerCase().slice(0, 3)), yy = mi < now.getUTCMonth() - 6 ? y + 1 : y;
+    const a = Number(m[2]), b = m[3] ? Number(m[3]) : a;
+    const last = b >= a ? Math.min(b, a + 14) : a;
+    for (let d = a; d <= last; d++) out.push(Date.UTC(yy, mi, d, 12));
+  }
+  return [...new Set(out)];
+}
+
+/** A one-day / weekend weather contract fits an event risk only on a day the risk names; longer contracts (month totals) pass. */
+export function weatherDayFits(risk: Risk, c: MarketContract, now = new Date(), busyDays: string[] = []): boolean {
+  let days = namedDays(`${risk.title} ${risk.trigger} ${risk.window ?? ""}`, now);
+  if (!days.length) return true;
+  // a range ("Nov 26-29") counts only on the business's busy days in it (QA cycle 5: a Fri-Sun tour company's "Nov 26-29"
+  // rain risk bought the Thanksgiving-Thursday market)
+  if (days.length > 1 && busyDays.length) { const busy = days.filter((d) => busyDays.includes(DOW[new Date(d).getUTCDay()])); if (busy.length) days = busy; }
+  const m = contractMeta(c.id);
+  const start = m?.eventDate ? Date.parse(`${m.eventDate}T00:00:00Z`) : NaN;
+  const end = m?.eventEnd ? Date.parse(`${m.eventEnd}T23:59:59Z`) : start + 86_399_000;
+  if (!Number.isFinite(start) || end - start > 4 * 86_400_000) return true;
+  return days.some((d) => d >= start && d <= end);
+}
 /** A single-game contract fits an event game risk: same day (+-1) when the risk names one; home game for a venue-bound lot. */
 export function gameFits(risk: Risk, c: MarketContract, profile: BusinessProfile, now = new Date()): boolean {
   if (!/\s(vs\.?|v\.?|at|@)\s/i.test(c.eventTitle)) return true; // season futures etc.: other guards
@@ -1098,9 +1425,11 @@ export function gameFits(risk: Risk, c: MarketContract, profile: BusinessProfile
   const day = contractMeta(c.id)?.eventDate;
   const t = day ? Date.parse(`${day}T12:00:00Z`) : NaN;
   if (named.length && Number.isFinite(t) && !named.some((d) => Math.abs(d - t) <= 1.5 * 86_400_000)) return false;
-  if (VENUE_BOUND.test(profile.description)) {
+  if (venueBound(profile.description)) {
     // "A at B" / "A @ B"; Kalshi game events list the away team first ("Kansas City vs Buffalo" = KC at BUF)
-    const at = c.eventTitle.match(/^(.+?)\s+(?:at|@)\s+(.+?)\??$/i) ?? (c.venue === "kalshi" && /GAME-/i.test(c.eventTicker) ? c.eventTitle.match(/^(.+?)\s+vs\.?\s+(.+?)\??$/i) : null);
+    // (Gemini sports tickers too: GEMI-NCAAM-...-CMU-PITT is Central Michigan at Pitt)
+    const awayFirst = (c.venue === "kalshi" && /GAME-/i.test(c.eventTicker)) || (c.venue === "gemini" && /^GEMI-(NFL|NBA|NHL|NCAAF|NCAAM|NCAAW|WNBA|MLB)-/i.test(c.symbol || c.id.split(":")[1] || ""));
+    const at = c.eventTitle.match(/^(.+?)\s+(?:at|@)\s+(.+?)\??$/i) ?? (awayFirst ? c.eventTitle.match(/^(.+?)\s+vs\.?\s+(.+?)\??$/i) : null);
     const own = ownTeamsIn(`${risk.title} ${risk.trigger} ${profile.description}`);
     if (at && own.length) {
       const away = at[1].toLowerCase();
@@ -1146,15 +1475,40 @@ export function futuresTrigger(c: MarketContract, side: "yes" | "no"): string | 
   return null;
 }
 
-const PROMPT_ECHO = /\b(?:the chosen|pick (?:a|the) (?:rung|strike|contract)|rung|priced \d+\s*[-–]\s*\d+\s*(?:cents|¢)|catalogKey)\b/i;
+const GENERIC_NAME = /^(home|away|team|game|games|night|nights|loses?|lost|loss|wins?|beats?|this|next|week|weekend|today|tonight|the|our|their|playoffs?|season|football|basketball|hockey|college|saturday|sunday|monday|tuesday|wednesday|thursday|friday|january|february|march|april|june|july|august|september|october|november|december|stadium|arena|field|home-?game|crowd|fans?|local|rival|bowl|lose|loses)$/i;
+/** Capitalised names in `text` that are neither in the game contract's matchup nor the risk's own team. */
+export function strayNames(text: string, c: MarketContract, r: Pick<Risk, "title" | "trigger">): string[] {
+  const ev = `${c.eventTitle} ${c.label}`.toLowerCase();
+  const own = ownTeamsIn(`${r.title} ${r.trigger}`).flatMap((t) => [t.nick, t.city, ...t.names]).filter(Boolean).map((x) => x.toLowerCase());
+  return [...new Set(text.match(/\b[A-Z][a-zA-Z&.']{3,}\b/g) ?? [])].filter((w) => !GENERIC_NAME.test(w)
+    && !ev.includes(w.toLowerCase()) && !own.some((o) => o.split(/\s+/).includes(w.toLowerCase())));
+}
+/** A single-game trigger in the contract's own teams and date, when the risk's trigger names a team that game does not have. */
+export function gameTrigger(r: Risk, c: MarketContract, side: "yes" | "no"): string | null {
+  const m = c.eventTitle.match(/^(.+?)\s+(?:vs\.?|v\.?|at|@)\s+(.+?)\??$/i);
+  if (!m || !strayNames(r.trigger, c, r).length) return null;
+  const [a, b] = [m[1].trim(), m[2].trim()], lab = c.label.trim();
+  const other = lab.toLowerCase() === a.toLowerCase() ? b : lab.toLowerCase() === b.toLowerCase() ? a : null;
+  if (!other) return null;
+  const d = contractMeta(c.id)?.eventDate;
+  const when = d ? ` on ${new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" })}` : "";
+  return side === "yes" ? `${other} lose to ${lab}${when}` : `${lab} lose to ${other}${when}`;
+}
 
-export function marketWordedTriggers(risks: Risk[], lines: QuoteLine[]): void {
+const PROMPT_ECHO = /\b(?:the chosen|pick (?:a|the) (?:rung|strike|contract)|rung|(?:label|bracket) offered|priced \d+\s*[-–]\s*\d+\s*(?:cents|¢)|catalogKey)\b/i;
+
+export function marketWordedTriggers(risks: Risk[], lines: QuoteLine[], options: Quote["options"] = []): void {
   for (const r of risks) {
-    const l = lines.find((x) => x.riskId === r.id && x.contracts > 0) ?? lines.find((x) => x.riskId === r.id);
-    if (!l) continue;
+    // an option-only risk names its first choice too (QA cycle 4: trigger "CPI above 3.2%", near-certain, next to a 3.7% option)
+    const l = lines.find((x) => x.riskId === r.id && x.contracts > 0) ?? lines.find((x) => x.riskId === r.id) ?? options?.find((o) => o.riskId === r.id)?.choices[0];
+    // no line to name: drop the echoed aside instead (QA cycle 3: "...above 2 inches (the lowest rung shown)")
+    if (!l) { if (PROMPT_ECHO.test(r.trigger ?? "")) r.trigger = r.trigger.replace(/\s*\([^)]*\)/g, (m) => (PROMPT_ECHO.test(m) || /\blabel offered\b|\bshown\b/i.test(m) ? "" : m)).trim(); continue; }
     // season futures: the trigger names the stage the contract actually pays on (a cheaper-tail stage can differ from the risk's wording)
     const ft = r.peril === "game" ? futuresTrigger(l.contract, l.side) : null;
     if (ft) { r.trigger = ft; continue; }
+    // one game: an opponent the contract's game does not have came from another sport's market (QA cycle 5: "Tennessee loses
+    // to Coastal Carolina on Sat Nov 21" (a basketball game) next to the LSU-at-Tennessee football line)
+    if (r.peril === "game") { const t = gameTrigger(r, l.contract, l.side); if (t) { if (strayNames(r.title, l.contract, r).length) r.title = t; r.trigger = t; continue; } }
     // the LLM sometimes echoes prompt instructions ("the chosen strike (pick a rung priced 5-60 cents)"): name the real contract
     if (!MARKET_WORDED.includes(r.peril) && !PROMPT_ECHO.test(r.trigger ?? "")) continue;
     const c = l.contract;

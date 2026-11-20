@@ -196,5 +196,6 @@ test("advise: without answers nothing changes (no clarifications field, no answe
   const q = await advise(biz("Cafe with a patio and 3 delivery vans."), { deps: deps(recordingLlm(prompts)) });
   assert.equal(q.clarifications, undefined);
   assert.doesNotMatch(prompts.risk[0], /quick questions/);
-  assert.equal(q.risks.filter((r) => r.kind !== "proxy").length, 3);
+  // both rain risks land on the one rain market here, so they merge into one risk (QA cycle 3: one risk per market)
+  assert.equal(q.risks.filter((r) => r.kind !== "proxy").length, 2);
 });

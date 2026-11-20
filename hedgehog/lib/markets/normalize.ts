@@ -202,6 +202,16 @@ export function perilFromText(t: string): Peril {
 
 export const geminiUrl = (eventTicker: string) => `https://www.gemini.com/predictions/${encodeURIComponent(eventTicker)}`;
 
+/**
+ * A crossed or stale book (QA cycle 4: gold "$4,100 or above" quoted YES ask 3c / bid 56c, NO ask 44c / bid 97c): a bid above
+ * its own ask, or YES + NO asks well under $1 (free money), is a data artifact, not a price. Such a contract is unquoted.
+ */
+export function crossedBook(b: { yesAsk: number | null; yesBid: number | null; noAsk: number | null; noBid: number | null }): boolean {
+  if (b.yesAsk !== null && b.yesBid !== null && b.yesBid > b.yesAsk + 0.005) return true;
+  if (b.noAsk !== null && b.noBid !== null && b.noBid > b.noAsk + 0.005) return true;
+  return b.yesAsk !== null && b.noAsk !== null && b.yesAsk + b.noAsk < 0.97;
+}
+
 function geminiPrices(c: GContract) {
   const p = c.prices ?? {};
   const bestBid = price(p.bestBid), bestAsk = price(p.bestAsk);
@@ -209,7 +219,8 @@ function geminiPrices(c: GContract) {
   const yesBid = price(p.sell?.yes) ?? bestBid;
   const noAsk = price(p.buy?.no) ?? (yesBid !== null ? price(1 - yesBid) : null);
   const noBid = price(p.sell?.no) ?? (yesAsk !== null ? price(1 - yesAsk) : null);
-  return { yesAsk, yesBid, noAsk, noBid };
+  const out = { yesAsk, yesBid, noAsk, noBid };
+  return crossedBook(out) ? { yesAsk: null, yesBid: null, noAsk: null, noBid: null } : out;
 }
 
 function geminiStatus(e: GEvent, c: GContract): MarketContract["status"] {

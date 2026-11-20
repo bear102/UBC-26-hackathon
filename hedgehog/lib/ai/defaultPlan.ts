@@ -4,7 +4,8 @@
 // owner named as a loss.
 import type { Coverage } from "../client/quote";
 import { applyPicks, type Picks } from "../client/choices";
-import type { Quote, QuoteLine, QuotePackage, Risk } from "../types";
+import type { NaturalHedge, Quote, QuoteLine, QuotePackage, Risk } from "../types";
+import { ownTeamsIn } from "./horizon";
 
 const BALANCED_BLURB = "The AI's pick for each direct risk, plus creative hedges with a strong or medium link.";
 
@@ -58,10 +59,49 @@ export function settleDefaultPlan(q: Quote, cov: Coverage, defaultPicks: Map<str
   q.uncovered = q.uncovered.filter((u) => !inPlan.has(u.riskId));
   for (const o of opts) {
     if (inPlan.has(o.riskId) || q.uncovered.some((u) => u.riskId === o.riskId)) continue;
-    const why = skipped.get(o.riskId) ?? (defaultPicks.has(o.riskId) ? "Didn't fit your monthly budget at this coverage." : null);
-    if (why) q.uncovered.push({ riskId: o.riskId, reason: why });
+    // every risk is either in the plan or says why not (QA cycle 4: two option-only risks appeared in neither list)
+    const r = risk.get(o.riskId);
+    const why = skipped.get(o.riskId) ?? (defaultPicks.has(o.riskId) ? "Didn't fit your monthly budget at this coverage."
+      : r?.kind === "proxy" && r.correlation === "weak" ? "Loose link to your loss: shown as an option, not put in the plan." : "Shown as an option, not put in the plan.");
+    q.uncovered.push({ riskId: o.riskId, reason: why });
   }
-  q.naturalHedges = (q.naturalHedges ?? []).filter((n) => !contradictsLoss(n.advice, `${n.title} ${n.explanation}`, q.risks));
+  q.naturalHedges = (q.naturalHedges ?? []).filter((n) => !contradictsLoss(saysDont(n), `${n.title} ${n.explanation}`, q.risks) && !contradictsPlan(n, q) && !citesMissingCover(n, q));
+}
+
+/**
+ * A "don't hedge" / "watch" note about what the plan buys contradicts it (QA cycle 4: "insuring a Pistons miss is costly -
+ * watch" next to the plan's 7c Pistons NO line; "rain hedges work against you" next to a rain line). Games: the same team.
+ */
+/** The note's real advice: a "watch" note whose text says "don't buy rain cover" is a don't-hedge (QA cycle 5). */
+export function saysDont(n: Pick<NaturalHedge, "advice" | "explanation">): NaturalHedge["advice"] {
+  return n.advice === "watch" && /\b(don'?t|do not|no need to|never)\s+(buy|hedge|add|insure)\b/i.test(n.explanation) ? "dont-hedge" : n.advice;
+}
+
+/** A note may not lean on cover the quote does not have (QA cycle 5: "the playbook rain cover already protects the downside" with
+ *  no rain line), nor talk about Hedgehog's internal analysts. */
+export function citesMissingCover(n: NaturalHedge, q: Pick<Quote, "lines" | "risks">): boolean {
+  const text = `${n.title} ${n.explanation}`;
+  if (/\b(analyst|playbook)\b/i.test(text)) return true;
+  const m = text.match(/\b(rain|snow|cold|heat|fuel|diesel|gas)\s+(cover|hedge|line)\s+(already|covers|protects)/i);
+  if (!m) return false;
+  const p = m[1].toLowerCase() === "diesel" || m[1].toLowerCase() === "fuel" ? "gas" : m[1].toLowerCase();
+  return !q.lines.some((l) => l.contracts > 0 && q.risks.find((r) => r.id === l.riskId)?.peril === p);
+}
+
+export function contradictsPlan(n: NaturalHedge, q: Pick<Quote, "lines" | "risks">): boolean {
+  // games: only "watch" (a "don't hedge: wins already pay you" note is about the win side, not the loss the plan buys)
+  if (n.advice === "hedge-opposite" || (n.peril === "game" && n.advice !== "watch")) return false;
+  const text = `${n.title} ${n.explanation}`;
+  return q.lines.some((l) => {
+    if (l.contracts <= 0 || l.action === "read-only") return false;
+    const r = q.risks.find((x) => x.id === l.riskId);
+    // a note filed under another peril that says "don't buy rain cover" next to a rain line (QA cycle 5: a fuel idea's note)
+    if (r && r.peril !== n.peril && n.peril !== "game" && saysDont(n) === "dont-hedge" && WEATHER[r.peril]?.test(n.explanation)) return true;
+    if (!r || r.peril !== n.peril) return false;
+    if (n.peril !== "game") return saysDont(n) === "dont-hedge"; // "watch: size rain cover to the walk-up share" fits a rain line
+    const names = ownTeamsIn(`${r.title} ${r.trigger}`).flatMap((t) => [t.nick, ...t.names]);
+    return names.some((w) => w.length > 3 && new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text));
+  });
 }
 
 const WEATHER: Record<string, RegExp> = {
