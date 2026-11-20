@@ -29,6 +29,8 @@ export function CoverAllDialog({ items: initial, businessId, budgetUsd, onClose,
   const [items, setItems] = useState(initial);
   const [moved, setMoved] = useState<{ before: number; after: number } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // what the server actually charged per line (premium incl. fee), keyed by contract; shown on the receipt
+  const [charged, setCharged] = useState<Map<string, number> | null>(null);
   const { publicKey, signTransaction, signAllTransactions, connected } = useWallet();
   const { setVisible } = useWalletModal();
   const [stage, setStage] = useState<Stage>("review");
@@ -71,6 +73,7 @@ export function CoverAllDialog({ items: initial, businessId, budgetUsd, onClose,
         setProgress(st === "signing" ? `Approve once in your wallet (${n} transaction${n === 1 ? "" : "s"})` : `${st === "sending" ? "Sending" : "Confirming"} ${n > 1 ? `${i + 1} of ${n}` : ""} on Solana devnet`);
       });
       setSigs(signed);
+      setCharged(new Map(plan.policies.map((p) => [items[p.index].line.contractId, p.premiumUsd])));
       setProgress("Recording your policies");
       await Promise.all(plan.policies.map(async (p) => {
         let backing: DeskHedge | undefined;
@@ -124,7 +127,7 @@ export function CoverAllDialog({ items: initial, businessId, budgetUsd, onClose,
           {items.map((it) => (
             <li key={it.line.contractId}>
               <span className={s.name}>{stage === "done" && <IconCheck size={14} />}{it.risk?.title ?? it.line.contract.eventTitle}</span>
-              <span className={s.nums}>pays <b className="pay">{usd(it.line.payoutUsd)}</b> · costs <b>{usd(it.line.premiumUsd, 2)}</b></span>
+              <span className={s.nums}>pays <b className="pay">{usd(it.line.payoutUsd)}</b> · {stage === "done" && charged ? "paid" : "costs"} <b>{usd(charged?.get(it.line.contractId) ?? it.line.premiumUsd, 2)}</b></span>
             </li>
           ))}
         </ul>
@@ -173,7 +176,7 @@ export function CoverAllDialog({ items: initial, businessId, budgetUsd, onClose,
                   <p className={c.receiptMsg}><b>You&apos;re covered on {items.length} risks.</b> {simulated ? "(simulated)" : `${items.length} policies are live onchain.`}</p>
                   <div className="terms">
                     <div className="term pay"><span className="lab">Pays up to</span><span className={`amt ${c.amt}`}>{usd(payout)}</span></div>
-                    <div className="term cost"><span className="lab">Premium paid</span><span className={`amt ${c.amt}`}>{usd(premium, 2)}</span></div>
+                    <div className="term cost"><span className="lab">Premium paid</span><span className={`amt ${c.amt}`}>{usd(charged ? [...charged.values()].reduce((a, v) => a + v, 0) : premium, 2)}</span></div>
                   </div>
                 </div>
                 <GuillocheBand tone="red" />

@@ -329,13 +329,13 @@ function Backing({ h }: { h?: DeskHedge }) {
   return (
     <div className={s.backing}>
       <div className="row between" style={{ gap: 8 }}>
-        <b className={s.backingTitle}>Hedgehog&apos;s backing on {venueName(venueOfId(h.contractId) ?? "gemini")}</b>
+        <b className={s.backingTitle}>Hedgehog&apos;s backing on {venueName(h.venue ?? venueOfId(h.contractId) ?? "gemini")}</b>
         <span className={`badge ${h.status === "error" || h.status === "rejected" ? "badge-bad" : "badge-gemini"}`}>{h.mode === "live" ? h.status : h.status === "error" ? "not placed" : "test order"}</span>
       </div>
       <div className={s.order}>{h.limitPrice > 0 ? orderText(h) : `${h.outcome.toUpperCase()} ${h.symbol}`}</div>
       <div className="muted" style={{ marginTop: 4 }}>
         {h.error ? h.error : <>Desk spends ≤ {usd(h.notionalUsd, 2)}{h.soldForUsd != null ? ` vs ${usd(h.soldForUsd, 2)} received` : ""}. It pays out exactly when you&apos;re owed.</>}
-        {h.url && <> · <a href={h.url} target="_blank" rel="noreferrer">{venueName(venueOfId(h.contractId) ?? "gemini")} market <Ext /></a></>}
+        {h.url && <> · <a href={h.url} target="_blank" rel="noreferrer">{venueName(h.venue ?? venueOfId(h.contractId) ?? "gemini")} market <Ext /></a></>}
       </div>
     </div>
   );

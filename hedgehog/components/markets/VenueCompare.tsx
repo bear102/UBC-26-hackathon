@@ -42,14 +42,17 @@ export function VenueCompare({ line, location }: { line: QuoteLine; location?: s
 
       <button type="button" className={s.line} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         <span className={s.vals}>
-          {cmp.rows.map((r, i) => (
+          {/* One venue: its midpoint would just be a third number next to the card's price-based odds, so show only the verdict.
+              Several venues: label the numbers as midpoints, the basis of the comparison. */}
+          {cmp.verdict !== "single" && <span className="muted" title="Midpoint between the best bid and ask on each venue">Midpoints:&nbsp;</span>}
+          {cmp.verdict !== "single" && cmp.rows.map((r, i) => (
             <span key={r.venue} className={s.val}>
               {i > 0 && <span className={s.dot} aria-hidden="true">·</span>}
               <span className={s[`v_${r.venue}`]}>{venueName(r.venue)}</span> <b className="num">{fmtChance(r.prob)}</b>
               {r.match === "similar" && <sup title={r.matchNote ? `Similar question: ${r.matchNote}` : "Similar question, not identical"}>≈</sup>}
             </span>
           ))}
-          <span className={`${s.verdict} ${TONE[cmp.verdict]}`}>— {tail}</span>
+          <span className={`${s.verdict} ${TONE[cmp.verdict]}`}>{cmp.verdict === "single" ? tail.charAt(0).toUpperCase() + tail.slice(1) : `— ${tail}`}</span>
           {loading && <span className="spinner" style={{ width: 11, height: 11, marginLeft: 6 }} aria-label="checking other markets" />}
         </span>
         <span className={s.more}>{open ? "Hide" : "Compare"} {open ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />}</span>

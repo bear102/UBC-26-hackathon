@@ -11,13 +11,15 @@ export function EditableLoss({ value, original, onChange }: {
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(Math.round(value)));
+  const [bad, setBad] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
-  useEffect(() => { if (editing) { setDraft(String(Math.round(value))); input.current?.select(); } }, [editing, value]);
+  useEffect(() => { if (editing) { setDraft(String(Math.round(value))); setBad(null); input.current?.select(); } }, [editing, value]);
 
   const save = () => {
     const n = Math.round(Number(draft.replace(/[$,\s]/g, "")));
-    if (Number.isFinite(n) && n > 0 && n <= 10_000_000) onChange(n);
-    setEditing(false);
+    if (!Number.isFinite(n) || n <= 0) { setBad("Enter a dollar amount above $0."); input.current?.focus(); return; }
+    if (n > 10_000_000) { setBad("That's above $10 million. Enter a smaller amount."); input.current?.focus(); return; }
+    setBad(null); onChange(n); setEditing(false);
   };
 
   if (!editing) {
@@ -37,13 +39,14 @@ export function EditableLoss({ value, original, onChange }: {
     );
   }
   return (
-    <form onSubmit={(e) => { e.preventDefault(); save(); }} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+    <form onSubmit={(e) => { e.preventDefault(); save(); }} style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
       <span aria-hidden="true">$</span>
       <input ref={input} inputMode="numeric" value={draft} onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Escape") setEditing(false); }}
-        aria-label="Your estimated loss in dollars" style={{ width: 110, padding: "6px 10px" }} className="input num" />
+        aria-label="Your estimated loss in dollars" aria-invalid={!!bad} aria-describedby={bad ? "loss-err" : undefined} style={{ width: 110, padding: "6px 10px" }} className="input num" />
       <button type="submit" className="btn btn-sm">Save</button>
       <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}>Cancel</button>
+      {bad && <span id="loss-err" role="alert" className="xs" style={{ flexBasis: "100%", color: "var(--red)" }}>{bad}</span>}
     </form>
   );
 }
