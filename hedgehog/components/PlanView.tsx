@@ -8,6 +8,7 @@ import { advise, adviseQuestions, coverReprice, getPolicies, getPresets } from "
 import { rescaleQuote, type Coverage } from "@/lib/client/quote";
 import { clearQuotes, lastBusiness, lastOwner, lastQuotePct, loadClarify, loadProfile, loadQuote, saveClarify, saveProfile, saveQuote, setLastBusiness } from "@/lib/client/storage";
 import { FIXTURE_PRESETS } from "@/lib/fixtures";
+import { plainError } from "@/lib/client/errors";
 import { usd } from "@/lib/client/format";
 import { AdviseProgress } from "./AdviseProgress";
 import { RiskCard } from "./RiskCard";
@@ -93,10 +94,10 @@ export function PlanView() {
     try {
       const q = await advise(p, c, answers ?? loadClarify(p)?.answers);
       if (my !== reqId.current) return;
-      saveQuote(q, c); setQuote(q); setLocal(false);
+      clearQuotes(p.id); saveQuote(q, c); setQuote(q); setLocal(false); // older coverage levels were sized from the old quote
       if (!hadQuote.current && fxAllowed()) setReveal(true);
     } catch (e) {
-      if (my === reqId.current) setError(e instanceof Error ? e.message : String(e));
+      if (my === reqId.current) setError(plainError(e));
     } finally { if (my === reqId.current) setLoading(false); }
   }, []);
 
@@ -150,9 +151,9 @@ export function PlanView() {
     const sp = new URLSearchParams(window.location.search); sp.set("c", String(c)); if (profile) sp.set("b", profile.id);
     router.replace(`/plan?${sp.toString()}`, { scroll: false });
     if (!profile || !quote) return;
-    const cached = loadQuote(profile.id, c);
-    if (cached) { setQuote(cached); setLocal(false); return; }
-    setQuote(rescaleQuote(quote, c)); setLocal(true);
+    // re-size what's on screen (keeps the chosen plan and any loss edits; QA #6), and remember it for this coverage
+    const q = rescaleQuote(quote, c);
+    saveQuote(q, c); setQuote(q); setLocal(true);
   }
 
   useEffect(() => { if (quote && !reveal) hadQuote.current = true; }, [quote, reveal]);
@@ -202,7 +203,7 @@ export function PlanView() {
   const proxyIds = new Set(quote.risks.filter((r) => r.kind === "proxy").map((r) => r.id));
   const notCoverable = quote.uncovered.filter((u) => !proxyIds.has(u.riskId));
   const uncoveredIds = new Set([...quote.uncovered.map((u) => u.riskId), ...proxyIds]);
-  const applyChoice = (q: Quote) => { setQuote(q); setLocal(true); };
+  const applyChoice = (q: Quote) => { saveQuote(q, cov); setQuote(q); setLocal(true); };
   // Owner corrects the AI's loss estimate: re-size that hedge (and the budget fit) instantly, no AI call.
   const editLoss = (riskId: string, usdValue: number) => {
     if (!quote) return;
@@ -251,6 +252,7 @@ export function PlanView() {
               <span className="caps-title">Underwriter&apos;s note</span>
             </div>
             <p className={s.summary}>{quote.summary}</p>
+            {local && <p className="xs muted">Written for the original quote; numbers below are current.</p>}
             <ClarifyRecap answers={quote.clarifications ?? loadClarify(profile)?.answers} asked={!!loadClarify(profile)?.questions.length} onEdit={editAnswers} busy={loading} />
             <p className={`xs ${s.venues}`}>
               <span className="badge badge-gemini">Priced live: Gemini · Kalshi · Polymarket</span>
@@ -273,13 +275,13 @@ export function PlanView() {
             <div className="bind-big"><span>Premium if it doesn&apos;t</span><b>{usd(quote.totalPremiumUsd, 2)}</b></div>
             <div className={s.budget}>
               <div className={s.budgetRow}>
-                <span>Monthly budget used</span>
+                <span>Premium vs. monthly budget</span>
                 <span className="num"><b>{usd(used, 0)}</b> of {usd(budget)}</span>
               </div>
               <div className={`bar ${used > budget + 0.01 ? "over" : ""}`}><i style={{ width: `${budgetPct}%` }} /></div>
             </div>
             <p className={s.bindSummary}>
-              Covers {cov}% of ~{usd(totalLoss)} in estimated losses across {coveredRisks.length} risk{coveredRisks.length === 1 ? "" : "s"}.
+              Pays up to {usd(quote.totalPayoutUsd)} of ~{usd(totalLoss)} in estimated losses across {coveredRisks.length} risk{coveredRisks.length === 1 ? "" : "s"}{quote.totalPayoutUsd < (totalLoss * cov) / 100 * 0.9 ? ", limited by your budget" : ""}.
               {local && <> Resized at current prices. <button className={s.linkBtn} onClick={() => runAdvise(profile, cov)} disabled={loading}>{loading ? "Re-running…" : "Re-run AI"}</button></>}
             </p>
             <CoverChecklist items={items} onCover={startCover} onCoverAll={() => setCoverAll(items.filter((i) => !i.done))} />

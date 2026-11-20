@@ -208,13 +208,17 @@ test("advise: risk map || brainstorm -> one batched match -> ladders, options, p
   assert.deepEqual(q.uncovered.map((u) => u.riskId), ["r3", "r5"]);
   assert.match(q.uncovered[1].reason, /coin flip/);
   // packages
-  assert.deepEqual(q.packages!.map((p) => p.id), ["essentials", "balanced", "max"]);
+  assert.deepEqual(q.packages!.map((p) => p.id).slice(0, 2), ["essentials", "balanced"]);
   const [ess, bal, max] = q.packages!;
-  assert.ok(ess.totalPremiumUsd < bal.totalPremiumUsd && bal.totalPremiumUsd <= max.totalPremiumUsd + 1); // Balanced and Max can both hit the cap
+  assert.ok(ess.totalPremiumUsd < bal.totalPremiumUsd);
+  // QA #4: the default plan IS Balanced (same picks, same totals); QA #5: a plan costing as much and paying no more is not offered
+  assert.deepEqual(q.lines.filter((l) => l.contracts > 0 && q.options!.some((o) => o.riskId === l.riskId)).map((l) => l.contractId).sort(), bal.picks.map((p) => p.contractId).sort());
+  assert.equal(q.totalPremiumUsd, bal.totalPremiumUsd);
+  if (max) assert.ok(max.totalPremiumUsd < bal.totalPremiumUsd - 0.01 || max.totalPayoutUsd > bal.totalPayoutUsd);
   for (const p of q.packages!) assert.ok(p.totalPremiumUsd <= q.budgetUsd + 1e-9, `${p.name} ${p.totalPremiumUsd} over budget ${q.budgetUsd}`);
   assert.ok(!ess.picks.some((p) => p.riskId === "r4" || p.riskId === "r5"));
   // packages list only funded legs (QA cycle 1): Max offers r5 only when the budget leaves room for it
-  assert.ok(max.picks.length >= bal.picks.length);
+  if (max) assert.ok(max.picks.length >= bal.picks.length);
   // Balanced = the plan's lines that the budget actually funds (the stub sizer here ignores the budget)
   assert.ok(bal.picks.length >= 2 && bal.picks.every((p) => q.lines.some((l) => l.contractId === p.contractId)));
   // natural hedge + backtest evidence for the heat strike

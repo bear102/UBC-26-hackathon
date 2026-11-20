@@ -3,56 +3,74 @@ import type { Quote, QuoteLine, Risk } from "@/lib/types";
 
 export type Coverage = 25 | 50 | 100;
 
-/** Resize every line to `pct` of its risk's loss, cap by book depth (maxCoverable), then greedily fit the budget (best payout/$ first). */
+/** Resize every line to `pct` of its risk's loss, cap by book depth (maxCoverable), then fit the budget.
+ *  Monotonic in coverage (QA #7): 50% starts from what 25% funded and 100% from what 50% funded, so choosing more
+ *  coverage never pays less on any line. */
 export function rescaleQuote(q: Quote, pct: Coverage): Quote {
+  let floor: number[] = [];
+  let out = sizeAt(q, 25, floor);
+  for (const c of [50, 100] as const) {
+    if (c > pct) break;
+    floor = out.lines.map((l) => l.contracts);
+    out = sizeAt(q, c, floor);
+  }
+  return out;
+}
+
+/** One coverage level; `floor[i]` = contracts line i keeps from the level below (already inside the budget). */
+function sizeAt(q: Quote, pct: Coverage, floor: number[]): Quote {
   const risks = new Map<string, Risk>(q.risks.map((r) => [r.id, r]));
   // keep lines that were cut for budget too — we re-derive from the full list
-  const sized: QuoteLine[] = q.lines.map((l) => {
+  const wantOf = new Map<QuoteLine, number>();
+  const sized: QuoteLine[] = q.lines.map((l, i) => {
     const risk = risks.get(l.riskId);
     const price = l.pricePerContract || (l.side === "yes" ? l.contract.yesAsk : l.contract.noAsk) || 0.5;
     const want = Math.ceil(((risk?.lossUsd ?? l.payoutUsd) * pct) / 100);
     // `maxCoverable` (set by the quote engine after walking the book) is the hard cap; we keep it on the line.
     const cap = l.maxCoverable != null && l.maxCoverable > 0 ? Math.floor(l.maxCoverable) : undefined;
-    const contracts = cap != null ? Math.min(want, cap) : want;
+    const contracts = Math.max(cap != null ? Math.min(want, cap) : want, floor[i] ?? 0);
     const { premiumPerMonth: _pm, ...rest } = l; // the budget caps the up-front premium; no per-month spreading
-    return {
-      ...rest,
-      coveragePct: pct,
-      contracts,
-      premiumUsd: round2(contracts * price),
-      payoutUsd: contracts,
-    };
+    const out = { ...rest, coveragePct: pct, contracts, pricePerContract: price, premiumUsd: round2(contracts * price), payoutUsd: contracts };
+    wantOf.set(out, want);
+    return out;
   });
-    let left = q.budgetUsd > 0 ? q.budgetUsd : Infinity;
-  // direct risks before creative (proxy) hedges, then cheapest probability first
+  const base = new Map<QuoteLine, number>(sized.map((l, i) => [l, Math.min(l.contracts, floor[i] ?? 0)]));
+  const cost = (l: QuoteLine, n: number) => round2(n * l.pricePerContract);
+  let left = q.budgetUsd > 0 ? q.budgetUsd : Infinity;
+  for (const l of sized) if (l.action !== "read-only") left -= cost(l, base.get(l)!);
+  // direct risks before creative (proxy) hedges, then the loss at stake weighted by value (same order as lib/markets/quote.ts)
   const proxy = (l: QuoteLine) => (risks.get(l.riskId)?.kind === "proxy" ? 1 : 0);
-  const order = [...sized].sort((a, b) => proxy(a) - proxy(b) || a.pricePerContract - b.pricePerContract);
+  const prio = (l: QuoteLine) => (risks.get(l.riskId)?.lossUsd ?? 0) * Math.sqrt(1 / Math.max(0.01, l.pricePerContract));
+  const order = [...sized].sort((a, b) => proxy(a) - proxy(b) || prio(b) - prio(a));
   const out = new Map<QuoteLine, QuoteLine>();
   // same split as the quote engine (lib/markets/quote.ts sizeQuote): pass 1 caps one line at 60% of the budget while others
-  // wait, pass 2 hands the rest back in order; a scaled line paying under $25 is noise and stays unfunded
+  // wait, pass 2 hands the rest back in order; a new line paying under $25 is noise and stays unfunded (also a thin book's $4 line)
   const buyable = order.filter((l) => l.action !== "read-only");
-  const cap = buyable.length > 1 ? left * 0.6 : left;
+  const cap = buyable.length > 1 ? (q.budgetUsd > 0 ? q.budgetUsd : Infinity) * 0.6 : Infinity;
   const fit = (l: QuoteLine, money: number) => {
-    const n = Math.min(l.contracts, Math.floor((money + 1e-9) / Math.max(l.pricePerContract, 0.01)));
-    return n >= 1 && n >= Math.min(l.contracts, 25) ? n : 0;
+    const b = base.get(l)!;
+    const n = Math.min(l.contracts, b + Math.floor((money + 1e-9) / Math.max(l.pricePerContract, 0.01)));
+    if (b > 0) return n;
+    return n >= 1 && n >= Math.min(wantOf.get(l)!, 25) ? n : 0;
   };
   for (const l of order) {
     if (l.action === "read-only") { out.set(l, l); continue; }
-    const allow = Math.min(left, cap);
-    if (l.premiumUsd <= allow + 1e-9) { left -= l.premiumUsd; out.set(l, l); continue; }
+    const b = base.get(l)!;
+    if (b === 0 && l.contracts < Math.min(wantOf.get(l)!, 25)) { out.set(l, { ...l, contracts: 0, premiumUsd: 0, payoutUsd: 0 }); continue; }
+    const extra = cost(l, l.contracts) - cost(l, b);
+    const allow = Math.min(left, Math.max(0, cap - cost(l, b)));
+    if (extra <= allow + 1e-9) { left -= extra; out.set(l, l); continue; }
     const n = fit(l, allow);
-    const prem = round2(n * l.pricePerContract);
-    left -= prem;
-    out.set(l, { ...l, contracts: n, premiumUsd: prem, payoutUsd: n });
+    left -= cost(l, n) - cost(l, b);
+    out.set(l, { ...l, contracts: n, premiumUsd: cost(l, n), payoutUsd: n });
   }
   for (const l of order) {
     const cur = out.get(l)!;
     if (l.action === "read-only" || cur.contracts >= l.contracts) continue;
-    const n = fit(l, cur.premiumUsd + left);
+    const n = fit(l, cost(l, cur.contracts) - cost(l, base.get(l)!) + left);
     if (n <= cur.contracts) continue;
-    const prem = round2(n * l.pricePerContract);
-    left -= prem - cur.premiumUsd;
-    out.set(l, { ...l, contracts: n, premiumUsd: prem, payoutUsd: n });
+    left -= cost(l, n) - cost(l, cur.contracts);
+    out.set(l, { ...l, contracts: n, premiumUsd: cost(l, n), payoutUsd: n });
   }
   const lines = sized.map((l) => out.get(l)!);
   const counted = lines.filter((l) => l.action !== "read-only");

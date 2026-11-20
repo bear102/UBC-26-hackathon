@@ -141,15 +141,16 @@ test("sizeQuote: a budget-scaled line paying under $25 is dropped, not shown as 
 });
 
 test("rescaleQuote + buildPackages: 60% cap then leftover; unfunded (under $25) legs are not package picks", () => {
-  const c1 = mc({ id: "kalshi:A", yesAsk: 0.2 }), c2 = mc({ id: "kalshi:B", yesAsk: 0.5 });
+  const c1 = mc({ id: "kalshi:A", yesAsk: 0.2 }), c2 = mc({ id: "kalshi:B", yesAsk: 0.5 }), c3 = mc({ id: "kalshi:C", yesAsk: 0.5 });
   const line = (riskId: string, c: MarketContract, n: number): QuoteLine => ({ riskId, contractId: c.id, side: "yes", rationale: "", basisRisk: "", contract: c, coveragePct: 100, contracts: n, pricePerContract: c.yesAsk!, premiumUsd: n * c.yesAsk!, payoutUsd: n, impliedProb: c.yesAsk!, action: "buy-onchain" } as QuoteLine);
-  const risks = [risk({ id: "r1", lossUsd: 100 }), risk({ id: "r2", lossUsd: 400 })];
-  const q = { businessId: "b", createdAt: "", risks, lines: [line("r1", c1, 100), line("r2", c2, 400)], uncovered: [], totalPremiumUsd: 0, totalPayoutUsd: 0, budgetUsd: 25, summary: "", model: "",
-    options: [{ riskId: "r1", choices: [line("r1", c1, 100)] }, { riskId: "r2", choices: [line("r2", c2, 400)] }] } as unknown as Quote;
-  const r = rescaleQuote(q, 100);
-  // pass 1: A capped at $15 (75), B gets $10 = 20 contracts (< $25 payout: none); pass 2: A takes the rest (100), $5 left
-  assert.deepEqual(r.lines.map((l) => l.contracts), [100, 0]);
-  for (const p of buildPackages(q, 100)) assert.deepEqual(p.picks.map((x) => x.contractId), [c1.id], p.name);
+  const risks = [risk({ id: "r1", lossUsd: 100 }), risk({ id: "r2", lossUsd: 400 }), risk({ id: "r3", lossUsd: 50 })];
+  const q = { businessId: "b", createdAt: "", risks, lines: [line("r1", c1, 100), line("r2", c2, 400), line("r3", c3, 50)], uncovered: [], totalPremiumUsd: 0, totalPayoutUsd: 0, budgetUsd: 25, summary: "", model: "",
+    options: [{ riskId: "r1", choices: [line("r1", c1, 100)] }, { riskId: "r2", choices: [line("r2", c2, 400)] }, { riskId: "r3", choices: [line("r3", c3, 50)] }] } as unknown as Quote;
+  // loss-weighted order B, A, C. 25%: B capped at $15 (30), A $5 (25), C $5 -> 10 < 13 wanted: none; pass 2: B takes the rest (40)
+  assert.deepEqual(rescaleQuote(q, 25).lines.map((l) => l.contracts), [25, 40, 0]);
+  // QA #7: more coverage never pays less on a line (the budget was already spent at 25%)
+  assert.deepEqual(rescaleQuote(q, 100).lines.map((l) => l.contracts), [25, 40, 0]);
+  for (const p of buildPackages(q, 100)) assert.deepEqual(p.picks.map((x) => x.contractId), [c1.id, c2.id], p.name);
 });
 
 test("sizeQuote: one line takes at most 60% of the budget while another direct risk waits", async () => {

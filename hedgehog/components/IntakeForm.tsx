@@ -73,14 +73,14 @@ export function IntakeForm() {
       <div className={`page-head ${s.head}`}>
         <div>
           <span className="eyebrow">Step 2</span>
-          <h1 className={s.h1}>{base ? <>Let&apos;s check {base.name}&apos;s <em>details</em></> : <>Tell us about <em>your business</em></>}</h1>
+          <h1 className={s.h1}>{base ? <>Check the <em>details</em> for {base.name}</> : <>Tell us about <em>your business</em></>}</h1>
         </div>
       </div>
 
       <div className={`card ${s.doc}`}>
         <div className={s.q}>
           <Seal withText={false} className={s.seal} />
-          <p><span className={s.qn}>Q1</span>What do you sell, where, and what kind of day hurts your sales?</p>
+          <p>What do you sell, where, and what kind of day hurts your sales?</p>
         </div>
         <label className={s.you}>
           <span className="sr-only">Describe your business</span>
@@ -96,10 +96,10 @@ export function IntakeForm() {
             <input className="input num" value={zip} onChange={(e) => setZip(e.target.value)} inputMode="numeric" maxLength={5} placeholder="78702" autoComplete="postal-code" />
           </label>
           <label className="field"><span>Average daily revenue</span>
-            <div className="input-prefix"><b>$</b><input className="input num" value={revenue} onChange={(e) => setRevenue(e.target.value.replace(/[^\d.]/g, ""))} inputMode="decimal" /></div>
+            <div className="input-prefix"><b>$</b><input className="input num" value={revenue} onChange={(e) => setRevenue(e.target.value.replace(/[^\d.-]/g, ""))} inputMode="decimal" /></div>
           </label>
           <label className="field"><span>Monthly hedge budget</span>
-            <div className="input-prefix"><b>$</b><input className="input num" value={budget} onChange={(e) => setBudget(e.target.value.replace(/[^\d.]/g, ""))} inputMode="decimal" /></div>
+            <div className="input-prefix"><b>$</b><input className="input num" value={budget} onChange={(e) => setBudget(e.target.value.replace(/[^\d.-]/g, ""))} inputMode="decimal" /></div>
           </label>
         </div>
         <fieldset className={s.fieldset}>

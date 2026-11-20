@@ -25,3 +25,20 @@ test("a bigger loss still respects the monthly budget", () => {
   const q = rescaleQuote({ ...base(5000, 120) }, 100);
   assert.ok(q.totalPremiumUsd <= 120 + 1e-9);
 });
+
+test("QA #7: per-line payout never drops when coverage goes up; thin books (< $25 of cover) are not funded", () => {
+  const mk = (id: string, price: number, max?: number) => ({ ...base(0, 0).lines[0], contractId: id, contract: { ...contract, id }, pricePerContract: price, ...(max ? { maxCoverable: max } : {}) });
+  const q: Quote = { ...base(0, 200), risks: [
+    { id: "r1", peril: "game", title: "Spurs", trigger: "t", lossUsd: 9000, lossReasoning: "", confidence: 0.7 },
+    { id: "r2", peril: "rain", title: "Rain", trigger: "t", lossUsd: 600, lossReasoning: "", confidence: 0.7 },
+    { id: "r3", peril: "heat", title: "Heat", trigger: "t", lossUsd: 900, lossReasoning: "", confidence: 0.7 },
+    { id: "r4", peril: "game", title: "Thin", trigger: "t", lossUsd: 5000, lossReasoning: "", confidence: 0.7 },
+  ], lines: [{ ...mk("kalshi:S", 0.6), riskId: "r1" }, { ...mk("kalshi:R", 0.25), riskId: "r2" }, { ...mk("kalshi:H", 0.1), riskId: "r3" }, { ...mk("kalshi:T", 0.4, 4), riskId: "r4" }] } as Quote;
+  const at = (c: 25 | 50 | 100) => rescaleQuote(q, c);
+  for (const [lo, hi] of [[25, 50], [50, 100]] as const) {
+    const a = at(lo).lines, b = at(hi).lines;
+    a.forEach((l, i) => assert.ok(b[i].payoutUsd >= l.payoutUsd, `${l.contractId} ${lo}% $${l.payoutUsd} -> ${hi}% $${b[i].payoutUsd}`));
+    assert.ok(at(hi).totalPremiumUsd <= 200 + 1e-9);
+  }
+  assert.equal(at(50).lines[3].contracts, 0); // 4 contracts for sale against a $5,000 loss: dust, not cover
+});

@@ -74,7 +74,7 @@ test("explorer: one row per game across three venues, outcomes aligned by team",
 test("explorer: 'markets agree' needs 2+ outcomes quoted on 2+ venues (QA: misaligned temp buckets)", () => {
   const t = (venue: "gemini" | "kalshi" | "polymarket", lo: number, p: number) => {
     const c = mk({ id: `${venue}:ATL-HI-${lo}`, venue, eventTitle: "Highest temperature in Atlanta on Nov 21, 2026?", label: `${lo}° to ${lo + 1}°`, peril: "heat", location: "Atlanta", yesAsk: p, yesBid: p - 0.02, noAsk: 1 - p + 0.02, noBid: 1 - p, expiry: "2026-11-22T05:00:00Z" });
-    setMeta(c.id, { eventDate: "2026-11-21", bounds: { lo, hi: lo + 1, unit: "°F" } });
+    setMeta(c.id, { eventDate: "2026-11-21", bounds: { lo, hi: lo + 1, loInclusive: true, hiInclusive: true, unit: "°F", text: `${lo}° to ${lo + 1}°` } });
     return c;
   };
   const now = Date.parse("2026-11-20T12:00:00Z");

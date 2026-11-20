@@ -17,6 +17,8 @@ import { OWN_TEAMS, futuresFallbackRisks, futuresSide, leagueIn, ownTeamsIn, per
 import { contractMeta } from "../markets/normalize";
 import { noMarketReason, parametricEnabled } from "../markets/proxies";
 import { isLongContract, longUniverse, seasonCalendar } from "./longContext";
+import { settleDefaultPlan } from "./defaultPlan";
+import type { Coverage } from "../client/quote";
 
 // ---------- injectable dependencies ----------
 export type SizeQuoteFn = (a: {
@@ -1011,6 +1013,9 @@ export async function advise(owner: BusinessProfile, opts: AdviseOpts = {}): Pro
     ...(opts.answers ? { clarifications: answers } : {}),
   };
   quote.packages = buildPackages(quote, coveragePct);
+  // QA #4: the plan shown first IS Plan B (the AI's picks, sized like the plan switcher); skip-priced lines stay out
+  settleDefaultPlan(quote, coveragePct as Coverage, new Map(defaultLegs.map((l) => [l.riskId, l.contractId])));
+  marketWordedTriggers(risks, quote.lines);
   attachForecast(quote, fc); // forecast vs market on weather lines (QuoteLine.forecast)
 
   // (5) summary

@@ -8,6 +8,7 @@ import { isMock } from "@/lib/client/mode";
 import { signAndSend, walletErrorMessage, type Network } from "@/lib/client/tx";
 import { cents, explorerTx, orderText, shortAddr, usd, VENUE_LABEL } from "@/lib/client/format";
 import { setLastOwner } from "@/lib/client/storage";
+import { plainError } from "@/lib/client/errors";
 import { DEMO_OWNER } from "@/lib/fixtures";
 import Link from "next/link";
 import { GuillocheBand, Seal } from "./Engraving";
@@ -83,7 +84,7 @@ export function CheckoutDialog({ kind, line: initialLine, risk, businessId, onCl
         setResult(res); go("done"); onDone(res);
       }
     } catch (e) {
-      setFailedAt(at); setErr(walletErrorMessage(e)); setStage("error");
+      setFailedAt(at); setErr(plainError(e, walletErrorMessage)); setStage("error");
     } finally { running.current = false; }
   }, [publicKey, signTransaction, mock, isCover, kind, line, risk, businessId, onDone]);
 
@@ -98,7 +99,7 @@ export function CheckoutDialog({ kind, line: initialLine, risk, businessId, onCl
       const fresh = (await onRefresh()).find((i) => i.line.contractId === line.contractId)?.line;
       if (fresh) { setMoved({ before: line.premiumUsd, after: fresh.premiumUsd }); setLine(fresh); }
       setErr(null); setFailedAt(null); setStage("review");
-    } catch (e) { setErr(walletErrorMessage(e)); }
+    } catch (e) { setErr(plainError(e, walletErrorMessage)); }
     finally { setRefreshing(false); }
   }
 
@@ -116,7 +117,7 @@ export function CheckoutDialog({ kind, line: initialLine, risk, businessId, onCl
   const busy = ["build", "signing", "sending", "confirming", "record"].includes(stage);
   const cur = stage === "error" ? failedAt : stage;
   const steps: { id: Stage; label: string }[] = [
-    { id: "connect", label: connected || mock ? `Wallet ${mock ? "(simulated)" : shortAddr(publicKey?.toBase58())}` : "Connect Phantom (devnet)" },
+    { id: "connect", label: connected || mock ? `Wallet ${mock ? "(simulated)" : shortAddr(publicKey?.toBase58())}` : "Connect a wallet" },
     { id: "build", label: isCover ? "Building policy transaction" : "Building hedge transaction" },
     { id: "signing", label: "Approve in your wallet" },
     { id: "sending", label: "Sending to Solana devnet" },
@@ -133,7 +134,7 @@ export function CheckoutDialog({ kind, line: initialLine, risk, businessId, onCl
         </div>
         <h2 id="co-title" className={s.title}>{risk?.title ?? line.contract.eventTitle}</h2>
         <p className={s.lede}>{isCover
-          ? <>Pay the premium in test USDC. If <b>{risk?.trigger ?? line.contract.label}</b>, the Hedgehog program pays you from its vault.</>
+          ? <>Pay the premium once, in test USDC. Trigger: <b>{risk?.trigger ?? line.contract.label}</b>. If it happens, Hedgehog pays you from its vault.</>
           : <>{line.contracts.toLocaleString()} × <b>{line.contract.label}</b> on {VENUE_LABEL[line.contract.venue]} at ~{cents(line.pricePerContract)}. Each token pays $1 if it happens.</>}
         </p>
 

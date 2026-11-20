@@ -386,8 +386,11 @@ const capFirst = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 export function untilPhrase(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "until the result is in";
-  const t = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-  return `until ${t} ${shortDate(iso)}`;
+  const tz = "America/Chicago";
+  const t = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: tz });
+  const far = Math.abs(d.getTime() - Date.now()) > 200 * 86_400_000;
+  const day = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: tz, ...(far ? { year: "numeric" } : {}) });
+  return `until ${t} CT ${day}`;
 }
 
 // ---------- glossary ----------
