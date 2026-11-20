@@ -69,6 +69,7 @@
 .certWho b { color: var(--ink); font-weight: 600; }
 .certTerms :global(.lab) { text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 600; }
 .certTerms :global(.amt) { font-size: 48px; margin-top: 6px; }
+.certTerms { grid-template-columns: 1fr; }
 .ifs { list-style: none; margin: 14px 0 0; padding: 0; }
 .ifs li { display: flex; align-items: center; gap: 10px; padding: 9px 0; }
 .ifs li + li { border-top: 1px dashed var(--line-2); }

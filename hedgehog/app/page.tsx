@@ -50,11 +50,10 @@ export default function Landing() {
                     <div className={s.certTitle}>Certificate of Cover</div>
                     <span className={s.rule} aria-hidden="true" />
                   </div>
-                  <h3 className={s.certH}>Rain or a cold snap empties the patio</h3>
+                  <h3 className={s.certH}>If it rains or turns cold and nobody shows up…</h3>
                   <p className={s.certWho}>Rainey St patio bar, Austin · <b>Saturday, Nov 21</b></p>
                   <div className={`terms ${s.certTerms}`}>
-                    <div className="term pay"><span className="lab">You get up to</span><span className="amt">$950</span></div>
-                    <div className="term cost"><span className="lab">You pay</span><span className="amt">$202</span></div>
+                    <div className="term pay"><span className="lab">We pay you up to</span><span className="amt">$950</span></div>
                   </div>
                   <ul className={s.ifs}>
                     <li>
