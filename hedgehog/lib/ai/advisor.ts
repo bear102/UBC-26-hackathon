@@ -154,7 +154,12 @@ export function candidateLines(cands: MarketContract[]): string {
     // season futures / period markets: the day observation ends (meta.eventEnd), not a placeholder venue expiry (Kalshi futures say 2029)
     const m = contractMeta(c.id);
     const when = m?.eventEnd && (m.futureKind || isLongContract(c)) ? `settles ${m.eventEnd}${m.futureKind ? ` (season future: ${m.futureKind})` : ""}` : `expires ${expS}`;
-    return `- ${c.id} | ${c.venue}${c.tradable || (c.venue === "polymarket" && c.status === "open") ? " (buyable)" : " (advice-only)"} | "${c.eventTitle}" | label "${c.label}" | YES ask ${px(c.yesAsk)} / NO ask ${px(c.noAsk)} | ${when}${c.proxyNote ? ` | proxy: ${c.proxyNote}` : ""}`;
+    // single games: say who is home and when the game is played (venue titles say "A vs B" with the away team first,
+    // and the expiry is a settlement deadline days later; the model read both wrong in demo QA)
+    const g = c.peril === "game" && !m?.futureKind ? gameSides(c) : null;
+    const st = g ? gameStartCT(c) : null;
+    const game = g ? ` | game: ${g.away} AT ${g.home} (home: ${g.home})${st ? `, played ${st}` : ""}` : "";
+    return `- ${c.id} | ${c.venue}${c.tradable || (c.venue === "polymarket" && c.status === "open") ? " (buyable)" : " (advice-only)"} | "${c.eventTitle}" | label "${c.label}" | YES ask ${px(c.yesAsk)} / NO ask ${px(c.noAsk)} | ${when}${game}${c.proxyNote ? ` | proxy: ${c.proxyNote}` : ""}`;
   }).join("\n");
 }
 
@@ -1425,18 +1430,66 @@ export function gameFits(risk: Risk, c: MarketContract, profile: BusinessProfile
   const day = contractMeta(c.id)?.eventDate;
   const t = day ? Date.parse(`${day}T12:00:00Z`) : NaN;
   if (named.length && Number.isFinite(t) && !named.some((d) => Math.abs(d - t) <= 1.5 * 86_400_000)) return false;
-  if (venueBound(profile.description)) {
-    // "A at B" / "A @ B"; Kalshi game events list the away team first ("Kansas City vs Buffalo" = KC at BUF)
-    // (Gemini sports tickers too: GEMI-NCAAM-...-CMU-PITT is Central Michigan at Pitt)
-    const awayFirst = (c.venue === "kalshi" && /GAME-/i.test(c.eventTicker)) || (c.venue === "gemini" && /^GEMI-(NFL|NBA|NHL|NCAAF|NCAAM|NCAAW|WNBA|MLB)-/i.test(c.symbol || c.id.split(":")[1] || ""));
-    const at = c.eventTitle.match(/^(.+?)\s+(?:at|@)\s+(.+?)\??$/i) ?? (awayFirst ? c.eventTitle.match(/^(.+?)\s+vs\.?\s+(.+?)\??$/i) : null);
-    const own = ownTeamsIn(`${risk.title} ${risk.trigger} ${profile.description}`);
-    if (at && own.length) {
-      const away = at[1].toLowerCase();
+  // a venue-bound business, or a risk that itself says "home game", needs the team at home (demo QA: "Spurs lose home game
+  // vs Sacramento" was hedged with San Antonio AT Sacramento)
+  if (venueBound(profile.description) || /\bhome\b/i.test(`${risk.title} ${risk.trigger}`)) {
+    const g = gameSides(c);
+    // OUR team: the one the business names (the risk text also names the opponent: "Pelicans beat the Spurs");
+    // fall back to the first team in the risk title
+    const fromBiz = ownTeamsIn(profile.description);
+    const own = fromBiz.length ? fromBiz : ownTeamsIn(risk.title).slice(0, 1);
+    if (g && own.length) {
+      const away = g.away.toLowerCase();
       if (own.some((o) => o.names.some((n) => away.includes(n)) || away.includes(o.nick.toLowerCase()))) return false;
     }
   }
   return true;
+}
+
+/** Away / home team of a single-game contract. "A at B" / "A @ B"; Kalshi game events and Gemini sports tickers list the
+ *  away team first even when the title says "vs" ("New Orleans vs San Antonio" on Gemini = New Orleans AT San Antonio). */
+export function gameSides(c: MarketContract): { away: string; home: string } | null {
+  const awayFirst = (c.venue === "kalshi" && /GAME-/i.test(c.eventTicker)) || (c.venue === "gemini" && /^GEMI-(NFL|NBA|NHL|NCAAF|NCAAM|NCAAW|WNBA|MLB)-/i.test(c.symbol || c.id.split(":")[1] || ""));
+  const at = c.eventTitle.match(/^(.+?)\s+(?:at|@)\s+(.+?)\??$/i) ?? (awayFirst ? c.eventTitle.match(/^(.+?)\s+vs\.?\s+(.+?)\??$/i) : null);
+  return at ? { away: at[1].trim(), home: at[2].trim() } : null;
+}
+
+/** Title + trigger for a single-game line, from the contract itself (who must lose, home/away, the real game day): the
+ *  risk map is written before matching and guessed dates ("Sun Nov 22 or Mon Nov 23") and venues wrong in demo QA. */
+export function gameLineWording(c: MarketContract, side: "yes" | "no"): { title: string; trigger: string } | null {
+  if (c.peril !== "game" || contractMeta(c.id)?.futureKind) return null;
+  const g = gameSides(c);
+  if (!g) return null;
+  const label = c.label.replace(/\s+win$/i, "").trim();
+  const eq = (a: string, b: string) => a.toLowerCase() === b.toLowerCase() || a.toLowerCase().startsWith(b.toLowerCase()) || b.toLowerCase().startsWith(a.toLowerCase());
+  const labelIsHome = eq(label, g.home), labelIsAway = eq(label, g.away);
+  if (!labelIsHome && !labelIsAway) return null;
+  // the side held pays when `loser` loses: YES on X pays when X wins (the other team loses); NO on X pays when X loses
+  const loser = side === "yes" ? (labelIsHome ? g.away : g.home) : label;
+  const winner = eq(loser, g.home) ? g.away : g.home;
+  const league = ((c.symbol || c.id.split(":")[1] || "").match(/^(?:GEMI-|KX)([A-Z]+?)(?:GAME)?-/)?.[1] ?? contractMeta(c.id)?.league ?? "").toUpperCase();
+  const nick = (city: string) => OWN_TEAMS.find((o) => (!league || o.league.includes(league)) && o.names.includes(city.toLowerCase()))?.nick ?? city;
+  const atHome = eq(loser, g.home);
+  const when = gameStartCT(c);
+  const day = when ? when.replace(/,\s*\d{1,2}:\d{2}\s*[AP]M\s*CT$/, "") : "";
+  const L = nick(loser), W = nick(winner);
+  return {
+    title: `${L === loser ? L : `The ${L}`} lose ${atHome ? "at home " : ""}to ${W === winner ? W : `the ${W}`}${day ? ` (${day})` : ""}`,
+    trigger: `${winner} beats ${loser} at ${g.home}${when ? `, ${when}` : ""}`,
+  };
+}
+
+/** Local (Central) start of a single game: Gemini sports tickers carry it (GEMI-NBA-2611220100-... = 2026-11-22 01:00 UTC). */
+export function gameStartCT(c: MarketContract): string | null {
+  const m = (c.symbol || c.id.split(":")[1] || "").match(/^GEMI-[A-Z]+-(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})-/);
+  let t: number | null = null;
+  if (m) t = Date.UTC(2000 + Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]));
+  if (t === null) {
+    const d = contractMeta(c.id)?.eventDate;
+    if (!d) return null;
+    return new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" });
+  }
+  return new Date(t).toLocaleString("en-US", { timeZone: TZ, weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + " CT";
 }
 
 /** Economic hedges: show the trigger in the market's own words ("CPI in November: Above 0.1%") so the period/strike
@@ -1504,8 +1557,18 @@ export function marketWordedTriggers(risks: Risk[], lines: QuoteLine[], options:
     // no line to name: drop the echoed aside instead (QA cycle 3: "...above 2 inches (the lowest rung shown)")
     if (!l) { if (PROMPT_ECHO.test(r.trigger ?? "")) r.trigger = r.trigger.replace(/\s*\([^)]*\)/g, (m) => (PROMPT_ECHO.test(m) || /\blabel offered\b|\bshown\b/i.test(m) ? "" : m)).trim(); continue; }
     // season futures: the trigger names the stage the contract actually pays on (a cheaper-tail stage can differ from the risk's wording)
+    const gt = r.peril === "game" ? gameLineWording(l.contract, l.side) : null;
+    if (gt) { r.trigger = gt.trigger; r.title = gt.title; continue; }
     const ft = r.peril === "game" ? futuresTrigger(l.contract, l.side) : null;
-    if (ft) { r.trigger = ft; continue; }
+    if (ft) {
+      r.trigger = ft;
+      // a cheaper/broader stage was chosen ("miss the playoffs" covered by "win fewer than 50 games"): the title names
+      // what the cover actually pays on, so the card never promises one event and pays on another
+      const kind = contractMeta(l.contract.id)?.futureKind;
+      const wanted = stageWanted(r.title);
+      if (kind && wanted.length && wanted[0] !== kind) r.title = ft;
+      continue;
+    }
     // one game: an opponent the contract's game does not have came from another sport's market (QA cycle 5: "Tennessee loses
     // to Coastal Carolina on Sat Nov 21" (a basketball game) next to the LSU-at-Tennessee football line)
     if (r.peril === "game") { const t = gameTrigger(r, l.contract, l.side); if (t) { if (strayNames(r.title, l.contract, r).length) r.title = t; r.trigger = t; continue; } }

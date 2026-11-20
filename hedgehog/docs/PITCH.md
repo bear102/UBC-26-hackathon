@@ -26,7 +26,7 @@ Don't wait on a live AI run (~60 s). Show the pre-made plan and say what happene
 
 ### 1:25–2:25 · The quote (tab ②, scroll)
 Point at one line: the Gemini Spurs line.
-> "Here's the Spurs line. If New Orleans beats the Spurs at home on Saturday, this bar loses about [$X]. Gemini prices that at about 11 cents per dollar, so cover costs [$Y] and pays [$Z]." *(read the numbers off the card)*
+> "Here's the Spurs line. If New Orleans beats the Spurs at home on Saturday, this bar loses about $1,800. Gemini prices that at about 11 cents per dollar, so cover costs $23 and pays $210, as much as the book has for sale right now." *(numbers from Corner Three Sports Bar on Nov 20; read them off the card if they moved)*
 Open **Where the price comes from**:
 > "We compare the same contract across venues and the cheapest wins; ties go to Gemini. The whole plan is sized to the owner's budget and to how much is actually for sale in the book. Every line shows its basis risk in plain English."
 Scroll to **Pick a plan**:

@@ -58,3 +58,30 @@ test("tempMeasureOf: daily high vs overnight low wording", async () => {
   assert.equal(tempMeasureOf("Cold weekend"), null);
   assert.equal(tempMeasureOf("High demand season with low sales"), null);
 });
+
+test("game contracts: away team first on Kalshi/Gemini 'vs' titles; Gemini ticker time shown in CT; home-game risk rejects a road game", async () => {
+  const { gameSides, gameStartCT, gameFits } = await import("../lib/ai/advisor");
+  const g = { id: "gemini:GEMI-NBA-2611220100-NOP-SAS-M-SAS", venue: "gemini", symbol: "GEMI-NBA-2611220100-NOP-SAS-M-SAS", eventTicker: "GEMI-NBA-2611220100-NOP-SAS", eventTitle: "New Orleans vs San Antonio", label: "San Antonio", peril: "game", status: "open", yesAsk: 0.9, noAsk: 0.11, expiry: "2026-11-23T13:00:00Z" } as unknown as MarketContract;
+  assert.deepEqual(gameSides(g), { away: "New Orleans", home: "San Antonio" });
+  assert.equal(gameStartCT(g), "Sat, Nov 21, 7:00 PM CT");
+  const k = { id: "kalshi:KXNBAGAME-26NOV23SASSAC-SAC", venue: "kalshi", symbol: "KXNBAGAME-26NOV23SASSAC-SAC", eventTicker: "KXNBAGAME-26NOV23SASSAC", eventTitle: "San Antonio vs Sacramento", label: "Sacramento", peril: "game", status: "open", yesAsk: 0.5, noAsk: 0.5, expiry: "2026-11-24T05:00:00Z" } as unknown as MarketContract;
+  assert.deepEqual(gameSides(k), { away: "San Antonio", home: "Sacramento" });
+  const risk = { id: "r", peril: "game", title: "Spurs lose home game vs Sacramento", trigger: "Sacramento beats the Spurs", lossUsd: 1000, lossReasoning: "", confidence: 0.5 } as Risk;
+  const bar = { id: "b", name: "Bar", description: "Sports bar in San Antonio", city: "San Antonio, TX", avgDailyRevenueUsd: 3000, busyDays: ["Fri"], monthlyBudgetUsd: 200 } as any;
+  assert.equal(gameFits(risk, k, bar, new Date("2026-11-20T12:00:00Z")), false); // Spurs are away: not a home game
+  assert.equal(gameFits({ ...risk, title: "Spurs lose Saturday home game vs New Orleans", trigger: "Pelicans beat the Spurs" } as Risk, g, bar, new Date("2026-11-20T12:00:00Z")), true);
+});
+
+test("season line whose stage differs from the title gets the contract's wording as its title", async () => {
+  const { stageWanted } = await import("../lib/ai/horizon");
+  assert.equal(stageWanted("Spurs miss the playoffs")[0], "playoffs");
+  assert.notEqual(stageWanted("Spurs miss the playoffs")[0], "wins"); // so a wins-ladder line retitles to "... win fewer than 50 games"
+});
+
+test("gameTrigger: title/trigger from the contract (who loses, home, real game day)", async () => {
+  const { gameLineWording: gameTrigger } = await import("../lib/ai/advisor");
+  const g = { id: "gemini:GEMI-NBA-2611220100-NOP-SAS-M-NOP", venue: "gemini", symbol: "GEMI-NBA-2611220100-NOP-SAS-M-NOP", eventTicker: "GEMI-NBA-2611220100-NOP-SAS", eventTitle: "New Orleans vs San Antonio", label: "New Orleans", peril: "game", status: "open", yesAsk: 0.11, noAsk: 0.9, expiry: "2026-11-23T13:00:00Z" } as unknown as MarketContract;
+  assert.deepEqual(gameTrigger(g, "yes"), { title: "The Spurs lose at home to the Pelicans (Sat, Nov 21)", trigger: "New Orleans beats San Antonio at San Antonio, Sat, Nov 21, 7:00 PM CT" });
+  const sas = { ...g, id: "gemini:GEMI-NBA-2611220100-NOP-SAS-M-SAS", symbol: "GEMI-NBA-2611220100-NOP-SAS-M-SAS", label: "San Antonio" } as MarketContract;
+  assert.equal(gameTrigger(sas, "no")!.title, "The Spurs lose at home to the Pelicans (Sat, Nov 21)");
+});
