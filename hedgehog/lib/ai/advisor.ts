@@ -591,6 +591,27 @@ export async function advise(owner: BusinessProfile, opts: AdviseOpts = {}): Pro
     let cands: MarketContract[] = [];
     try {
       cands = (await deps.findCandidates(risk, profile, 12)).filter((c) => c.status === "open");
+      // A risk about a named month ("Rainy December") must be hedged with THAT month's market, never a neighbour's.
+      const want = monthsNamed(`${risk.title} ${risk.trigger} ${risk.window ?? ""}`);
+      if (want.size === 1) {
+        const before = cands.length;
+        cands = cands.filter((c) => { const have = monthsNamed(`${c.eventTitle} ${c.label}`); return !have.size || [...have].some((m) => want.has(m)); });
+        if (before && !cands.length) {
+          uncovered.push({ riskId: risk.id, reason: `No ${MONTH_NAMES[[...want][0]]} market is listed yet; venues usually open the next month near month-end.` });
+          return;
+        }
+      }
+      // An ongoing cost (monthly fuel bill, margins) isn't hedged by a price on ONE day: a 1-day contract barely moves
+      // a month's bill. Cost risks need a contract that settles >= ~3 days out (weekly / monthly price markets).
+      if (COST_PERILS.has(risk.peril) && ONGOING_COST.test(`${risk.title} ${risk.trigger} ${risk.lossReasoning}`)) {
+        const before = cands.length;
+        const horizonOk = (c: MarketContract) => { const t = Date.parse(c.expiry); return !Number.isFinite(t) || t - now.getTime() >= 3 * 86_400_000; };
+        cands = cands.filter(horizonOk);
+        if (before && !cands.length) {
+          uncovered.push({ riskId: risk.id, reason: "Only one-day price markets are listed for this; they don't track a monthly cost." });
+          return;
+        }
+      }
     } catch (e) {
       uncovered.push({ riskId: risk.id, reason: `Market search failed: ${(e as Error).message.slice(0, 120)}` });
       return;
@@ -825,6 +846,17 @@ async function attachEvidence(risks: Risk[], choices: Map<string, TieredLeg[]>, 
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+const COST_PERILS = new Set(["natgas", "oil", "gas", "metals"]);
+const ONGOING_COST = /month|monthly|week|weekly|bill|costs?\b|expense|margin|ongoing|season|quarter/i;
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const MONTH_RE = /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may(?=\s*(?:\d|20\d\d))|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/gi;
+/** Month indexes (0-11) named in text; "Nov 21 - Nov 22" style day ranges count as that month too. */
+export function monthsNamed(text: string): Set<number> {
+  const out = new Set<number>();
+  for (const m of text.matchAll(MONTH_RE)) out.add(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"].indexOf(m[1].slice(0, 3).toLowerCase()));
+  return out;
+}
 
 /** Economic hedges: show the trigger in the market's own words ("CPI in November: Above 0.1%") so the period/strike
  *  always match the contract (the LLM's paraphrase could name the settlement month instead of the data month). */
