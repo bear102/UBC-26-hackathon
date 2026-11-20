@@ -5,6 +5,13 @@ import { IconArrowRight, PerilIcon } from "@/components/Icons";
 import { PastQuotes } from "@/components/PastQuotes";
 import s from "./page.module.css";
 
+// Creative hedges the AI can build today (each maps to live market types: temperature, game results, rain, diesel).
+const EXAMPLES = [
+  { peril: "cold", who: "An ice-cream truck", what: "a cold weekend" },
+  { peril: "game", who: "A sports bar", what: "the home team losing" },
+  { peril: "rain", who: "A roofer", what: "a rainy week" },
+  { peril: "oil", who: "A delivery fleet", what: "a diesel price spike" },
+];
 const PRICED = ["Priced on Gemini", "Kalshi", "Polymarket", "Paid out on Solana"];
 
 export default function Landing() {
@@ -26,10 +33,13 @@ export default function Landing() {
               <em className={s.stamp}>anything</em>
             </h1>
             <p className={`lede ${s.lede}`}>
-              Our AI finds the days that would hurt your business and builds cover from live prediction markets.
-              <b> You see what it pays if the bad day happens, and what it costs if it doesn&apos;t.</b>
-              {" "}Your policy lives on Solana, not in our database: the vault is public and the program pays your wallet.
+              Our AI finds the days that would hurt your business and builds cover from live prediction markets. For example:
             </p>
+            <ul className={s.examples}>
+              {EXAMPLES.map((e) => (
+                <li key={e.who}><span className={s.exIc} aria-hidden="true"><PerilIcon peril={e.peril} size={16} /></span><span><b>{e.who}</b> hedges {e.what}</span></li>
+              ))}
+            </ul>
             <div className={s.cta}>
               <a href="#pick" className="btn btn-primary btn-lg">Get my quote <IconArrowRight size={16} /></a>
               <Link href="/how-it-works" className="btn btn-lg">How it works</Link>
