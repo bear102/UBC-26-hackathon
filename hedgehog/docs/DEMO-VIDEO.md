@@ -1,30 +1,30 @@
-# Demo video: 2:00 plan
+# Demo video: final cut (2:12)
 
-The Devpost video must be 2-3 minutes (YouTube or Drive). We aim for **2:00**: under 2:10, never over 3:00.
-Screen clips are recorded by script (headless Chromium, 1920×1080, visible cursor) into `demo-assets/clips/`. Stills go in `demo-assets/shots/`.
-You record **one voiceover track** (script below), plus two optional clips.
+File: `public/demo-assets/hedgehog-demo-v5.mp4` (served at https://178-156-138-228.sslip.io/demo-assets/hedgehog-demo-v5.mp4; not in git).
+Devpost asks for 2-3 minutes. Built by script from clips recorded at 2880×1620 with logged clicks: title card → 13 sections (click zooms, section label, captions, voiceover) → outro, with crossfades. Each section lasts exactly as long as its line.
 
-## Shot list
+## Sections and voiceover (in order)
+| # | Label | Footage | Line |
+|---|---|---|---|
+| 1 | — | Home hero animating in | A rainy Saturday can wipe out a week of profit for a food truck or a patio bar. No insurer writes a policy that small. But prediction markets already price days like that. |
+| 2 | Describe your business | Form typed, quick question, quote reveal | Hedgehog turns those markets into insurance. I describe my business in one sentence. Claude maps my risks and asks a quick question or two about how the business runs. |
+| 3 | Any business | Food truck rain line, caterer diesel line, sports bar Spurs line | It works for any business: a food truck gets rain cover, a caterer hedges diesel, a sports bar hedges a home loss. |
+| 4 | Live market quote | Schedule, Gemini Spurs card, venue compare, Plan B | Every risk gets a dollar loss and a live contract on Gemini, Kalshi or Polymarket. Our code pulls the markets; the AI can only choose from those, and the cheapest venue sets the price. It shows exactly what I pay, and what I get if the bad day comes. And the whole plan fits my budget. |
+| 5 | Honest about limits | Natural hedges, Not coverable | It's honest about what it can't cover. Coin-flip prices and loose links stay out of the plan, and it tells you what not to hedge: a Spurs win already helps this bar. |
+| 6 | You stay in control | Plan A/B/C, coverage 25/50/100, edit loss | The owner stays in control: pick a plan, choose how much of each loss to cover, or correct the AI's estimate, and the quote re-prices instantly. |
+| 7 | Buy on Solana | Demo wallet, Cover all, receipt, tx | One click covers everything. One wallet approval buys every policy from our Solana program. The premium sits in a public vault that only sells cover it can actually pay. |
+| 8 | Priced & backed on Gemini | Gemini best-price row, backing order, markets explorer | Gemini is our primary venue. When it has the best price, the policy is priced on Gemini and matched with a backing order there: a dry run on devnet today. |
+| 9 | Live feed · QuickNode Streams | Dashboard + live feed | My cover shows up right away. QuickNode Streams watches our program on chain and pushes every policy and payout into this live feed. |
+| 10 | Automatic payout | Policy #3 settle tx (vault −3, owner +3) | When the market resolves, the policy settles itself. This one was written on a Gemini temperature market. Gemini resolved it, and the vault paid the owner. No claim form. |
+| 11 | On-chain trust | Vault + program on SolanaFM, refund clause | Everything that matters is on chain: the vault, its exposure limit and every policy. If a market never resolves, anyone can trigger the refund. |
+| 12 | Tax record from the chain | Tax table + CSV | And the owner gets a tax record straight from the chain. |
+| 13 | — | How it works → home | Hedgehog. Insurance for your worst business day, priced by prediction markets and paid on Solana. |
 
-| # | Time | Clip | Screen (what happens) | Voiceover (≈150 words/min) |
-|---|---|---|---|---|
-| 1 | 0:00–0:12 | `01-hook.mp4` | Home hero: the certificate, a slow scroll to "Pick a business" | "A rainy Saturday can wipe out a week of profit for a food truck or a patio bar. No insurer writes a policy that small. But prediction markets already price days like that." |
-| 2 | 0:12–0:32 | `02-describe.mp4` | "Describe yours": type a one-line patio bar in Austin → the AI's question (multi-select weather) → answer (e.g. how much seating is on the patio) → progress screen (the ~60 s wait is cut in the edit) | "Hedgehog turns those markets into insurance. I describe my business in one sentence. Claude maps my risks and asks a quick question or two about how the business runs." |
-| 3 | 0:32–1:00 | `03-plan.mp4` | Plan: the risk list with dollar losses → one risk card (if it happens / if it doesn't) → "Where the price comes from" venue compare → Plan B "AI pick" selected → budget line | "Every risk gets a dollar loss and a live contract on Gemini, Kalshi or Polymarket. Our code pulls the markets; the AI can only choose from those, and the cheapest venue sets the price. It shows exactly what I pay, and what I get if the bad day comes. And the whole plan fits my budget." |
-| 4 | 1:00–1:20 | `04-buy.mp4` | Create demo wallet → Cover all → approve → "Covered" receipt → Solana Explorer tx page | "One click covers everything. One wallet approval buys every policy from our Solana program. The premium sits in a public vault that only sells cover it can actually pay." |
-| 5 | 1:20–1:38 | `05-dashboard.mp4` | Dashboard "Your cover" → the live feed with the new policy and its "QuickNode" event | "My cover shows up right away. QuickNode Streams watches our program on chain and pushes every policy and payout into this live feed." |
-| 6 | 1:38–1:52 | `06-settle.mp4` | Explorer: policy #3 settle tx ([2tB5…Mx2s](https://explorer.solana.com/tx/2tB5XkKf3MMhL3n7bwjS14Yh1MYsyUThPgTQaZS3A6pLFJFPNyDdDP54iBei2NuQUjmubTCNfHdPFknFgmMDMx2s?cluster=devnet)), zoomed on the vault → owner 3.00 transfer | "When the market resolves, the policy settles itself. This one was written on a Gemini temperature market. Gemini resolved it, and the vault paid the owner. No claim form." |
-| 7 | 1:52–2:00 | `07-close.mp4` | /how-it-works hero, or back to the home hero with the logo | "Hedgehog. Insurance for your worst business day, priced by prediction markets and paid on Solana." |
-
-Spare B-roll, in case a section runs short or needs covering: `b-markets.mp4` (markets explorer, Gemini/Kalshi/Polymarket side by side), `b-mobile.mp4` (the plan at phone width), `b-tax.mp4` (onchain tax record + CSV).
-
-## What you film (only you can)
-1. **Voiceover (required).** Read the right-hand column in one take per section, in a quiet room, phone or laptop mic about 15 cm away. Leave about 1 s of silence between sections. 7 short files or one long file both work. Total ≈ 245 words ≈ 1:45 of speech; the visuals fill the rest.
-2. **Optional: a 5-10 s face intro** ("Hi, I'm … and this is Hedgehog"). Only if you want a face on it. It can replace the first line of section 1.
-3. **Optional: a real Phantom approval** on your own machine (10 s): on the plan page press Cover all and approve in the Phantom popup. Judges for the Solana prize like seeing a real wallet. The scripted clip uses the built-in demo wallet, which has no popup.
-
-## Editing
-Use any editor (CapCut, iMovie, DaVinci). Lay the clips in order, put your voiceover on top, and trim each clip to its line. Cut the AI wait in clip 2 to about 1 s with a "≈60 s later" caption. Export at 1080p and upload to YouTube (unlisted is fine). Add the link to Devpost and the README.
+## Optional clips from you (copy to `/root/hedgehog-voice/` on the server)
+- Your voice: one file per line above, named `01`…`13` in this table's order (any audio format).
+- A real Phantom approval (~8 s): replaces part of section 7.
+- Your QuickNode "ubc26" stream page (~8 s): network, dataset, filter, destination; goes in section 9.
+- A face intro (~5 s), before section 1.
 
 ## Do not show
-Policy #7 (`hedgehog:hail`), e2e test fixtures presented as real payouts, the `/wallet-debug` page, `.env` files, or any API key.
+Policy #7 (`hedgehog:hail`), e2e fixtures as real payouts, `/wallet-debug`, `.env` files or keys.
