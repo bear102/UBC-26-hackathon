@@ -53,15 +53,26 @@ function saveTxCache() {
 
 // ---------------------------------------------------------------- throttled RPC
 
-let chain: Promise<unknown> = Promise.resolve();
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-/** Serialize every RPC call made here, with a gap, retrying 429 / fetch errors with backoff. */
-function rpc<T>(fn: () => Promise<T>): Promise<T> {
-  const run = async () => {
+// Public devnet RPC rate-limits hard: one call at a time with a gap. A dedicated endpoint (QuickNode) takes parallel calls.
+const DEDICATED = () => /quiknode|helius|alchemy|triton/i.test(process.env.SOLANA_RPC_URL ?? "");
+const MAX_PARALLEL = () => Number(process.env.TAX_RPC_PARALLEL ?? (DEDICATED() ? 6 : 1));
+const GAP = () => (DEDICATED() ? 0 : GAP_MS);
+let active = 0;
+const waiting: (() => void)[] = [];
+async function slot(): Promise<() => void> {
+  if (active >= MAX_PARALLEL()) await new Promise<void>((r) => waiting.push(r));
+  active++;
+  return () => { active--; waiting.shift()?.(); };
+}
+/** Limit concurrent RPC calls made here (1 + gap on public RPC, 6 on a dedicated endpoint); retry 429 / fetch errors with backoff. */
+async function rpc<T>(fn: () => Promise<T>): Promise<T> {
+  const release = await slot();
+  try {
     for (let attempt = 0; ; attempt++) {
       try {
         const v = await fn();
-        await sleep(GAP_MS);
+        if (GAP()) await sleep(GAP());
         return v;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -69,10 +80,7 @@ function rpc<T>(fn: () => Promise<T>): Promise<T> {
         await sleep(500 * 2 ** attempt);
       }
     }
-  };
-  const p = chain.then(run, run);
-  chain = p.catch(() => undefined);
-  return p;
+  } finally { release(); }
 }
 
 async function allSignatures(pda: PublicKey): Promise<string[]> {
@@ -110,30 +118,33 @@ async function build(owner: string): Promise<ChainData> {
 
   // signature -> first policy PDA it was found under (batch buys touch several policies; events carry the rest)
   const sigs = new Map<string, string>();
-  for (const p of [...policies].sort((a, b) => a.policyId - b.policyId)) {
+  const ordered = [...policies].sort((a, b) => a.policyId - b.policyId);
+  // fetched in parallel (rpc() bounds concurrency), merged in policy order so "first PDA" stays deterministic
+  const lists = await Promise.all(ordered.map(async (p) => {
     let list = finalSigs.get(p.pda);
     if (!list) {
       list = await allSignatures(new PublicKey(p.pda));
       if (p.status !== "open") finalSigs.set(p.pda, list);
     }
-    for (const s of list) if (!sigs.has(s)) sigs.set(s, p.pda);
-  }
+    return list;
+  }));
+  ordered.forEach((p, i) => { for (const s of lists[i]) if (!sigs.has(s)) sigs.set(s, p.pda); });
 
   const cache = loadTxCache();
   let dirty = false;
-  const txs: { summary: TxSummary; policyPda: string }[] = [];
-  for (const [sig, pda] of sigs) {
+  const fetched = await Promise.all([...sigs].map(async ([sig, pda]) => {
     const key = `${owner}:${sig}`;
     let summary = cache.get(key);
     if (!summary) {
       const tx: ParsedTransactionWithMeta | null = await rpc(() => conn.getParsedTransaction(sig, { maxSupportedTransactionVersion: 0, commitment: "confirmed" }));
-      if (!tx) continue; // not yet visible; picked up on the next refresh
+      if (!tx) return null; // not yet visible; picked up on the next refresh
       summary = summarizeTx(sig, tx, owner, mint);
       cache.set(key, summary);
       dirty = true;
     }
-    txs.push({ summary, policyPda: pda });
-  }
+    return { summary, policyPda: pda };
+  }));
+  const txs: { summary: TxSummary; policyPda: string }[] = fetched.filter((x): x is { summary: TxSummary; policyPda: string } => !!x);
   if (dirty) saveTxCache();
 
   const asOfSlot = await rpc(() => conn.getSlot("confirmed"));

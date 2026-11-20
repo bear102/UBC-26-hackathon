@@ -2,6 +2,7 @@
 // - Builds UNSIGNED, owner-pays-fee txs (base64) for register_business + buy_policy, for Phantom to sign.
 // - Reads policies / underwriter state.
 // - Sends attestor-signed settle_policy and anyone-signed expire_policy (the crank).
+import { getConnection } from "./connection";
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -138,7 +139,7 @@ export class CoverClient {
   readonly uw: PublicKey;
 
   constructor(opts: CoverClientOpts = {}) {
-    this.connection = opts.connection ?? new Connection(env.rpc(), "confirmed");
+    this.connection = opts.connection ?? getConnection("devnet"); // QuickNode + public fallback (lib/solana/connection.ts)
     const provider = new AnchorProvider(this.connection, walletFor(opts.signer), { commitment: "confirmed" });
     this.program = new Program<HedgehogPolicy>(idlJson as HedgehogPolicy, provider);
     this.tokenProgram = opts.tokenProgram ?? TOKEN_PROGRAM_ID;
