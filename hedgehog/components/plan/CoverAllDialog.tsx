@@ -20,9 +20,14 @@ import s from "./CoverAllDialog.module.css";
 
 type Stage = "review" | "connect" | "build" | "signing" | "sending" | "done" | "error";
 
-export function CoverAllDialog({ items, businessId, budgetUsd, onClose, onDone }: {
+export function CoverAllDialog({ items: initial, businessId, budgetUsd, onClose, onDone, onRefresh }: {
   items: CoverItem[]; businessId: string; budgetUsd?: number; onClose: () => void; onDone: (r: CheckoutResult & { contractId: string }) => void;
+  /** Re-price the plan at live asks (after "price moved"); returns the not-yet-covered items at the new prices. */
+  onRefresh?: () => Promise<CoverItem[]>;
 }) {
+  const [items, setItems] = useState(initial);
+  const [moved, setMoved] = useState<{ before: number; after: number } | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const { publicKey, signTransaction, signAllTransactions, connected } = useWallet();
   const { setVisible } = useWalletModal();
   const [stage, setStage] = useState<Stage>("review");
@@ -84,6 +89,20 @@ export function CoverAllDialog({ items, businessId, budgetUsd, onClose, onDone }
     window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey);
   }, [busy, onClose]);
 
+  const priceMoved = !!err && /price moved/i.test(err);
+  async function refresh() {
+    if (!onRefresh) return;
+    setRefreshing(true);
+    try {
+      const before = items.reduce((a, i) => a + i.line.premiumUsd, 0);
+      const fresh = await onRefresh();
+      setItems(fresh);
+      setMoved({ before, after: fresh.reduce((a, i) => a + i.line.premiumUsd, 0) });
+      setErr(null); setStage("review");
+    } catch (e) { setErr(walletErrorMessage(e)); }
+    finally { setRefreshing(false); }
+  }
+
   function start() {
     setErr(null);
     if (!mock && !connected) { setStage("connect"); setVisible(true); return; }
@@ -117,6 +136,7 @@ export function CoverAllDialog({ items, businessId, budgetUsd, onClose, onDone }
 
         {stage === "review" && (
           <>
+            {moved && <div className="alert alert-info small" style={{ marginBottom: 12 }}>Prices updated to the live market: total {moved.after > moved.before ? "up" : moved.after < moved.before ? "down" : "unchanged"} from {usd(moved.before, 2)} to <b>{usd(moved.after, 2)}</b>. Check the lines above, then cover all.</div>}
             <p className={`xs muted ${c.trust}`}>Prices are re-checked live before you sign. Devnet prototype, not an insurance product. Each policy pays on its market&apos;s result, not your actual loss.</p>
             {mock && <div className="alert alert-info small" style={{ marginBottom: 12 }}>Demo mode: simulated, nothing goes onchain.</div>}
             <div className={c.actions}>
@@ -131,8 +151,13 @@ export function CoverAllDialog({ items, businessId, budgetUsd, onClose, onDone }
 
         {stage === "error" && (
           <>
-            <div className="alert alert-bad" role="alert" style={{ marginBottom: 12 }}>{err}</div>
-            <div className={c.actions}><button className="btn btn-ghost" onClick={onClose}>Close</button><button className="btn btn-primary" onClick={start}>Try again</button></div>
+            <div className="alert alert-bad" role="alert" style={{ marginBottom: 12 }}>{priceMoved ? <>A market price moved since your quote. <span className="muted">({err})</span></> : err}</div>
+            <div className={c.actions}>
+              <button className="btn btn-ghost" onClick={onClose}>Close</button>
+              {priceMoved && onRefresh
+                ? <button className="btn btn-primary" onClick={refresh} disabled={refreshing}>{refreshing ? <><span className="spinner" /> Refreshing…</> : "Refresh prices"}</button>
+                : <button className="btn btn-primary" onClick={start}>Try again</button>}
+            </div>
           </>
         )}
 

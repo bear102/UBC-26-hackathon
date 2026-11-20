@@ -101,6 +101,9 @@ export type CoverPlanLine = { marketRef: string; side: "yes" | "no"; contracts: 
 export type CoverPlanRes = { txs: string[]; policies: { index: number; policyId: number; policyPda: string; tx: number; marketRef: string; premiumUsd: number; payoutUsd: number }[]; warnings: string[]; quoteExpiresAt: string };
 /** "Cover all": priced + co-signed txs for every line (≤3 policies per tx); sign all at once, send in order. */
 export const coverBuyPlan = (b: { owner: string; businessId?: string; monthlyBudgetUsd?: number; lines: CoverPlanLine[] }) => call<CoverPlanRes>("/api/cover/buy-plan", post(b));
+/** Live ask per line (no AI, no tx): used to re-price a plan after "price moved". */
+export const coverReprice = (lines: { marketRef: string; side: "yes" | "no" }[]) =>
+  call<{ lines: { marketRef: string; side: "yes" | "no"; ask: number | null; error?: string }[]; at: string }>("/api/cover/reprice", post({ lines }));
 export const coverConfirm = (policyPda: string, signature: string) => call<{ backing?: DeskHedge }>("/api/cover/confirm", post({ policyPda, signature }));
 
 /** Devnet demo faucet: tops the wallet up to $50 test dollars + fee SOL. Never throws (mainnet / real-USDC setups just skip). */

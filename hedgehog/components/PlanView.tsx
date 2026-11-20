@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BusinessProfile, ClarifyAnswer, ClarifyQuestion, Quote, QuoteLine, Risk } from "@/lib/types";
-import { advise, adviseQuestions, getPresets } from "@/lib/client/api";
+import { advise, adviseQuestions, coverReprice, getPresets } from "@/lib/client/api";
 import { rescaleQuote, type Coverage } from "@/lib/client/quote";
 import { clearQuotes, lastBusiness, lastQuotePct, loadClarify, loadProfile, loadQuote, saveClarify, saveProfile, saveQuote, setLastBusiness } from "@/lib/client/storage";
 import { FIXTURE_PRESETS } from "@/lib/fixtures";
@@ -49,6 +49,7 @@ export function PlanView() {
   // "Quote ready" reveal: only when the AI just built the first quote on this visit (never for a cached quote).
   const [reveal, setReveal] = useState(false);
   const [touring, setTouring] = useState(false);
+  const [repricing, setRepricing] = useState(false);
   const hadQuote = useRef(false);
   // Quick questions before the quote (null = not asking). `edit` = re-answering on an existing plan.
   const [asking, setAsking] = useState<{ questions: ClarifyQuestion[]; previous: ClarifyAnswer[]; edit: boolean } | null>(null);
@@ -194,6 +195,21 @@ export function PlanView() {
   const items = coverItems(quote.lines, risksById, (l) => !!bought[`cover:${l.contractId}`], profile);
   const doneCount = items.filter((i) => i.done).length;
   const startCover = (line: QuoteLine) => setCheckout({ kind: "cover", line });
+  /** Re-price every buyable line at the live ask (no AI), re-fit coverage + budget, and show it. Returns the new
+   *  not-yet-covered items so an open "Cover all" dialog can continue with them. */
+  const refreshPrices = async (): Promise<CoverItem[]> => {
+    const buyable = quote.lines.filter((l) => l.action !== "read-only");
+    const r = await coverReprice(buyable.map((l) => ({ marketRef: l.contractId, side: l.side })));
+    const ask = new Map(r.lines.map((x) => [`${x.marketRef}|${x.side}`, x.ask]));
+    const lines = quote.lines.map((l) => {
+      const a = ask.get(`${l.contractId}|${l.side}`);
+      return a == null ? l : { ...l, pricePerContract: a };
+    });
+    const q = rescaleQuote({ ...quote, lines, createdAt: r.at }, cov);
+    saveQuote(q, cov); setQuote(q); setLocal(true);
+    const byId = new Map(q.risks.map((x) => [x.id, x]));
+    return coverItems(q.lines, byId, (l) => !!bought[`cover:${l.contractId}`], profile).filter((i) => !i.done);
+  };
 
   return (
     <div className="container">
@@ -263,7 +279,10 @@ export function PlanView() {
       <section className={`section ${s.risks}`} id="risks">
         <div className="sec-head">
           <div><span className="eyebrow">Each risk in detail</span><h2>Your risks, <em>matched to markets</em></h2></div>
-          <span className={`muted small ${s.quoted}`}>{loading ? <><span className="spinner" /> refreshing…</> : `Quoted ${new Date(quote.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`}</span>
+          <span className={`muted small ${s.quoted}`}>{loading || repricing ? <><span className="spinner" /> refreshing…</> : <>
+            Priced {new Date(quote.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+            {" · "}<button type="button" className={s.tourLink} onClick={async () => { setRepricing(true); try { await refreshPrices(); } finally { setRepricing(false); } }}>Refresh prices</button>
+          </>}</span>
         </div>
         <div className="stack">
           {coveredRisks.map((r, i) => (
@@ -307,7 +326,7 @@ export function PlanView() {
       <div className={s.barSpace} aria-hidden="true" />
 
       {coverAll && (
-        <CoverAllDialog items={coverAll} businessId={profile.id} budgetUsd={budget} onClose={() => setCoverAll(null)}
+        <CoverAllDialog items={coverAll} businessId={profile.id} budgetUsd={budget} onClose={() => setCoverAll(null)} onRefresh={refreshPrices}
           onDone={({ contractId, ...r }) => setBought((b) => ({ ...b, [`cover:${contractId}`]: r }))} />
       )}
 
