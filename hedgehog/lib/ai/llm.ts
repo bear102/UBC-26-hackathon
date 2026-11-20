@@ -2,6 +2,7 @@
 // Order: Gemini -> Anthropic -> OpenAI (each only if its key is set). Each provider gets one
 // "repair" retry when the output is not valid JSON or fails the zod schema. Keys are never logged.
 import { GoogleGenAI } from "@google/genai";
+import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod/v4";
 import { env } from "../env";
 
@@ -21,7 +22,7 @@ export class LlmError extends Error {
   constructor(message: string, public attempts: string[]) { super(message); this.name = "LlmError"; }
 }
 
-const TIMEOUT: Record<Tier, number> = { pro: 40_000, fast: 20_000 };
+const TIMEOUT: Record<Tier, number> = { pro: 50_000, fast: 25_000 };
 
 /** A raw provider: returns the model's text (expected to be JSON). */
 interface Provider {
@@ -138,24 +139,28 @@ const geminiProvider: Provider = {
   },
 };
 
+let anthropic: Anthropic | null = null;
+const anthropicClient = () => (anthropic ??= new Anthropic({ apiKey: env.anthropicKey(), maxRetries: 1 }));
+/** Claude via the official SDK. Sonnet 5.5 (adaptive thinking): effort "medium" for the heavy calls (risk map, brainstorm),
+ *  "low" for the quick ones (matching, summary, questions) to keep a plan fast. Server-side refusal fallback is on. */
 const anthropicProvider: Provider = {
   name: "anthropic",
   available: () => !!env.anthropicKey(),
   model: (tier) => (tier === "pro" ? process.env.ANTHROPIC_MODEL_PRO || "claude-sonnet-5-5" : process.env.ANTHROPIC_MODEL_FAST || "claude-sonnet-5-5"),
   async call({ system, prompt, jsonSchema, tier, timeoutMs }) {
-    const j = await fetchJson("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-api-key": env.anthropicKey(), "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        model: anthropicProvider.model(tier),
-        max_tokens: 4096,
-        system,
-        messages: [{ role: "user", content: prompt + schemaHint(jsonSchema) }],
-      }),
-    }, timeoutMs);
-    const text = (j.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
-    if (!text) throw new Error(`anthropic returned no text (stop: ${j.stop_reason})`);
-    return { text, model: anthropicProvider.model(tier) };
+    const msg = await anthropicClient().beta.messages.create({
+      model: anthropicProvider.model(tier),
+      max_tokens: 16000,
+      system,
+      messages: [{ role: "user", content: prompt + schemaHint(jsonSchema) }],
+      output_config: { effort: tier === "pro" ? "medium" : "low" },
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+    } as any, { timeout: timeoutMs }) as any;
+    if (msg.stop_reason === "refusal") throw new Error("anthropic refused the request");
+    const text = (msg.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
+    if (!text) throw new Error(`anthropic returned no text (stop: ${msg.stop_reason})`);
+    return { text, model: msg.model ?? anthropicProvider.model(tier) };
   },
 };
 
@@ -179,7 +184,8 @@ const openaiProvider: Provider = {
   },
 };
 
-export const PROVIDERS: Provider[] = [geminiProvider, anthropicProvider, openaiProvider];
+/** Claude first when its key is set (LLM_PRIMARY=gemini flips it back); Gemini and OpenAI are fallbacks. */
+export const PROVIDERS: Provider[] = process.env.LLM_PRIMARY === "gemini" ? [geminiProvider, anthropicProvider, openaiProvider] : [anthropicProvider, geminiProvider, openaiProvider];
 
 /** Core loop, exported for tests with fake providers. */
 export async function generateJsonWith<T>(providers: Provider[], opts: GenerateJsonOpts<T>): Promise<GenerateJsonResult<T>> {
