@@ -208,7 +208,9 @@ export function Dashboard() {
 
       <section className={s.cols}>
         <div>
-          <div className={s.secHead}><h2>Hedges</h2><span className={s.secMeta}>{positions ? `${positions.length} on file` : ""}</span></div>
+          {/* Legacy: outcome-token positions from the retired "Buy hedge" button. Shown only for wallets that hold some. */}
+          {positions && positions.length > 0 && (<>
+          <div className={s.secHead}><h2>Earlier hedges (outcome tokens)</h2><span className={s.secMeta}>{positions ? `${positions.length} on file` : ""}</span></div>
           <div className={s.list}>
           {positions === null ? <div className="empty"><span className="spinner" /> Loading positions…</div>
             : positions.length === 0 ? <div className="empty">No hedges yet. <Link href="/">Get a quote</Link>.</div>
@@ -248,10 +250,12 @@ export function Dashboard() {
             })}
           </div>
 
-          <div className={s.secHead} style={{ marginTop: 40 }}><h2>Hedgehog Cover policies</h2><span className={s.secMeta}>{policies ? `${policies.length} on file` : ""}</span></div>
+          </>)}
+
+          <div className={s.secHead} style={positions && positions.length > 0 ? { marginTop: 40 } : undefined}><h2>Your cover</h2><span className={s.secMeta}>{policies ? `${policies.length} on file` : ""}</span></div>
           <div className={s.list}>
           {policies === null ? <div className="empty"><span className="spinner" /> Loading policies…</div>
-            : policies.length === 0 ? <div className="empty">No Cover policies yet.</div>
+            : policies.length === 0 ? <div className="empty">No cover yet. <Link href="/">Get a quote</Link>.</div>
             : policies.map((x) => (
               <article key={x.policyId + (x.policyPda ?? "")} className={`stub ${s.stub}`}>
                 <div className="stub-left">
