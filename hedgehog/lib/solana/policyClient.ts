@@ -72,6 +72,10 @@ export interface CoverInfo {
 // ---------------------------------------------------------------- helpers
 
 export const toUnits = (usd: number) => new BN(Math.round(usd * 10 ** USDC_DECIMALS));
+/** Purchases are not capped by a monthly budget (the owner's budget only sizes the quote). The deployed program still
+ *  enforces a per-business 30-day budget, so every business is registered / topped up to this effectively unlimited
+ *  value and the check can never trip. ($1B: 1e15 units, inside JS's safe-integer range.) */
+export const NO_BUDGET_USD = 1_000_000_000;
 export const fromUnits = (v: BN | bigint | number | string) => Number(v.toString()) / 10 ** USDC_DECIMALS;
 export const triggerHash = (trigger: string) => Array.from(createHash("sha256").update(trigger).digest());
 
@@ -250,11 +254,10 @@ export class CoverClient {
     const names: string[] = [];
 
     if (!existing) {
-      const budget = p.monthlyBudgetUsd ?? Math.max(500, p.premiumUsd);
-      ixs.push(await this.program.methods.registerBusiness(toUnits(budget)).accountsPartial({ owner: p.owner, business: biz }).instruction());
+      ixs.push(await this.program.methods.registerBusiness(toUnits(NO_BUDGET_USD)).accountsPartial({ owner: p.owner, business: biz }).instruction());
       names.push("register_business");
-    } else if (p.monthlyBudgetUsd !== undefined && !toUnits(p.monthlyBudgetUsd).eq(existing.monthlyBudget)) {
-      ixs.push(await this.program.methods.setBudget(toUnits(p.monthlyBudgetUsd)).accountsPartial({ owner: p.owner, business: biz }).instruction());
+    } else if (existing.monthlyBudget.lt(toUnits(NO_BUDGET_USD))) {
+      ixs.push(await this.program.methods.setBudget(toUnits(NO_BUDGET_USD)).accountsPartial({ owner: p.owner, business: biz }).instruction());
       names.push("set_budget");
     }
 
@@ -330,13 +333,12 @@ export class CoverClient {
     const totalPayout = p.items.reduce((a, i) => a + i.payoutUsd, 0);
 
     const setup: TransactionInstruction[] = [];
-    const budget = p.monthlyBudgetUsd ?? Math.max(500, totalPremium);
     if (!existing) {
-      setup.push(await this.program.methods.registerBusiness(toUnits(Math.max(budget, totalPremium))).accountsPartial({ owner: p.owner, business: biz }).instruction());
-    } else if (p.monthlyBudgetUsd !== undefined && !toUnits(p.monthlyBudgetUsd).eq(existing.monthlyBudget)) {
-      setup.push(await this.program.methods.setBudget(toUnits(p.monthlyBudgetUsd)).accountsPartial({ owner: p.owner, business: biz }).instruction());
+      setup.push(await this.program.methods.registerBusiness(toUnits(NO_BUDGET_USD)).accountsPartial({ owner: p.owner, business: biz }).instruction());
+    } else if (existing.monthlyBudget.lt(toUnits(NO_BUDGET_USD))) {
+      setup.push(await this.program.methods.setBudget(toUnits(NO_BUDGET_USD)).accountsPartial({ owner: p.owner, business: biz }).instruction());
     }
-    // Friendly pre-checks (the program enforces these too): wallet balance, budget left this period, vault capacity.
+    // Friendly pre-checks (the program enforces these too): wallet balance, vault capacity. No monthly-budget check on purchase.
     try {
       const bal = await this.connection.getTokenAccountBalance(ownerToken);
       if (Number(bal.value.amount) < toUnits(totalPremium).toNumber()) warnings.push(`owner has ${bal.value.uiAmountString} USDC, premiums total ${totalPremium.toFixed(2)}`);
@@ -346,12 +348,6 @@ export class CoverClient {
       const free = fromUnits(vb.value.amount) - fromUnits(u.totalExposure);
       if (totalPayout > free) throw new Error(`vault free capacity is ${free.toFixed(2)} USDC < total payout ${totalPayout} (InsufficientCapacity)`);
     } catch (e) { if (e instanceof Error && /InsufficientCapacity/.test(e.message)) throw e; }
-    if (existing) {
-      const fresh = now >= Number(existing.periodStart.toString()) + 30 * 86400;
-      const spent = fresh ? 0 : fromUnits(existing.spentThisPeriod);
-      const cap = p.monthlyBudgetUsd ?? fromUnits(existing.monthlyBudget);
-      if (spent + totalPremium > cap + 1e-6) throw new Error(`BudgetExceeded: ${spent.toFixed(2)} already spent this month + ${totalPremium.toFixed(2)} > ${cap.toFixed(2)} budget`);
-    }
 
     const firstId = existing ? Number(existing.policyCount.toString()) : 0;
     const policies: { index: number; policyId: number; policyPda: string; tx: number }[] = [];
