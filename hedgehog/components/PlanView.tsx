@@ -297,7 +297,8 @@ export function PlanView() {
       )}
 
       {reveal && (
-        <QuoteReveal name={profile.name} payoutUsd={quote.totalPayoutUsd} premiumUsd={quote.totalPremiumUsd} risks={items.length}
+        <QuoteReveal name={profile.name} payoutUsd={quote.totalPayoutUsd}
+          lines={items.map((it) => ({ title: it.risk?.title ?? it.line.contract.eventTitle, payoutUsd: it.line.payoutUsd }))}
           onDone={() => { setReveal(false); window.scrollTo({ top: 0 }); }} />
       )}
       {touring && !reveal && <PlanTour onClose={() => setTouring(false)} />}
